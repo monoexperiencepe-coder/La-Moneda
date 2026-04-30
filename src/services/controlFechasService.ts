@@ -26,7 +26,7 @@ export async function fetchLatestControlFechasByVehicle(): Promise<ControlFecha[
     console.error('[fetch_latest_control_fechas_by_vehicle]', error.message);
     return [];
   }
-  return (data ?? []).map((r) => mapControlFechaRow(r as Record<string, unknown>));
+  return (data ?? []).map((r: Record<string, unknown>) => mapControlFechaRow(r));
 }
 
 /**
@@ -67,7 +67,7 @@ export async function fetchControlFechasHistoryPage(
   }
 
   return {
-    rows: (data ?? []).map((r) => mapControlFechaRow(r as Record<string, unknown>)),
+    rows: (data ?? []).map((r: Record<string, unknown>) => mapControlFechaRow(r)),
     total: count ?? 0,
   };
 }
