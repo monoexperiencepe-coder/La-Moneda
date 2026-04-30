@@ -19,6 +19,7 @@ import {
   Vehicle,
 } from '../data/types';
 import { ingresoMontoPEN } from '../utils/moneda';
+import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
 
 interface RegistrosContextValue {
   vehicles: Vehicle[];
@@ -30,6 +31,12 @@ interface RegistrosContextValue {
   unidades: UnidadRegistro[];
   conductores: Conductor[];
   controlFechas: ControlFecha[];
+  controlFechasHistory: ControlFecha[];
+  controlFechasHistoryTotal: number | null;
+  controlFechasHistoryPage: number;
+  controlFechasHistoryPageSize: number;
+  controlFechasHistoryLoading: boolean;
+  loadControlFechasHistory: (filters: ControlFechasHistoryFilters, page: number) => Promise<void>;
   kilometrajes: KilometrajeRegistro[];
   pendientes: Pendiente[];
   registrosTiempo: RegistroTiempo[];
@@ -244,7 +251,10 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
       const result = await registros.addControlFecha(data);
       if (result) {
-        toastHook.success('🗓️ Control de fecha', `${data.tipo} · ${data.fechaVencimiento}`);
+        toastHook.success(
+          '🗓️ Control de fecha guardado',
+          `${data.tipo} · vence ${data.fechaVencimiento} · id ${result.id} (búscalo en la lista de abajo o en Supabase por id).`,
+        );
       }
       return result;
     } catch (e) {
@@ -378,6 +388,12 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       unidades: registros.unidades,
       conductores: registros.conductores,
       controlFechas: registros.controlFechas,
+      controlFechasHistory: registros.controlFechasHistory,
+      controlFechasHistoryTotal: registros.controlFechasHistoryTotal,
+      controlFechasHistoryPage: registros.controlFechasHistoryPage,
+      controlFechasHistoryPageSize: registros.controlFechasHistoryPageSize,
+      controlFechasHistoryLoading: registros.controlFechasHistoryLoading,
+      loadControlFechasHistory: registros.loadControlFechasHistory,
       kilometrajes: registros.kilometrajes,
       pendientes: registros.pendientes,
       registrosTiempo: registros.registrosTiempo,

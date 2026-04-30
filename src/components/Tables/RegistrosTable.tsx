@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye,
 } from 'lucide-react';
@@ -20,6 +20,8 @@ interface RegistrosTableProps {
   vehicles: Vehicle[];
   onDeleteIngreso?: (id: number) => void;
   onDeleteGasto?: (id: number) => void;
+  /** Desde URL (ej. Inicio → cobros pendientes): preselecciona filtro estado de pago en ingresos. */
+  initialEstadoPago?: string;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -77,10 +79,13 @@ const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number
 };
 
 const RegistrosTable: React.FC<RegistrosTableProps> = ({
-  mode, ingresos = [], gastos = [], vehicles, onDeleteIngreso, onDeleteGasto,
+  mode, ingresos = [], gastos = [], vehicles, onDeleteIngreso, onDeleteGasto, initialEstadoPago = '',
 }) => {
   const [query, setQuery] = useState('');
-  const [filterEstadoPago, setFilterEstadoPago] = useState('');
+  const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
+  useEffect(() => {
+    if (mode === 'ingresos') setFilterEstadoPago(initialEstadoPago ?? '');
+  }, [mode, initialEstadoPago]);
   const [sortKey, setSortKey] = useState<string>('fecha');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);

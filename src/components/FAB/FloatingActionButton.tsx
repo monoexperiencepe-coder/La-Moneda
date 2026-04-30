@@ -1,45 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useDrawer } from '../../context/DrawerContext';
+import type { DrawerType } from '../../context/DrawerContext';
 
 interface QuickAction {
   icon: string;
   label: string;
   gradient: string;
-  type: 'income' | 'expense' | 'discount' | 'maintenance' | 'documentation';
+  type: Exclude<DrawerType, null>;
 }
 
 const quickActions: QuickAction[] = [
-  {
-    icon: '💰',
-    label: 'Ingreso',
-    gradient: 'from-emerald-400 to-teal-500',
-    type: 'income',
-  },
-  {
-    icon: '💸',
-    label: 'Gasto',
-    gradient: 'from-red-400 to-orange-500',
-    type: 'expense',
-  },
-  {
-    icon: '🏷️',
-    label: 'Descuento',
-    gradient: 'from-amber-400 to-yellow-600',
-    type: 'discount',
-  },
-  {
-    icon: '🔧',
-    label: 'Mantenimiento',
-    gradient: 'from-blue-400 to-indigo-500',
-    type: 'maintenance',
-  },
-  {
-    icon: '📋',
-    label: 'Documentación',
-    gradient: 'from-purple-400 to-pink-500',
-    type: 'documentation',
-  },
+  { icon: '💰', label: 'Ingreso', gradient: 'from-emerald-400 to-teal-500', type: 'income' },
+  { icon: '💸', label: 'Gasto', gradient: 'from-red-400 to-orange-500', type: 'expense' },
 ];
 
 const FloatingActionButton: React.FC = () => {
@@ -67,11 +40,10 @@ const FloatingActionButton: React.FC = () => {
       ref={containerRef}
       className={`fixed bottom-28 sm:bottom-14 right-4 sm:right-6 flex flex-col items-end gap-3 ${isOpen ? 'z-[45]' : 'z-30'}`}
     >
-      {/* Menú: 5 opciones con nombre (lista vertical, sin solapar) */}
       {isOpen && (
         <nav
           role="menu"
-          aria-label="Registro rápido"
+          aria-label="Registro rápido (solo datos que guardan en Supabase)"
           className="w-[min(18rem,calc(100vw-2rem))] divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white py-0 shadow-2xl animate-pop-up origin-bottom-right"
         >
           {quickActions.map((action, i) => (
@@ -95,7 +67,6 @@ const FloatingActionButton: React.FC = () => {
         </nav>
       )}
 
-      {/* FAB principal */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}

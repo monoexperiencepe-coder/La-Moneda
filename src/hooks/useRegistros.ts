@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Ingreso,
   Gasto,
@@ -15,7 +15,6 @@ import {
   Documentacion,
   Vehicle,
 } from '../data/types';
-import { mockDescuentos, mockPrestamos, mockPrestamoAbonos, mockMantenimientos, mockDocumentaciones } from '../data/mockData';
 import { fetchVehiculos } from '../services/vehiculosService';
 import { fetchUnidades, insertUnidad, removeUnidad } from '../services/unidadesService';
 import {
@@ -26,7 +25,14 @@ import {
 } from '../services/conductoresService';
 import { fetchIngresos, insertIngreso, removeIngreso } from '../services/ingresosService';
 import { fetchGastos, insertGasto, removeGasto } from '../services/gastosService';
-import { fetchControlFechas, insertControlFecha, removeControlFecha } from '../services/controlFechasService';
+import {
+  fetchLatestControlFechasByVehicle,
+  fetchControlFechasHistoryPage,
+  getDefaultControlFechasHistoryPageSize,
+  insertControlFecha,
+  removeControlFecha,
+  type ControlFechasHistoryFilters,
+} from '../services/controlFechasService';
 import { fetchKilometrajes, insertKilometraje, removeKilometraje } from '../services/kilometrajesService';
 import {
   fetchPendientes,
@@ -58,26 +64,54 @@ export const useRegistros = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>(mockMantenimientos);
-  const [documentaciones, setDocumentaciones] = useState<Documentacion[]>(mockDocumentaciones);
-  const [descuentos, setDescuentos] = useState<Descuento[]>(mockDescuentos);
-  const [prestamos, setPrestamos] = useState<Prestamo[]>(mockPrestamos);
-  const [prestamoAbonos, setPrestamoAbonos] = useState<PrestamoAbono[]>(mockPrestamoAbonos);
+  const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
+  const [documentaciones, setDocumentaciones] = useState<Documentacion[]>([]);
+  const [descuentos, setDescuentos] = useState<Descuento[]>([]);
+  const [prestamos, setPrestamos] = useState<Prestamo[]>([]);
+  const [prestamoAbonos, setPrestamoAbonos] = useState<PrestamoAbono[]>([]);
   const [unidades, setUnidades] = useState<UnidadRegistro[]>([]);
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [controlFechas, setControlFechas] = useState<ControlFecha[]>([]);
+  const [controlFechasHistory, setControlFechasHistory] = useState<ControlFecha[]>([]);
+  const [controlFechasHistoryTotal, setControlFechasHistoryTotal] = useState<number | null>(null);
+  const [controlFechasHistoryPage, setControlFechasHistoryPage] = useState(0);
+  const [controlFechasHistoryLoading, setControlFechasHistoryLoading] = useState(false);
+  const historyQueryRef = useRef<{ filters: ControlFechasHistoryFilters; page: number } | null>(null);
+  const historyPageSize = getDefaultControlFechasHistoryPageSize();
+
   const [kilometrajes, setKilometrajes] = useState<KilometrajeRegistro[]>([]);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [registrosTiempo, setRegistrosTiempo] = useState<RegistroTiempo[]>([]);
 
+  const loadControlFechasHistory = useCallback(async (filters: ControlFechasHistoryFilters, page: number) => {
+    historyQueryRef.current = { filters, page };
+    setControlFechasHistoryLoading(true);
+    try {
+      let p = Math.max(0, page);
+      for (;;) {
+        const { rows, total } = await fetchControlFechasHistoryPage(filters, p, historyPageSize);
+        if (rows.length > 0 || p === 0) {
+          historyQueryRef.current = { filters, page: p };
+          setControlFechasHistory(rows);
+          setControlFechasHistoryTotal(total);
+          setControlFechasHistoryPage(p);
+          break;
+        }
+        p -= 1;
+      }
+    } finally {
+      setControlFechasHistoryLoading(false);
+    }
+  }, [historyPageSize]);
+
   const refreshFromSupabase = useCallback(async () => {
-    const [v, u, c, i, g, cf, km, pen, rt] = await Promise.all([
+    const [v, u, c, i, g, latest, km, pen, rt] = await Promise.all([
       fetchVehiculos(),
       fetchUnidades(),
       fetchConductores(),
       fetchIngresos(),
       fetchGastos(),
-      fetchControlFechas(),
+      fetchLatestControlFechasByVehicle(),
       fetchKilometrajes(),
       fetchPendientes(),
       fetchRegistrosTiempo(),
@@ -87,11 +121,16 @@ export const useRegistros = () => {
     setConductores(c);
     setIngresos(i);
     setGastos(g);
-    setControlFechas(cf);
+    setControlFechas(latest);
     setKilometrajes(km);
     setPendientes(pen);
     setRegistrosTiempo(rt);
-  }, []);
+
+    const q = historyQueryRef.current;
+    if (q) {
+      await loadControlFechasHistory(q.filters, q.page);
+    }
+  }, [loadControlFechasHistory]);
 
   useEffect(() => {
     void refreshFromSupabase();
@@ -410,6 +449,12 @@ export const useRegistros = () => {
     unidades,
     conductores,
     controlFechas,
+    controlFechasHistory,
+    controlFechasHistoryTotal,
+    controlFechasHistoryPage,
+    controlFechasHistoryPageSize: historyPageSize,
+    controlFechasHistoryLoading,
+    loadControlFechasHistory,
     kilometrajes,
     pendientes,
     registrosTiempo,

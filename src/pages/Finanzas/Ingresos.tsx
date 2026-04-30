@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
@@ -11,6 +11,8 @@ import { MESES } from '../../data/catalogs';
 
 const Ingresos: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const cobroPendiente = searchParams.get('cobro') === 'pendiente';
   const { ingresos, gastos, vehicles, deleteIngreso } = useRegistrosContext();
   const { open } = useDrawer();
 
@@ -33,8 +35,24 @@ const Ingresos: React.FC = () => {
             <ChevronLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">💰 Ingresos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Ingresos</h1>
             <p className="text-sm text-gray-500">{ingresos.length} registros totales</p>
+            {cobroPendiente && (
+              <p className="mt-1 text-xs text-amber-800">
+                Filtro: cobro pendiente.{' '}
+                <button
+                  type="button"
+                  className="font-semibold text-primary-600 hover:underline"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete('cobro');
+                    setSearchParams(next, { replace: true });
+                  }}
+                >
+                  Quitar filtro
+                </button>
+              </p>
+            )}
           </div>
         </div>
         <button onClick={() => open('income')}
@@ -76,7 +94,13 @@ const Ingresos: React.FC = () => {
       {/* Table */}
       <div>
         <h2 className="text-base font-bold text-gray-800 mb-3">Historial de Ingresos</h2>
-        <RegistrosTable mode="ingresos" ingresos={ingresos} vehicles={vehicles} onDeleteIngreso={deleteIngreso} />
+        <RegistrosTable
+          mode="ingresos"
+          ingresos={ingresos}
+          vehicles={vehicles}
+          onDeleteIngreso={deleteIngreso}
+          initialEstadoPago={cobroPendiente ? 'PENDIENTE' : ''}
+        />
       </div>
     </div>
   );

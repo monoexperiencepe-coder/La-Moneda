@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-export type DrawerType = 'income' | 'expense' | 'discount' | 'maintenance' | 'documentation' | null;
+/** Solo acciones que persisten en Supabase (ingreso / gasto). */
+export type DrawerType = 'income' | 'expense' | null;
 
 interface DrawerContextValue {
   openDrawer: DrawerType;

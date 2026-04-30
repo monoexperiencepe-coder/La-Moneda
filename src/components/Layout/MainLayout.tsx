@@ -4,9 +4,6 @@ import Footer from './Footer';
 import FloatingActionButton from '../FAB/FloatingActionButton';
 import QuickIncomeDrawer from '../Drawers/QuickIncomeDrawer';
 import QuickExpenseDrawer from '../Drawers/QuickExpenseDrawer';
-import QuickMaintenanceDrawer from '../Drawers/QuickMaintenanceDrawer';
-import QuickDocumentationDrawer from '../Drawers/QuickDocumentationDrawer';
-import QuickDiscountDrawer from '../Drawers/QuickDiscountDrawer';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -29,9 +26,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       {/* Drawers */}
       <QuickIncomeDrawer />
       <QuickExpenseDrawer />
-      <QuickDiscountDrawer />
-      <QuickMaintenanceDrawer />
-      <QuickDocumentationDrawer />
     </div>
   );
 };

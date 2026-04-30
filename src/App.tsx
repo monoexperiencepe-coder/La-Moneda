@@ -24,6 +24,7 @@ import Documentacion from './pages/Operaciones/Documentacion';
 import ControlGlobal from './pages/Operaciones/ControlGlobal';
 import RegistroTiempo from './pages/Operaciones/RegistroTiempo';
 import Conductores from './pages/Operaciones/Conductores';
+import Pendientes from './pages/Operaciones/Pendientes';
 import Logros from './pages/Logros/Logros';
 import Configuracion from './pages/Configuracion/Configuracion';
 
@@ -60,6 +61,7 @@ const AppContent: React.FC = () => {
             <Route path="/operaciones/control-global" element={<ControlGlobal />} />
             <Route path="/operaciones/tiempo" element={<RegistroTiempo />} />
             <Route path="/operaciones/conductores" element={<Conductores />} />
+            <Route path="/operaciones/pendientes" element={<Pendientes />} />
 
             {/* Reportes */}
             <Route path="/reportes" element={<ReportesHub />} />

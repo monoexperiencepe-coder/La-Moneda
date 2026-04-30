@@ -17,12 +17,12 @@ interface Achievement {
 
 const Logros: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, vehicles, mantenimientos } = useRegistrosContext();
+  const { ingresos, gastos, vehicles, kilometrajes } = useRegistrosContext();
 
   const totalIngresos = ingresos.length;
   const totalGastos = gastos.length;
   const totalVehicles = vehicles.filter(v => v.activo).length;
-  const totalMantenimientos = mantenimientos.length;
+  const totalKmRegistros = kilometrajes.length;
   const netMargin =
     ingresos.reduce((s, i) => s + ingresoMontoPEN(i), 0) - gastos.reduce((s, g) => s + g.monto, 0);
 
@@ -33,7 +33,7 @@ const Logros: React.FC = () => {
     { id: 'first_expense', emoji: '📊', title: 'Primer Gasto', description: 'Registraste tu primer gasto', unlocked: totalGastos >= 1, color: 'from-red-400 to-orange-500' },
     { id: 'fleet_5', emoji: '🚗', title: 'Flota de 5', description: 'Tienes 5 vehículos activos', unlocked: totalVehicles >= 5, progress: totalVehicles, max: 5, color: 'from-blue-400 to-indigo-500' },
     { id: 'profitable', emoji: '💎', title: 'Rentable', description: 'Margen neto positivo', unlocked: netMargin > 0, color: 'from-primary-400 to-secondary-500' },
-    { id: 'maintenance_5', emoji: '🔧', title: 'Mantenimiento Pro', description: '5 registros de mantenimiento', unlocked: totalMantenimientos >= 5, progress: totalMantenimientos, max: 5, color: 'from-gray-400 to-gray-600' },
+    { id: 'km_5', emoji: '🔧', title: 'Kilometraje activo', description: '5 registros de km en Supabase', unlocked: totalKmRegistros >= 5, progress: totalKmRegistros, max: 5, color: 'from-gray-400 to-gray-600' },
     { id: 'big_earner', emoji: '🌟', title: 'Gran Ganador', description: 'Margen neto mayor a S/ 10,000', unlocked: netMargin >= 10000, color: 'from-yellow-400 to-orange-500' },
   ];
 

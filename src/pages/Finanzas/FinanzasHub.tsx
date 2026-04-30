@@ -1,26 +1,18 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/formatting';
-import { prestamoSaldoEquivalentePEN } from '../../utils/moneda';
-
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, descuentos, prestamos } = useRegistrosContext();
-  const kpis = calculateKPIs(ingresos, gastos, descuentos);
-  const saldoPrestamosRef = useMemo(
-    () => prestamos.filter(p => p.estado === 'ACTIVO').reduce((s, p) => s + prestamoSaldoEquivalentePEN(p), 0),
-    [prestamos],
-  );
+  const { ingresos, gastos } = useRegistrosContext();
+  const kpis = calculateKPIs(ingresos, gastos, []);
 
   const options = [
     { title: 'Ingresos', desc: 'Tabla y gráficos de ingresos', emoji: '💰', path: '/finanzas/ingresos', gradient: 'from-emerald-500/10 to-teal-500/10', border: 'border-emerald-200 hover:border-emerald-400', stat: formatCurrency(kpis.totalIngresos), statColor: 'text-emerald-600' },
     { title: 'Resumen', desc: 'Por mes/año y vehículo (tipo Excel)', emoji: '📋', path: '/finanzas/resumen', gradient: 'from-violet-500/10 to-fuchsia-500/10', border: 'border-violet-200 hover:border-violet-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-violet-700' : 'text-red-600' },
     { title: 'Gastos', desc: 'Tabla y categorías de gastos', emoji: '💸', path: '/finanzas/gastos', gradient: 'from-red-500/10 to-orange-500/10', border: 'border-red-200 hover:border-red-400', stat: formatCurrency(kpis.totalGastos), statColor: 'text-red-500' },
-    { title: 'Descuentos', desc: 'Rebajes por categoría (choque, taller, día autorizado…)', emoji: '🏷️', path: '/finanzas/descuentos', gradient: 'from-amber-500/10 to-yellow-500/10', border: 'border-amber-200 hover:border-amber-400', stat: formatCurrency(kpis.totalDescuentos), statColor: 'text-amber-700' },
-    { title: 'Préstamos', desc: 'Solicitudes PEN/USD, tasa %, TC y abonos a capital', emoji: '🏦', path: '/finanzas/prestamos', gradient: 'from-sky-500/10 to-cyan-500/10', border: 'border-sky-200 hover:border-sky-400', stat: formatCurrency(saldoPrestamosRef), statColor: 'text-sky-700' },
     { title: 'Reportes', desc: 'Análisis y comparativas', emoji: '📊', path: '/finanzas/reportes', gradient: 'from-purple-500/10 to-pink-500/10', border: 'border-purple-200 hover:border-purple-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-primary-600' : 'text-red-600' },
   ];
 
