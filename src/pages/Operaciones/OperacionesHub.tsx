@@ -5,12 +5,12 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { buildFleetPanelRows, type EstadoFlota } from '../../utils/fleetPanel';
 
 const SUBLINKS: { title: string; path: string; emoji: string; hint?: string }[] = [
-  { title: 'Pendientes', path: '/operaciones/pendientes', emoji: '📌' },
-  { title: 'Documentación', path: '/operaciones/docs', emoji: '📋', hint: 'SOAT, RT, vencimientos (Supabase)' },
   { title: 'Control global', path: '/operaciones/control-global', emoji: '🧭', hint: 'Resumen y alertas' },
+  { title: 'Pendientes', path: '/operaciones/pendientes', emoji: '📌', hint: 'Trabajo pendiente y prioridades' },
+  { title: 'Documentación', path: '/operaciones/docs', emoji: '📋', hint: 'SOAT, RT, vencimientos (Supabase)' },
   { title: 'Mantenimiento', path: '/operaciones/mantenimiento', emoji: '🔧', hint: 'Kilometraje y valor tiempo' },
-  { title: 'Valor tiempo', path: '/operaciones/tiempo', emoji: '⏱️' },
   { title: 'Conductores', path: '/operaciones/conductores', emoji: '👤' },
+  { title: 'Valor tiempo', path: '/operaciones/tiempo', emoji: '⏱️' },
 ];
 
 function badgeEstado(e: EstadoFlota): { cls: string; label: string } {
@@ -74,16 +74,16 @@ const OperacionesHub: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         {SUBLINKS.map((l) => (
           <button
             key={l.path}
             type="button"
             title={l.hint ?? l.title}
             onClick={() => navigate(l.path)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-700 hover:border-primary-300 hover:bg-primary-50/50 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:border-primary-300 hover:bg-primary-50/50 transition-colors"
           >
-            <span>{l.emoji}</span>
+            <span className="text-base leading-none">{l.emoji}</span>
             {l.title}
           </button>
         ))}
