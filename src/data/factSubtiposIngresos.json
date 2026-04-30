@@ -1,0 +1,37 @@
+{
+  "ALQUILER": [
+    "Día",
+    "Mes",
+    "Quincena",
+    "Semana"
+  ],
+  "APORTES": [
+    "Efectivo / Yape / Plin",
+    "Transferencia bancaria",
+    "Otros"
+  ],
+  "CAPITAL DE TRABAJO": [
+    "Aporte Socios",
+    "Crédito bancos",
+    "FINANC CASA COMERCIAL",
+    "Préstamo personas"
+  ],
+  "GARANTÍAS": [
+    "Otras",
+    "PARCIAL",
+    "TOTAL"
+  ],
+  "DEVOLUCION PRESTAMO": [
+    "Capital",
+    "Intereses",
+    "Otros"
+  ],
+  "OTROS INGRESOS": [
+    "ARREGLO MECÁNICO",
+    "AUTOPARTES",
+    "CHOQUE",
+    "DAÑOS A LA UNIDAD",
+    "MORA",
+    "PAPELETAS/MYLTAS"
+  ]
+}
