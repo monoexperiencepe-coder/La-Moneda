@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ChevronLeft, Filter } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
-import { formatDate, isExpiringSoon, isExpired } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
+import { DocTone, docColumnTone, docNearestExpiryIso, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
 import type { TipoControlFecha, Vehicle } from '../../data/types';
 
@@ -12,69 +13,42 @@ const DOC_TIPOS = DOC_MODULE_COLUMNS.map((c) => c.tipo);
 
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
 
-type Tone = 'empty' | 'ok' | 'soon' | 'late';
+type RowTone = Exclude<DocTone, 'neutral'>;
 
-function tone(date: string | undefined): Tone {
-  if (!date) return 'empty';
-  if (isExpired(date)) return 'late';
-  if (isExpiringSoon(date, 30)) return 'soon';
-  return 'ok';
-}
-
-function rowTone(doc: DocPivot | undefined): Tone {
-  if (!doc) return 'empty';
-  let worst: Tone = 'empty';
-  for (const { tipo } of DOC_MODULE_COLUMNS) {
-    const t = tone(doc[tipo]);
-    if (t === 'late') return 'late';
-    if (t === 'soon') worst = 'soon';
-    else if (t === 'ok' && worst === 'empty') worst = 'ok';
-  }
-  return worst;
-}
-
-function nearestExpiry(doc: DocPivot | undefined): string {
-  if (!doc) return '9999';
-  let nearest = '9999';
-  for (const { tipo } of DOC_MODULE_COLUMNS) {
-    const d = doc[tipo];
-    if (d && d < nearest) nearest = d;
-  }
-  return nearest;
-}
-
-const TONE_CELL: Record<Tone, string> = {
+const TONE_CELL: Record<DocTone, string> = {
   late: 'bg-red-50 text-red-700 font-semibold',
   soon: 'bg-amber-50 text-amber-800 font-semibold',
   ok: 'bg-emerald-50 text-emerald-800',
+  neutral: 'bg-slate-50 text-slate-700 border border-slate-100',
   empty: 'text-gray-300',
 };
 
-const TONE_DOT: Record<Exclude<Tone, 'empty'>, string> = {
+const TONE_DOT: Record<Exclude<RowTone, 'empty'>, string> = {
   late: 'bg-red-500',
   soon: 'bg-amber-400',
   ok: 'bg-emerald-500',
 };
 
-const DateCell: React.FC<{ date?: string; label: string }> = ({ date, label }) => {
-  const t = tone(date);
+const DateCell: React.FC<{ date?: string; label: string; tipo: TipoControlFecha }> = ({ date, label, tipo }) => {
+  const t = docColumnTone(date, tipo);
   if (t === 'empty') {
     return <span className="text-gray-300 text-xs select-none" title={`${label}: sin dato`}>—</span>;
   }
+  const titleExtra = t === 'neutral' ? ' (fecha de referencia, no vencimiento)' : '';
   return (
     <span
       className={`inline-block rounded-md px-1.5 py-0.5 text-[11px] sm:text-xs tabular-nums ${TONE_CELL[t]}`}
-      title={`${label}: ${formatDate(date!)}`}
+      title={`${label}: ${formatDate(date!)}${titleExtra}`}
     >
       {formatDate(date!)}
     </span>
   );
 };
 
-const StatusBadge: React.FC<{ t: Tone }> = ({ t }) => {
+const StatusBadge: React.FC<{ t: RowTone }> = ({ t }) => {
   if (t === 'empty') return <span className="text-gray-300 text-xs">—</span>;
-  const labels: Record<Exclude<Tone, 'empty'>, string> = { late: 'Vencido', soon: '≤ 30 d', ok: 'Al día' };
-  const cls: Record<Exclude<Tone, 'empty'>, string> = {
+  const labels: Record<Exclude<RowTone, 'empty'>, string> = { late: 'Vencido', soon: '≤ 30 d', ok: 'Al día' };
+  const cls: Record<Exclude<RowTone, 'empty'>, string> = {
     late: 'bg-red-100 text-red-700 border-red-200',
     soon: 'bg-amber-100 text-amber-800 border-amber-200',
     ok: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -90,11 +64,11 @@ const StatusBadge: React.FC<{ t: Tone }> = ({ t }) => {
 interface VehicleRow {
   v: Vehicle;
   doc: DocPivot | undefined;
-  wt: Tone;
+  wt: RowTone;
   nearest: string;
 }
 
-const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; wt: Tone }> = ({ v, doc, wt }) => (
+const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; wt: RowTone }> = ({ v, doc, wt }) => (
   <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
     <div className="flex justify-between items-start gap-2 mb-3">
       <div className="min-w-0">
@@ -112,7 +86,7 @@ const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; wt: Tone 
             {label}
           </span>
           <div className="min-w-0 text-right">
-            <DateCell date={doc?.[tipo]} label={label} />
+            <DateCell date={doc?.[tipo]} label={label} tipo={tipo} />
           </div>
         </li>
       ))}
@@ -148,7 +122,8 @@ const Documentacion: React.FC = () => {
   const allRows: VehicleRow[] = useMemo(() => {
     return vehicles.map((v) => {
       const doc = pivot.get(v.id);
-      return { v, doc, wt: rowTone(doc), nearest: nearestExpiry(doc) };
+      const wt = docRowWorstTone(doc, DOC_MODULE_COLUMNS);
+      return { v, doc, wt, nearest: docNearestExpiryIso(doc, DOC_MODULE_COLUMNS) };
     });
   }, [vehicles, pivot]);
 
@@ -332,7 +307,7 @@ const Documentacion: React.FC = () => {
                         </td>
                         {DOC_MODULE_COLUMNS.map(({ tipo, label }) => (
                           <td key={tipo} className="py-2.5 px-1.5 text-center align-middle">
-                            <DateCell date={doc?.[tipo]} label={label} />
+                            <DateCell date={doc?.[tipo]} label={label} tipo={tipo} />
                           </td>
                         ))}
                         <td className="py-2.5 pl-2 pr-3 text-center align-middle">

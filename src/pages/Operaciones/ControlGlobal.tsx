@@ -4,6 +4,7 @@ import { ChevronLeft, AlertTriangle, Filter, CheckCircle2, Clock, XCircle } from
 import Card from '../../components/Common/Card';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, formatCurrency, todayStr } from '../../utils/formatting';
+import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
 import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperativeAlerts';
 
 const ID_TIPOS_INGRESO = ['ALQUILER', 'GARANTIA', 'PAPELETAS', 'CHOQUES / DANOS', 'INTERESES', 'PRESTAMOS'];
@@ -28,16 +29,17 @@ const ControlGlobal: React.FC = () => {
       .filter((v) => v.activo)
       .map((v) => {
         const fechasV = controlFechas.filter((c) => c.vehicleId === v.id);
-        const vencidos = fechasV
+        const fechasAlerta = fechasV.filter((c) => !esControlFechaSinAlertaVencimiento(c.tipo));
+        const vencidos = fechasAlerta
           .filter((c) => diffDays(c.fechaVencimiento) < 0)
           .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
-        const proximos = fechasV
+        const proximos = fechasAlerta
           .filter((c) => {
             const d = diffDays(c.fechaVencimiento);
             return d >= 0 && d <= 30;
           })
           .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
-        const ok = fechasV
+        const ok = fechasAlerta
           .filter((c) => diffDays(c.fechaVencimiento) > 30)
           .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
 
@@ -80,7 +82,13 @@ const ControlGlobal: React.FC = () => {
     [vehicleStatus, soloConProblemas],
   );
 
-  const alertas = useMemo(() => controlFechas.filter((c) => diffDays(c.fechaVencimiento) <= 30).length, [controlFechas]);
+  const alertas = useMemo(
+    () =>
+      controlFechas.filter(
+        (c) => !esControlFechaSinAlertaVencimiento(c.tipo) && diffDays(c.fechaVencimiento) <= 30,
+      ).length,
+    [controlFechas],
+  );
 
   const pendientesActivos = useMemo(
     () => pendientes.filter((p) => p.estado === 'ABIERTO' || p.estado === 'EN_CURSO').length,

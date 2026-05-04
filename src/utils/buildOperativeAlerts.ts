@@ -1,4 +1,5 @@
 import type { ControlFecha, Ingreso, Vehicle } from '../data/types';
+import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import { formatCurrency, formatDate, todayStr } from './formatting';
 import { ingresoMontoPEN } from './moneda';
 
@@ -71,6 +72,7 @@ export function buildOperativeAlerts(
 
   /* 2) Vencimientos próximos o ya vencidos (control_fechas) */
   const vencRows = controlFechas.filter((c) => {
+    if (esControlFechaSinAlertaVencimiento(c.tipo)) return false;
     const d = diffDaysFromToday(c.fechaVencimiento);
     return d <= DIAS_ALERTA_VENCIMIENTO;
   });

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Card from '../Common/Card';
 import Input from '../Common/Input';
 import Select from '../Common/Select';
-import { TIPOS_CONTROL_FECHA_OPTIONS } from '../../data/controlFechaCatalog';
+import { esControlFechaSinAlertaVencimiento, TIPOS_CONTROL_FECHA_OPTIONS } from '../../data/controlFechaCatalog';
 import { formatDate, todayStr } from '../../utils/formatting';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -179,7 +179,15 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
           ) : (
             filasPaginaFiltradas.map((c) => {
               const d = diffDaysFromToday(c.fechaVencimiento);
-              const cls = d < 0 ? 'text-red-600' : d <= 30 ? 'text-amber-700' : 'text-emerald-700';
+              const sinVenc = esControlFechaSinAlertaVencimiento(c.tipo);
+              const cls = sinVenc
+                ? 'text-slate-600'
+                : d < 0
+                  ? 'text-red-600'
+                  : d <= 30
+                    ? 'text-amber-700'
+                    : 'text-emerald-700';
+              const rightLabel = sinVenc ? 'Referencia' : d < 0 ? `${Math.abs(d)} d venc.` : `${d} d`;
               return (
                 <div key={c.id} className="flex items-start justify-between gap-2 px-3 py-2 text-sm">
                   <div className="min-w-0">
@@ -190,8 +198,8 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
                     {c.comentarios ? <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.comentarios}</p> : null}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className={`text-[11px] font-semibold ${cls}`}>
-                      {d < 0 ? `${Math.abs(d)} d venc.` : `${d} d`}
+                    <span className={`text-[11px] font-semibold ${cls}`} title={sinVenc ? 'Fecha de registro único (no vencimiento)' : undefined}>
+                      {rightLabel}
                     </span>
                     <button
                       type="button"

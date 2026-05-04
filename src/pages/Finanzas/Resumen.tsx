@@ -7,6 +7,7 @@ import Input from '../../components/Common/Input';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
 import type { Vehicle, Ingreso, Gasto, KilometrajeRegistro, ControlFecha } from '../../data/types';
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
@@ -75,6 +76,7 @@ function buildRows(
     let vencidos = 0;
     let proximos30 = 0;
     for (const c of fechasV) {
+      if (esControlFechaSinAlertaVencimiento(c.tipo)) continue;
       const d = diffDaysToday(c.fechaVencimiento);
       if (d < 0) vencidos++;
       else if (d <= 30) proximos30++;

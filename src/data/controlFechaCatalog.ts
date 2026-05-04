@@ -1,5 +1,13 @@
 import type { TipoControlFecha } from './types';
 
+/**
+ * Fecha de hecho único (instalación GNV, compra de batería, etc.), no un vencimiento renovable:
+ * no debe figurar como vencido / por vencer ni en alertas operativas.
+ */
+export function esControlFechaSinAlertaVencimiento(tipo: TipoControlFecha): boolean {
+  return tipo === 'INSTALACION_GNV' || tipo === 'BAT_COMPRA_NUEVA';
+}
+
 /** Opciones para selects de control de fechas (única fuente de etiquetas). */
 export const TIPOS_CONTROL_FECHA_OPTIONS: { value: TipoControlFecha; label: string }[] = [
   { value: 'BAT_MANT_REALIZADO', label: 'BAT — mant. realizado' },

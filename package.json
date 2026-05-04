@@ -13,7 +13,8 @@
     "backfill:contexto-operativo": "node scripts/backfill_contexto_operativo.mjs",
     "reimport:control-fechas": "node scripts/reimport_control_fechas.mjs",
     "import:gastos-reales": "node scripts/import_gastos_reales.mjs",
-    "report:gastos-sin-vehiculo": "node scripts/import_gastos_reales.mjs --report-sin-vehiculo"
+    "report:gastos-sin-vehiculo": "node scripts/import_gastos_reales.mjs --report-sin-vehiculo",
+    "audit:gastos-por-vehiculo": "node scripts/audit_gastos_por_vehiculo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

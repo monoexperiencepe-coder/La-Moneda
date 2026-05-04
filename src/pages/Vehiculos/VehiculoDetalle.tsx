@@ -3,10 +3,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
-import { formatCurrency, formatDate, isExpiringSoon, isExpired } from '../../utils/formatting';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { conductorAsignadoLabel, ultimoKmPorVehiculo } from '../../utils/fleetPanel';
+import { conductorAsignadoLabel, formatConductorDisplayLabel, ultimoKmPorVehiculo } from '../../utils/fleetPanel';
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
+import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
 import type { Conductor, Pendiente, TipoControlFecha } from '../../data/types';
 import Badge from '../../components/Common/Badge';
@@ -17,26 +18,6 @@ import ValorTiempoSection from '../../components/operaciones/ValorTiempoSection'
 
 const DOC_TIPOS = DOC_MODULE_COLUMNS.map((c) => c.tipo);
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
-type Tone = 'empty' | 'ok' | 'soon' | 'late';
-
-function tone(date: string | undefined): Tone {
-  if (!date) return 'empty';
-  if (isExpired(date)) return 'late';
-  if (isExpiringSoon(date, 30)) return 'soon';
-  return 'ok';
-}
-
-function rowTone(doc: DocPivot | undefined): Tone {
-  if (!doc) return 'empty';
-  let worst: Tone = 'empty';
-  for (const { tipo } of DOC_MODULE_COLUMNS) {
-    const t = tone(doc[tipo]);
-    if (t === 'late') return 'late';
-    if (t === 'soon') worst = 'soon';
-    else if (t === 'ok' && worst === 'empty') worst = 'ok';
-  }
-  return worst;
-}
 
 const TABS = [
   { id: 'resumen', label: 'Resumen' },
@@ -104,7 +85,7 @@ const VehiculoDetalle: React.FC = () => {
 
   const pivot = useMemo(() => buildControlFechasPivotMapByTipos(controlFechas, DOC_TIPOS), [controlFechas]);
   const docForVehicle = vehicle ? pivot.get(vehicle.id) : undefined;
-  const docWorst = rowTone(docForVehicle);
+  const docWorst = docRowWorstTone(docForVehicle, DOC_MODULE_COLUMNS);
 
   const ultimoKm = vehicle ? ultimoKmPorVehiculo(kilometrajes, vehicle.id) : null;
   const conductorActual = vehicle ? conductorAsignadoLabel(conductores, vehicle.id) : '—';
@@ -326,9 +307,15 @@ const VehiculoDetalle: React.FC = () => {
                 <tbody className="divide-y divide-gray-50">
                   {DOC_MODULE_COLUMNS.map(({ tipo, label }) => {
                     const d = docForVehicle?.[tipo];
-                    const tn = tone(d);
+                    const tn = docColumnTone(d, tipo);
                     const cellCls =
-                      tn === 'late' ? 'text-red-700 font-semibold' : tn === 'soon' ? 'text-amber-800 font-semibold' : 'text-gray-800';
+                      tn === 'late'
+                        ? 'text-red-700 font-semibold'
+                        : tn === 'soon'
+                          ? 'text-amber-800 font-semibold'
+                          : tn === 'neutral'
+                            ? 'text-slate-600'
+                            : 'text-gray-800';
                     return (
                       <tr key={tipo}>
                         <td className="py-2 pl-3 pr-2 text-gray-700">{label}</td>
@@ -370,9 +357,7 @@ const VehiculoDetalle: React.FC = () => {
                 {conductoresVehiculo.map((c: Conductor) => (
                   <li key={c.id} className="px-4 py-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold text-gray-900">
-                        {c.nombres} {c.apellidos}
-                      </span>
+                      <span className="font-semibold text-gray-900">{formatConductorDisplayLabel(c)}</span>
                       <span className="text-xs">
                         <span
                           className={`rounded-full px-2 py-0.5 font-semibold ${

@@ -1,3 +1,4 @@
+import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import type { Vehicle, Ingreso, ControlFecha, KilometrajeRegistro, Conductor, Pendiente } from '../data/types';
 import { todayStr } from './formatting';
 
@@ -37,15 +38,44 @@ export function ultimoKmPorVehiculo(kilometrajes: KilometrajeRegistro[], vehicle
   return km != null ? km : null;
 }
 
+/**
+ * Nombre para UI: si vienen vacíos desde BD (p. ej. seed incompleto), mostrar documento, celular o texto genérico.
+ * No implica que falte el vínculo conductor ↔ vehículo.
+ */
+export function formatConductorDisplayLabel(c: Conductor): string {
+  const nom = `${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim();
+  if (nom) return nom;
+  const doc = String(c.numeroDocumento ?? '').trim();
+  if (doc) return doc;
+  const cel = String(c.celular ?? '').trim();
+  if (cel) return cel;
+  return 'Conductor registrado sin nombre';
+}
+
+/** Iniciales para avatar cuando nombre/apellido faltan. */
+export function conductorDisplayInitials(c: Conductor): string {
+  const n = (c.nombres ?? '').trim();
+  const a = (c.apellidos ?? '').trim();
+  if (n || a) {
+    const ch = ((n[0] ?? '') + (a[0] ?? '')).toUpperCase();
+    return ch || '?';
+  }
+  const doc = String(c.numeroDocumento ?? '').trim();
+  if (doc.length >= 2) return doc.slice(0, 2).toUpperCase();
+  if (doc.length === 1) return doc.toUpperCase();
+  const digits = String(c.celular ?? '').replace(/\D/g, '');
+  if (digits.length >= 2) return digits.slice(-2);
+  return '?';
+}
+
 export function conductorAsignadoLabel(conductores: Conductor[], vehicleId: number): string {
   const vigentes = conductores.filter(
     (c) => c.vehicleId != null && Number(c.vehicleId) === Number(vehicleId) && c.estado === 'VIGENTE',
   );
-  vigentes.sort((a, b) => a.id - b.id);
+  vigentes.sort((a, b) => Number(a.id) - Number(b.id));
   const c = vigentes[0];
   if (!c) return '—';
-  const nom = `${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim();
-  return nom || '—';
+  return formatConductorDisplayLabel(c);
 }
 
 export function buildFleetPanelRows(
@@ -60,10 +90,11 @@ export function buildFleetPanelRows(
   return active
     .map((v) => {
       const fechasV = controlFechas.filter((c) => c.vehicleId != null && Number(c.vehicleId) === Number(v.id));
-      const vencidos = fechasV
+      const fechasAlerta = fechasV.filter((c) => !esControlFechaSinAlertaVencimiento(c.tipo));
+      const vencidos = fechasAlerta
         .filter((c) => diffDaysFromToday(c.fechaVencimiento) < 0)
         .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
-      const proximos = fechasV
+      const proximos = fechasAlerta
         .filter((c) => {
           const d = diffDaysFromToday(c.fechaVencimiento);
           return d >= 0 && d <= 30;
@@ -157,11 +188,18 @@ export function computeTodayReview(
   const activeIds = new Set(vehicles.filter((v) => v.activo).map((v) => v.id));
 
   const vencidosRows = controlFechas
-    .filter((c) => c.vehicleId != null && activeIds.has(Number(c.vehicleId)) && diffDaysFromToday(c.fechaVencimiento) < 0)
+    .filter(
+      (c) =>
+        !esControlFechaSinAlertaVencimiento(c.tipo) &&
+        c.vehicleId != null &&
+        activeIds.has(Number(c.vehicleId)) &&
+        diffDaysFromToday(c.fechaVencimiento) < 0,
+    )
     .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
 
   const porVencerRows = controlFechas
     .filter((c) => {
+      if (esControlFechaSinAlertaVencimiento(c.tipo)) return false;
       if (c.vehicleId == null || !activeIds.has(Number(c.vehicleId))) return false;
       const d = diffDaysFromToday(c.fechaVencimiento);
       return d >= 0 && d <= 30;

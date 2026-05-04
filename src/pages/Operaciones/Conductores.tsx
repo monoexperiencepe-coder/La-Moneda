@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
+import { conductorDisplayInitials, formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import type { Conductor } from '../../data/types';
 
 /* ─── types ─────────────────────────────────────────────────────────────── */
@@ -55,15 +56,14 @@ function conductorToDraft(c: Conductor): ConductorEditDraft {
 }
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
-function initials(n: string, a: string) {
-  return ((n.trim()[0] ?? '') + (a.trim()[0] ?? '')).toUpperCase();
-}
-
 const PALETTE = [
   'bg-violet-600', 'bg-sky-600', 'bg-emerald-600', 'bg-amber-500',
   'bg-rose-600',   'bg-indigo-600', 'bg-teal-600',   'bg-pink-600',
 ];
-const avatarBg = (id: number) => PALETTE[id % PALETTE.length];
+const avatarBg = (id: number | string) => {
+  const n = typeof id === 'number' && Number.isFinite(id) ? id : parseInt(String(id).replace(/\D/g, '').slice(-9), 10) || 0;
+  return PALETTE[Math.abs(n) % PALETTE.length];
+};
 
 function whatsappHref(phone: string) {
   const digits = phone.replace(/\D/g, '');
@@ -398,11 +398,11 @@ const Conductores: React.FC = () => {
                     <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
                       <div className="flex items-center gap-2.5">
                         <div className={`shrink-0 w-8 h-8 rounded-full ${avatarBg(c.id)} flex items-center justify-center text-white text-[11px] font-bold`}>
-                          {initials(c.nombres, c.apellidos)}
+                          {conductorDisplayInitials(c)}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 truncate max-w-[10rem] text-[13px]">
-                            {c.nombres} {c.apellidos}
+                          <p className="font-semibold text-gray-900 truncate max-w-[10rem] text-[13px]" title={formatConductorDisplayLabel(c)}>
+                            {formatConductorDisplayLabel(c)}
                           </p>
                           <p className="text-[10px] text-gray-400">{c.domicilio}</p>
                         </div>
