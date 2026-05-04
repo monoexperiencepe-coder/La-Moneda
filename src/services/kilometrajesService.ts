@@ -2,20 +2,21 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import { kilometrajeToInsert, mapKilometrajeRow } from './supabaseMappers';
 import type { KilometrajeRegistro } from '../data/types';
+import { fetchAllSupabasePages } from './supabaseRangeFetch';
 
 export async function fetchKilometrajes(): Promise<KilometrajeRegistro[]> {
   if (!EMPRESA_ID) return [];
-  const { data, error } = await supabase
-    .from('kilometrajes')
-    .select('*')
-    .eq('empresa_id', EMPRESA_ID)
-    .order('fecha', { ascending: false })
-    .order('id', { ascending: false });
-  if (error) {
-    console.error('[kilometrajes]', error.message);
-    return [];
-  }
-  return (data ?? []).map((r) => mapKilometrajeRow(r as Record<string, unknown>));
+  const data = await fetchAllSupabasePages(async (from, to) => {
+    const { data, error } = await supabase
+      .from('kilometrajes')
+      .select('*')
+      .eq('empresa_id', EMPRESA_ID)
+      .order('fecha', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to);
+    return { data, error };
+  });
+  return data.map((r) => mapKilometrajeRow(r as Record<string, unknown>));
 }
 
 export async function insertKilometraje(

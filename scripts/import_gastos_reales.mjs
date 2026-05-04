@@ -27,6 +27,10 @@
  *   node scripts/import_gastos_reales.mjs --report-sin-vehiculo [ruta.xlsx]
  *   REPORT_SIN_VEHICULO=1 node scripts/import_gastos_reales.mjs
  *
+ * Fechas: tras interpretar la celda, se valida el calendario. Si el día no existe en ese mes
+ * (ej. 2023-04-31), se usa el último día válido del mes antes de insertar. Mes/año fuera de rango
+ * o día menor que 1 → la fila se omite (no se inserta).
+ *
  * No modifica ingresos, vehículos, conductores, control_fechas ni kilometrajes.
  */
 
@@ -83,9 +87,33 @@ const xlsxPath = xlsxArg
 
 function normPlaca(p) {
   if (p == null || typeof p !== 'string') return ''
-  const s = p.trim().toUpperCase().replace(/\s+/g, '')
+  const s = p.trim().toUpperCase().replace(/\s+/g, '').replace(/[()[\]]/g, '')
   if (s === '—' || s === '-' || s === '–') return ''
   return s
+}
+
+/** Claves a probar contra `placaToId` (mapa ya incluye variante sin guion desde la BD). */
+function placaLookupKeysFromExtracted(extracted) {
+  const n = normPlaca(extracted)
+  if (!n) return []
+  const keys = [n]
+  const noHyphen = n.replace(/-/g, '')
+  if (noHyphen && noHyphen !== n) keys.push(noHyphen)
+  if (n.includes('-')) return [...new Set(keys)]
+  const m3 = n.match(/^([A-Z]{3})([0-9]{3})$/)
+  if (m3) keys.push(`${m3[1]}-${m3[2]}`)
+  const m2 = n.match(/^([A-Z]{2})([0-9]{4})$/)
+  if (m2) keys.push(`${m2[1]}-${m2[2]}`)
+  const m4 = n.match(/^([A-Z])([A-Z0-9]{2})([0-9]{3})$/)
+  if (m4) keys.push(`${m4[1]}${m4[2]}-${m4[3]}`)
+  return [...new Set(keys)]
+}
+
+function lookupPlacaInMap(extracted, placaToId) {
+  for (const k of placaLookupKeysFromExtracted(extracted)) {
+    if (placaToId.has(k)) return placaToId.get(k)
+  }
+  return null
 }
 
 function normNumeroInterno(s) {
@@ -126,17 +154,86 @@ function parseMonto(cell) {
 }
 
 /**
- * Cabeceras tipo "YARIS 04 F7S-684": placa alfanumérica (F7S-684, MK5-584) o clásica (ANF-599, AB-1234).
- * Patrón izquierdo + guion + derecho (dos variantes alternadas).
+ * Excel a veces guarda montos como texto ("150.50", "S/ 20") o fechas como texto.
+ * Antes solo se consideraba `typeof === 'number'` en columnas > A: eso dejaba fuera meses enteros.
  */
-const PLACA_BODY = `(?:[A-Z]{2,3}-[0-9]{2,4}|[A-Z][A-Z0-9]{2}-[0-9]{3})`
+function rowHasNumericOrMoneyInValueColumns(row) {
+  for (let i = 1; i < row.length; i++) {
+    const v = row[i]
+    if (typeof v === 'number' && Number.isFinite(v)) return true
+    if (typeof v === 'string' && parseMonto(v) != null) return true
+  }
+  return false
+}
 
-/** Normaliza texto de cabecera: trim, mayúsculas, espacios colapsados (una sola). */
+const FECHA_MIN_YEAR = 1990
+const FECHA_MAX_YEAR = 2100
+
+/**
+ * Interpreta celda a YYYY-MM-DD tentativo (puede ser calendario inválido, ej. 2023-04-31).
+ * No valida día/mes: usar siempre `finalizeCalendarDateForInsert` después.
+ */
+function parseFechaCell(raw) {
+  if (raw == null || raw === '') return null
+  if (typeof raw === 'number' && Number.isFinite(raw)) return serialToDateOnly(raw)
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    if (!s) return null
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})\b/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/)
+    if (dmy) {
+      const dd = String(dmy[1]).padStart(2, '0')
+      const mm = String(dmy[2]).padStart(2, '0')
+      return `${dmy[3]}-${mm}-${dd}`
+    }
+    const n = Number.parseFloat(s.replace(',', '.'))
+    if (Number.isFinite(n) && n > 25000 && n < 65000) {
+      const d = serialToDateOnly(n)
+      if (d) return d
+    }
+  }
+  return null
+}
+
+/**
+ * Valida y corrige YYYY-MM-DD para Postgres.
+ * - día > último día del mes → último día válido (clamped).
+ * - mes fuera de 1–12, año fuera de rango, día menor que 1 → omitir (ok: false).
+ */
+function finalizeCalendarDateForInsert(tentativeYmd) {
+  if (tentativeYmd == null || typeof tentativeYmd !== 'string') return { ok: false }
+  const m = tentativeYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return { ok: false }
+  const y = Number(m[1])
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return { ok: false }
+  if (y < FECHA_MIN_YEAR || y > FECHA_MAX_YEAR) return { ok: false }
+  if (mo < 1 || mo > 12) return { ok: false }
+  const last = new Date(y, mo, 0).getDate()
+  if (d < 1) return { ok: false }
+  if (d > last) {
+    const fixed = `${y}-${String(mo).padStart(2, '0')}-${String(last).padStart(2, '0')}`
+    return { ok: true, fecha: fixed, clamped: true, tentative: tentativeYmd }
+  }
+  return { ok: true, fecha: tentativeYmd, clamped: false }
+}
+
+/**
+ * Cabeceras: placas con guion (ANF-599, F7S-684), sin guion (BLF037), o entre paréntesis "(BLF037)".
+ * Orden del alternado: formatos con guion antes que los compactos para no comer subcadenas.
+ */
+const PLACA_BODY = `(?:[A-Z]{2,3}-[0-9]{2,4}|[A-Z][A-Z0-9]{2}-[0-9]{3}|[A-Z][A-Z0-9]{2}[0-9]{3}|[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{4})`
+
+/** Normaliza texto de cabecera: trim, mayúsculas, espacios; paréntesis → espacio (ej. "(BLF037)"). */
 function normalizeVehicleHeaderText(line) {
   return String(line ?? '')
     .trim()
     .toUpperCase()
+    .replace(/[()[\]]/g, ' ')
     .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /**
@@ -185,12 +282,17 @@ function parseWorkbook(path) {
   let skippedNoDate = 0
   let skippedNoVehicleContext = 0
   let vehicleHeaderRows = 0
+  let dateClampedCount = 0
+  let dateOmittedInvalidCount = 0
+  const dateClampSamples = []
+  const dateOmittedSamples = []
+  const MAX_DATE_SAMPLES = 25
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r] || []
     const a = row[0]
     const desc = typeof a === 'string' ? a.trim() : ''
-    const hasNumeric = row.some((v, i) => i > 0 && typeof v === 'number')
+    const hasNumeric = rowHasNumericOrMoneyInValueColumns(row)
 
     if (desc && !hasNumeric) {
       currentVehicleLine = desc
@@ -212,13 +314,27 @@ function parseWorkbook(path) {
       const monto = parseMonto(rawMonto)
       if (monto == null || monto === 0) continue
 
-      let fecha = null
-      if (typeof rawFecha === 'number' && Number.isFinite(rawFecha)) {
-        fecha = serialToDateOnly(rawFecha)
-      }
-      if (!fecha) {
+      const tentative = parseFechaCell(rawFecha)
+      if (!tentative) {
         skippedNoDate++
         continue
+      }
+      const fin = finalizeCalendarDateForInsert(tentative)
+      if (!fin.ok) {
+        dateOmittedInvalidCount++
+        if (dateOmittedSamples.length < MAX_DATE_SAMPLES) {
+          dateOmittedSamples.push(
+            `tentativa=${tentative} fila=${r + 1} mes="${label}" desc=${(desc || '').slice(0, 36)}`,
+          )
+        }
+        continue
+      }
+      const fecha = fin.fecha
+      if (fin.clamped) {
+        dateClampedCount++
+        if (dateClampSamples.length < MAX_DATE_SAMPLES) {
+          dateClampSamples.push(`${fin.tentative} → ${fin.fecha} (fila ${r + 1}, mes "${label}")`)
+        }
       }
 
       const tipo = desc.slice(0, 80) || 'GASTO'
@@ -256,9 +372,21 @@ function parseWorkbook(path) {
           month_header: label,
           vehicle_line: currentVehicleLine,
           descripcion: desc,
+          ...(fin.clamped ? { fecha_celda_invalida: fin.tentative, fecha_ajustada_a_ultimo_dia_mes: true } : {}),
         },
       })
     }
+  }
+
+  if (dateClampedCount > 0) {
+    console.warn(
+      `[gastos import] ${dateClampedCount} fecha(s) fuera del mes fueron ajustadas al último día válido (ejemplos abajo en resumen DRY_RUN).`,
+    )
+  }
+  if (dateOmittedInvalidCount > 0) {
+    console.warn(
+      `[gastos import] ${dateOmittedInvalidCount} celda(s) con fecha no válida omitidas (mes/año fuera de rango o día < 1).`,
+    )
   }
 
   return {
@@ -269,6 +397,10 @@ function parseWorkbook(path) {
     vehicleHeaderRows,
     skippedNoDate,
     skippedNoVehicleContext,
+    dateClampedCount,
+    dateOmittedInvalidCount,
+    dateClampSamples,
+    dateOmittedSamples,
   }
 }
 
@@ -277,9 +409,9 @@ function resolveVehicleId(g, placaToId, carNoToIds) {
   let fromPlaca = false
   let fromCarNo = false
   if (g.vehicle_placa) {
-    const p = normPlaca(g.vehicle_placa)
-    if (placaToId.has(p)) {
-      vid = placaToId.get(p)
+    const idPlaca = lookupPlacaInMap(g.vehicle_placa, placaToId)
+    if (idPlaca != null) {
+      vid = idPlaca
       fromPlaca = true
     }
   }
@@ -295,16 +427,17 @@ function resolveVehicleId(g, placaToId, carNoToIds) {
 
 /** Por qué no hubo vehicle_id (solo cuando vid es null). */
 function classifySinVehiculo(g, placaToId, carNoToIds) {
-  const placaNorm = g.vehicle_placa ? normPlaca(g.vehicle_placa) : ''
   const set = g.vehicle_car_no ? carNoToIds.get(g.vehicle_car_no) : null
 
   if (g.vehicle_car_no && set && set.size > 1) return 'num_interno_ambiguo'
 
-  if (placaNorm && !placaToId.has(placaNorm)) return 'placa_no_en_supabase'
+  if (g.vehicle_placa && normPlaca(g.vehicle_placa) && lookupPlacaInMap(g.vehicle_placa, placaToId) == null) {
+    return 'placa_no_en_supabase'
+  }
 
   if (g.vehicle_car_no && (!set || set.size === 0)) return 'num_interno_sin_coincidencia'
 
-  if (g.vehicle_placa && !placaNorm) return 'placa_vacia_o_invalida'
+  if (g.vehicle_placa && !normPlaca(g.vehicle_placa)) return 'placa_vacia_o_invalida'
 
   return 'sin_placa_regex_ni_num_util'
 }
@@ -336,6 +469,12 @@ function runReportSinVehiculo({ parsed, placaToId, carNoToIds }) {
   console.log('='.repeat(80))
   console.log('Total filas parseadas con monto+fecha:', parsed.parsed.length)
   console.log('Sin vehicle_id:', sin.length)
+  console.log(
+    'Fechas corregidas / omitidas (parse):',
+    parsed.dateClampedCount ?? 0,
+    '/',
+    parsed.dateOmittedInvalidCount ?? 0,
+  )
 
   console.log('\n--- 1) Muestra (primeros 50) ---')
   console.log(
@@ -512,12 +651,29 @@ async function main() {
   console.log('Gastos parseados (filas a insertar):', parsed.parsed.length)
   console.log('Omitidos (monto sin fecha en celda):', parsed.skippedNoDate)
   console.log('Omitidos (sin cabecera de vehículo previa):', parsed.skippedNoVehicleContext)
+  console.log('Fechas corregidas (día → último día válido del mes):', parsed.dateClampedCount ?? 0)
+  console.log('Fechas omitidas (mes/año fuera de rango o día < 1):', parsed.dateOmittedInvalidCount ?? 0)
+  if (dryRun && (parsed.dateClampSamples?.length || parsed.dateOmittedSamples?.length)) {
+    console.log('\n--- DRY_RUN: ejemplos de fechas ---')
+    if (parsed.dateClampSamples?.length) {
+      console.log('Corregidas (muestra, hasta ' + parsed.dateClampSamples.length + '):')
+      for (const s of parsed.dateClampSamples) console.log('  ·', s)
+    }
+    if (parsed.dateOmittedSamples?.length) {
+      console.log('Omitidas (muestra, hasta ' + parsed.dateOmittedSamples.length + '):')
+      for (const s of parsed.dateOmittedSamples) console.log('  ·', s)
+    }
+  }
 
   const vehiculos = await fetchAllVehiculos(supabase, empresaId)
   const placaToId = new Map()
   for (const v of vehiculos) {
     const p = normPlaca(v.placa)
-    if (p) placaToId.set(p, Number(v.id))
+    if (!p) continue
+    const id = Number(v.id)
+    placaToId.set(p, id)
+    const flat = p.replace(/-/g, '')
+    if (flat !== p) placaToId.set(flat, id)
   }
 
   const unidades = await fetchAllUnidades(supabase, empresaId)
