@@ -5,6 +5,8 @@ import type {
   Conductor,
   Ingreso,
   Gasto,
+  InversionVehiculo,
+  GastoCaja,
   Moneda,
   TipoDocumento,
   TipoDomicilio,
@@ -174,6 +176,47 @@ export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
     detalleOperativo: strOrNull(r.detalle_operativo),
     tipoOperacion: strOrNull(r.tipo_operacion),
     estadoPago: strOrNull(r.estado_pago),
+    excelExtra: jsonRecordOrNull(r.excel_extra),
+    createdAt: isoCreated(r.created_at),
+  };
+}
+
+export function mapGastoCajaRow(r: Record<string, unknown>): GastoCaja {
+  return {
+    id: num(r.id),
+    fecha: toDateOnlyString(r.fecha),
+    concepto: str(r.concepto),
+    monto: num(r.monto),
+    categoria: str(r.categoria) || 'CAJA_GENERAL',
+    comentarios: str(r.comentarios),
+    excelExtra: jsonRecordOrNull(r.excel_extra),
+    createdAt: isoCreated(r.created_at),
+  };
+}
+
+export function mapInversionVehiculoRow(r: Record<string, unknown>): InversionVehiculo {
+  const fc = r.fecha_compra;
+  const fechaCompra =
+    fc == null || fc === ''
+      ? null
+      : (() => {
+          const d = toDateOnlyString(fc);
+          return d === '' ? null : d;
+        })();
+  return {
+    id: num(r.id),
+    vehicleId: r.vehicle_id != null && r.vehicle_id !== '' ? num(r.vehicle_id) : null,
+    descripcionExcel: str(r.descripcion_excel),
+    fechaCompra,
+    valorCompraUsd: numOrNull(r.valor_compra_usd),
+    gastoGnvUsd: numOrNull(r.gasto_gnv_usd),
+    gastoNotarialUsd: numOrNull(r.gasto_notarial_usd),
+    legFirmasUsd: numOrNull(r.leg_firmas_usd),
+    seguroUsd: numOrNull(r.seguro_usd),
+    gpsUsd: numOrNull(r.gps_usd),
+    fundasAccesoriosUsd: numOrNull(r.fundas_accesorios_usd),
+    totalInversionUsd: numOrNull(r.total_inversion_usd),
+    totalInversionPen: numOrNull(r.total_inversion_pen),
     excelExtra: jsonRecordOrNull(r.excel_extra),
     createdAt: isoCreated(r.created_at),
   };

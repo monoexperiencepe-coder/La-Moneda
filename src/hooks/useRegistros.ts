@@ -14,6 +14,8 @@ import {
   Mantenimiento,
   Documentacion,
   Vehicle,
+  InversionVehiculo,
+  GastoCaja,
 } from '../data/types';
 import { fetchVehiculos } from '../services/vehiculosService';
 import { fetchUnidades, insertUnidad, removeUnidad } from '../services/unidadesService';
@@ -46,6 +48,8 @@ import {
   patchRegistroTiempo,
   removeRegistroTiempo,
 } from '../services/registrosTiempoService';
+import { fetchInversionesVehiculo } from '../services/inversionesVehiculoService';
+import { fetchGastosCaja } from '../services/gastosCajaService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
@@ -82,6 +86,8 @@ export const useRegistros = () => {
   const [kilometrajes, setKilometrajes] = useState<KilometrajeRegistro[]>([]);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [registrosTiempo, setRegistrosTiempo] = useState<RegistroTiempo[]>([]);
+  const [inversionesVehiculo, setInversionesVehiculo] = useState<InversionVehiculo[]>([]);
+  const [gastosCaja, setGastosCaja] = useState<GastoCaja[]>([]);
 
   const loadControlFechasHistory = useCallback(async (filters: ControlFechasHistoryFilters, page: number) => {
     historyQueryRef.current = { filters, page };
@@ -105,7 +111,7 @@ export const useRegistros = () => {
   }, [historyPageSize]);
 
   const refreshFromSupabase = useCallback(async () => {
-    const [v, u, c, i, g, latest, km, pen, rt] = await Promise.all([
+    const [v, u, c, i, g, latest, km, pen, rt, inv, gc] = await Promise.all([
       fetchVehiculos(),
       fetchUnidades(),
       fetchConductores(),
@@ -115,6 +121,8 @@ export const useRegistros = () => {
       fetchKilometrajes(),
       fetchPendientes(),
       fetchRegistrosTiempo(),
+      fetchInversionesVehiculo(),
+      fetchGastosCaja(),
     ]);
     setVehicles(v);
     setUnidades(u);
@@ -125,6 +133,8 @@ export const useRegistros = () => {
     setKilometrajes(km);
     setPendientes(pen);
     setRegistrosTiempo(rt);
+    setInversionesVehiculo(inv);
+    setGastosCaja(gc);
 
     const q = historyQueryRef.current;
     if (q) {
@@ -458,6 +468,8 @@ export const useRegistros = () => {
     kilometrajes,
     pendientes,
     registrosTiempo,
+    inversionesVehiculo,
+    gastosCaja,
     addIngreso,
     addGasto,
     addMantenimiento,

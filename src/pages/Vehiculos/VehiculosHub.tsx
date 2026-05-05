@@ -1,14 +1,22 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency } from '../../utils/formatting';
+import { formatCurrency, formatUSD } from '../../utils/formatting';
+import { totalInversionUsdForVehicle } from '../../services/inversionesVehiculoService';
 import { calculateVehicleRentability } from '../../utils/calculations';
 
 const VehiculosHub: React.FC = () => {
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, descuentos } = useRegistrosContext();
+  const { vehicles, ingresos, gastos, descuentos, inversionesVehiculo } = useRegistrosContext();
   const rentability = calculateVehicleRentability(vehicles, ingresos, gastos, descuentos);
+  const inversionUsdByVehicleId = useMemo(() => {
+    const m = new Map<number, number | null>();
+    for (const v of vehicles) {
+      m.set(v.id, totalInversionUsdForVehicle(inversionesVehiculo, v.id));
+    }
+    return m;
+  }, [vehicles, inversionesVehiculo]);
 
   const options = [
     {
@@ -72,6 +80,11 @@ const VehiculosHub: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900">{r.vehicle.marca} {r.vehicle.modelo}</p>
                 <p className="text-xs text-gray-400 font-mono">{r.vehicle.placa}</p>
+                {inversionUsdByVehicleId.get(r.vehicle.id) != null ? (
+                  <p className="text-[10px] text-amber-800 font-medium mt-0.5 tabular-nums">
+                    Inv. adq. {formatUSD(inversionUsdByVehicleId.get(r.vehicle.id)!)}
+                  </p>
+                ) : null}
               </div>
               <span className={`text-sm font-bold ${r.margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {formatCurrency(r.margen)}

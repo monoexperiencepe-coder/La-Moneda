@@ -3,13 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
-import { formatCurrency, formatDate } from '../../utils/formatting';
+import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { conductorAsignadoLabel, formatConductorDisplayLabel, ultimoKmPorVehiculo } from '../../utils/fleetPanel';
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
 import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
-import type { Conductor, Pendiente, TipoControlFecha } from '../../data/types';
+import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha } from '../../data/types';
 import Badge from '../../components/Common/Badge';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
@@ -57,6 +57,7 @@ const VehiculoDetalle: React.FC = () => {
     deleteGasto,
     addKilometraje,
     deleteKilometraje,
+    inversionesVehiculo,
   } = useRegistrosContext();
   const { open, setLastVehicleId } = useDrawer();
 
@@ -77,6 +78,17 @@ const VehiculoDetalle: React.FC = () => {
   const vehicleIngresos = useMemo(() => ingresos.filter((i) => Number(i.vehicleId) === vid), [ingresos, vid]);
   const vehicleGastos = useMemo(() => gastos.filter((g) => Number(g.vehicleId) === vid), [gastos, vid]);
   const vehicleDescuentos = useMemo(() => descuentos.filter((d) => Number(d.vehicleId) === vid), [descuentos, vid]);
+  const vehicleInversiones = useMemo(
+    () => inversionesVehiculo.filter((inv) => inv.vehicleId != null && Number(inv.vehicleId) === vid),
+    [inversionesVehiculo, vid],
+  );
+  const inversionTotalUsd = useMemo(
+    () =>
+      vehicleInversiones.length === 0
+        ? null
+        : vehicleInversiones.reduce((s, inv) => s + (inv.totalInversionUsd ?? 0), 0),
+    [vehicleInversiones],
+  );
 
   const totalIngresos = vehicleIngresos.reduce((s, i) => s + ingresoMontoPEN(i), 0);
   const totalGastos = vehicleGastos.reduce((s, g) => s + g.monto, 0);
@@ -228,6 +240,15 @@ const VehiculoDetalle: React.FC = () => {
                 <p className="text-lg font-bold text-gray-900 tabular-nums">{ultimoKm != null ? ultimoKm.toLocaleString('es-PE') : '—'}</p>
               </div>
             </div>
+            {inversionTotalUsd != null && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                <p className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">Inversión histórica (adquisición)</p>
+                <p className="text-lg font-bold text-amber-950 tabular-nums mt-1">{formatUSD(inversionTotalUsd)}</p>
+                <p className="text-[10px] text-amber-900/90 mt-1 max-w-xl">
+                  Costo total de inversión cargado en el Excel de adquisición. No suma al total de gastos operativos ni al margen de arriba.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase">Documentación</p>
@@ -283,6 +304,44 @@ const VehiculoDetalle: React.FC = () => {
                 <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(utilidad)}</p>
               </div>
             </div>
+            {vehicleInversiones.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 overflow-hidden">
+                <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/80">
+                  <h3 className="text-sm font-bold text-amber-950">Inversión de adquisición (histórica)</h3>
+                  <p className="text-xs text-amber-900/85 mt-0.5">
+                    Referencia de compra e inversión inicial (USD/PEN en tabla). No es gasto operativo mensual.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[520px]">
+                    <thead className="bg-white/80 text-left text-[10px] uppercase text-amber-900/80 border-b border-amber-100">
+                      <tr>
+                        <th className="py-2 px-3">Descripción</th>
+                        <th className="py-2 px-3 whitespace-nowrap">F. compra</th>
+                        <th className="py-2 px-3 text-right">Total USD</th>
+                        <th className="py-2 px-3 text-right">Total PEN</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100/80 bg-white/60">
+                      {vehicleInversiones.map((inv: InversionVehiculo) => (
+                        <tr key={inv.id}>
+                          <td className="py-2 px-3 text-gray-900">{inv.descripcionExcel}</td>
+                          <td className="py-2 px-3 text-gray-600 whitespace-nowrap">
+                            {inv.fechaCompra ? formatDate(inv.fechaCompra) : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums font-semibold text-amber-950">
+                            {inv.totalInversionUsd != null ? formatUSD(inv.totalInversionUsd) : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums text-gray-700">
+                            {inv.totalInversionPen != null ? formatCurrency(inv.totalInversionPen) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             <div>
               <h3 className="text-sm font-bold text-gray-800 mb-2">Ingresos de esta unidad</h3>
               <RegistrosTable mode="ingresos" ingresos={vehicleIngresos} vehicles={vehicles} onDeleteIngreso={deleteIngreso} />

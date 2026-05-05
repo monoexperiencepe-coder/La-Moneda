@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -6,13 +6,24 @@ import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/formatting';
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos } = useRegistrosContext();
+  const { ingresos, gastos, gastosCaja } = useRegistrosContext();
   const kpis = calculateKPIs(ingresos, gastos, []);
+  const totalGastosCaja = useMemo(() => gastosCaja.reduce((s, g) => s + g.monto, 0), [gastosCaja]);
 
   const options = [
     { title: 'Ingresos', desc: 'Tabla y gráficos de ingresos', emoji: '💰', path: '/finanzas/ingresos', gradient: 'from-emerald-500/10 to-teal-500/10', border: 'border-emerald-200 hover:border-emerald-400', stat: formatCurrency(kpis.totalIngresos), statColor: 'text-emerald-600' },
     { title: 'Resumen', desc: 'Por mes/año y vehículo (tipo Excel)', emoji: '📋', path: '/finanzas/resumen', gradient: 'from-violet-500/10 to-fuchsia-500/10', border: 'border-violet-200 hover:border-violet-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-violet-700' : 'text-red-600' },
-    { title: 'Gastos', desc: 'Tabla y categorías de gastos', emoji: '💸', path: '/finanzas/gastos', gradient: 'from-red-500/10 to-orange-500/10', border: 'border-red-200 hover:border-red-400', stat: formatCurrency(kpis.totalGastos), statColor: 'text-red-500' },
+    { title: 'Gastos', desc: 'Operativos por vehículo (Fact)', emoji: '💸', path: '/finanzas/gastos', gradient: 'from-red-500/10 to-orange-500/10', border: 'border-red-200 hover:border-red-400', stat: formatCurrency(kpis.totalGastos), statColor: 'text-red-500' },
+    {
+      title: 'Gastos de caja',
+      desc: 'Excel GASTOS — sin vehículo; aparte de gastos operativos',
+      emoji: '🏧',
+      path: '/finanzas/gastos-caja',
+      gradient: 'from-amber-500/10 to-yellow-500/10',
+      border: 'border-amber-200 hover:border-amber-400',
+      stat: formatCurrency(totalGastosCaja),
+      statColor: 'text-amber-800',
+    },
     { title: 'Reportes', desc: 'Análisis y comparativas', emoji: '📊', path: '/finanzas/reportes', gradient: 'from-purple-500/10 to-pink-500/10', border: 'border-purple-200 hover:border-purple-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-primary-600' : 'text-red-600' },
   ];
 
@@ -28,7 +39,7 @@ const FinanzasHub: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
         {options.map(o => (
           <button key={o.path} onClick={() => navigate(o.path)}
             className={`mission-btn bg-gradient-to-br ${o.gradient} border-2 ${o.border} group text-left`}>

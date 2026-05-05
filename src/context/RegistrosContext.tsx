@@ -17,6 +17,8 @@ import {
   Mantenimiento,
   Documentacion,
   Vehicle,
+  InversionVehiculo,
+  GastoCaja,
 } from '../data/types';
 import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
@@ -40,6 +42,8 @@ interface RegistrosContextValue {
   kilometrajes: KilometrajeRegistro[];
   pendientes: Pendiente[];
   registrosTiempo: RegistroTiempo[];
+  inversionesVehiculo: InversionVehiculo[];
+  gastosCaja: GastoCaja[];
   mantenimientos: Mantenimiento[];
   documentaciones: Documentacion[];
   addIngreso: (data: Omit<Ingreso, 'id' | 'createdAt'>) => Promise<Ingreso | null>;
@@ -397,6 +401,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       kilometrajes: registros.kilometrajes,
       pendientes: registros.pendientes,
       registrosTiempo: registros.registrosTiempo,
+      inversionesVehiculo: registros.inversionesVehiculo,
+      gastosCaja: registros.gastosCaja,
       mantenimientos: registros.mantenimientos,
       documentaciones: registros.documentaciones,
       addIngreso: handleAddIngreso,

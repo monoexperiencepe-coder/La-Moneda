@@ -126,6 +126,42 @@ export interface Gasto {
   createdAt: string;
 }
 
+/**
+ * Costo histórico de inversión / adquisición por unidad (tabla inversiones_vehiculo).
+ * No es gasto operativo mensual; no se mezcla con totales de gastos Fact.
+ */
+export interface InversionVehiculo {
+  id: number;
+  vehicleId: number | null;
+  descripcionExcel: string;
+  fechaCompra: string | null;
+  valorCompraUsd: number | null;
+  gastoGnvUsd: number | null;
+  gastoNotarialUsd: number | null;
+  legFirmasUsd: number | null;
+  seguroUsd: number | null;
+  gpsUsd: number | null;
+  fundasAccesoriosUsd: number | null;
+  totalInversionUsd: number | null;
+  totalInversionPen: number | null;
+  excelExtra?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/**
+ * Gasto de caja general (Excel GASTOS). No vehículo; no es fila de public.gastos operativo.
+ */
+export interface GastoCaja {
+  id: number;
+  fecha: string;
+  concepto: string;
+  monto: number;
+  categoria: string;
+  comentarios: string;
+  excelExtra?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 /** Categoría operativa de rebaja (no es tipo Fact de gastos). */
 export type CategoriaDescuento =
   | 'CHOQUE'

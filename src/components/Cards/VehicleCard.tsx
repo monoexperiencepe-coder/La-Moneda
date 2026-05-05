@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Vehicle, Ingreso, Gasto, Documentacion } from '../../data/types';
-import { formatCurrency, todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
+import { formatCurrency, formatUSD, todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { Eye, Edit } from 'lucide-react';
 
@@ -10,9 +10,11 @@ interface VehicleCardProps {
   ingresos: Ingreso[];
   gastos: Gasto[];
   documentaciones: Documentacion[];
+  /** Costo histórico de adquisición (USD); null si no hay fila en inversiones_vehiculo. */
+  inversionTotalUsd?: number | null;
 }
 
-const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, documentaciones }) => {
+const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, documentaciones, inversionTotalUsd }) => {
   const navigate = useNavigate();
 
   const todayIngresos = ingresos
@@ -94,6 +96,13 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-4">
+          {inversionTotalUsd != null && (
+            <div className="bg-amber-50/90 rounded-xl p-3 backdrop-blur-sm border border-amber-100 col-span-2">
+              <p className="text-[10px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión adquisición (hist.)</p>
+              <p className="text-sm font-bold text-amber-950 tabular-nums">{formatUSD(inversionTotalUsd)}</p>
+              <p className="text-[9px] text-amber-800/90 mt-0.5">No es gasto operativo mensual</p>
+            </div>
+          )}
           <div className="bg-white/70 rounded-xl p-3 backdrop-blur-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📊 HOY</p>
             <p className="text-sm font-bold text-gray-900">{formatCurrency(todayIngresos)}</p>

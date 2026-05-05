@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Filter } from 'lucide-react';
 import VehicleCard from '../../components/Cards/VehicleCard';
 import { useRegistrosContext } from '../../context/RegistrosContext';
+import { totalInversionUsdForVehicle } from '../../services/inversionesVehiculoService';
 
 const Inventario: React.FC = () => {
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, documentaciones } = useRegistrosContext();
+  const { vehicles, ingresos, gastos, documentaciones, inversionesVehiculo } = useRegistrosContext();
   const [showAll, setShowAll] = useState(false);
 
   const filteredVehicles = showAll ? vehicles : vehicles.filter(v => v.activo);
@@ -43,6 +44,7 @@ const Inventario: React.FC = () => {
             ingresos={ingresos}
             gastos={gastos}
             documentaciones={documentaciones}
+            inversionTotalUsd={totalInversionUsdForVehicle(inversionesVehiculo, vehicle.id)}
           />
         ))}
       </div>

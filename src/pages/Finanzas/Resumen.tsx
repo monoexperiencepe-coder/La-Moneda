@@ -5,10 +5,10 @@ import Card from '../../components/Common/Card';
 import Select from '../../components/Common/Select';
 import Input from '../../components/Common/Input';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
+import { formatCurrency, formatUSD, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
-import type { Vehicle, Ingreso, Gasto, KilometrajeRegistro, ControlFecha } from '../../data/types';
+import type { Vehicle, Ingreso, Gasto, KilometrajeRegistro, ControlFecha, InversionVehiculo } from '../../data/types';
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -34,6 +34,8 @@ export interface ResumenVehiculoFila {
   ultimoKm: number | null;
   vencidos: number;
   proximos30: number;
+  /** Costo histórico de adquisición (inversión); no depende del periodo de ingresos/gastos. */
+  inversionTotalUsd: number | null;
 }
 
 /** Cruza filas con `vehicle_id` bigint / number / string sin mismatch por tipo en runtime. */
@@ -42,12 +44,19 @@ function vehicleIdMatch(rowVid: number | null | undefined, vehId: number): boole
   return Number(rowVid) === Number(vehId);
 }
 
+function inversionUsdForVehicle(inversiones: InversionVehiculo[], vehId: number): number | null {
+  const list = inversiones.filter((inv) => vehicleIdMatch(inv.vehicleId, vehId));
+  if (!list.length) return null;
+  return list.reduce((s, inv) => s + (inv.totalInversionUsd ?? 0), 0);
+}
+
 function buildRows(
   vehicles: Vehicle[],
   ingresos: Ingreso[],
   gastos: Gasto[],
   kilometrajes: KilometrajeRegistro[],
   controlFechas: ControlFecha[],
+  inversiones: InversionVehiculo[],
   desde: string,
   hasta: string,
 ): ResumenVehiculoFila[] {
@@ -92,6 +101,7 @@ function buildRows(
       ultimoKm,
       vencidos,
       proximos30,
+      inversionTotalUsd: inversionUsdForVehicle(inversiones, v.id),
     };
   });
 }
@@ -130,7 +140,7 @@ const MESES = [
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, kilometrajes, controlFechas } = useRegistrosContext();
+  const { vehicles, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo } = useRegistrosContext();
 
   const now = new Date();
   const [periodMode, setPeriodMode] = useState<'mes' | 'rango'>('mes');
@@ -168,8 +178,8 @@ const Resumen: React.FC = () => {
 
   const rows = useMemo(
     () =>
-      buildRows(vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, desde, hasta),
-    [vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, desde, hasta],
+      buildRows(vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta),
+    [vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta],
   );
 
   const totales = useMemo(() => {
@@ -182,6 +192,7 @@ const Resumen: React.FC = () => {
         nGastos: acc.nGastos + r.nGastos,
         vencidos: acc.vencidos + r.vencidos,
         proximos30: acc.proximos30 + r.proximos30,
+        inversionUsdSum: acc.inversionUsdSum + (r.inversionTotalUsd ?? 0),
       }),
       {
         totalIngresos: 0,
@@ -191,6 +202,7 @@ const Resumen: React.FC = () => {
         nGastos: 0,
         vencidos: 0,
         proximos30: 0,
+        inversionUsdSum: 0,
       },
     );
   }, [rows]);
@@ -233,6 +245,7 @@ const Resumen: React.FC = () => {
       'Ingresos_S/',
       'Gastos_S/',
       'Utilidad_S/',
+      'Inversion_USD_hist',
       'N_ingresos',
       'N_gastos',
       'Ultimo_km',
@@ -250,6 +263,7 @@ const Resumen: React.FC = () => {
           r.totalIngresos.toFixed(2),
           r.totalGastos.toFixed(2),
           r.utilidad.toFixed(2),
+          r.inversionTotalUsd != null ? r.inversionTotalUsd.toFixed(2) : '',
           r.nIngresos,
           r.nGastos,
           r.ultimoKm ?? '',
@@ -267,6 +281,7 @@ const Resumen: React.FC = () => {
         totales.totalIngresos.toFixed(2),
         totales.totalGastos.toFixed(2),
         totales.utilidad.toFixed(2),
+        totales.inversionUsdSum.toFixed(2),
         totales.nIngresos,
         totales.nGastos,
         '',
@@ -335,7 +350,8 @@ const Resumen: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">📋 Resumen</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Por periodo y vehículo (estilo Excel RESUMEN) — mes completo o rango libre; datos desde ingresos, gastos, KMS y vencimientos
+              Por periodo y vehículo (estilo Excel RESUMEN) — ingresos, gastos, KMS y vencimientos por periodo. La columna{' '}
+              <strong>Inversión USD</strong> es costo histórico de adquisición (no es gasto del periodo).
             </p>
           </div>
         </div>
@@ -431,7 +447,8 @@ const Resumen: React.FC = () => {
 
         <p className="text-xs text-gray-400 mt-3">
           Ingresos/gastos usan <strong>fecha de movimiento</strong> dentro del periodo. En <strong>rango</strong> puedes cruzar meses o trimestres.
-          Si ves ceros, revisa fechas o el año donde cargaste datos. Último km: último KMS con fecha ≤ fin del periodo. Vencimientos: estado actual (no dependen del periodo).
+          Si ves ceros, revisa fechas o el año donde cargaste datos. Último km: último KMS con fecha ≤ fin del periodo. Vencimientos: estado actual (no dependen del periodo).{' '}
+          <strong>Inversión USD</strong>: total desde <code className="text-[10px] bg-gray-100 px-1 rounded">inversiones_vehiculo</code> por unidad (referencia de compra, no operativo).
         </p>
       </Card>
 
@@ -444,6 +461,9 @@ const Resumen: React.FC = () => {
                 <th className="py-3 px-4 font-semibold text-right">Ingresos</th>
                 <th className="py-3 px-4 font-semibold text-right">Gastos</th>
                 <th className="py-3 px-4 font-semibold text-right">Utilidad</th>
+                <th className="py-3 px-4 font-semibold text-right" title="Costo histórico de adquisición (USD)">
+                  Inversión USD
+                </th>
                 <th className="py-3 px-4 font-semibold text-center">N° ing.</th>
                 <th className="py-3 px-4 font-semibold text-center">N° gas.</th>
                 <th className="py-3 px-4 font-semibold text-right">Último km</th>
@@ -454,7 +474,7 @@ const Resumen: React.FC = () => {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-400">
+                  <td colSpan={10} className="py-12 text-center text-gray-400">
                     No hay vehículos en la flota para este filtro.
                   </td>
                 </tr>
@@ -479,6 +499,9 @@ const Resumen: React.FC = () => {
                       }`}
                     >
                       {formatCurrency(r.utilidad)}
+                    </td>
+                    <td className="py-3 px-4 text-right tabular-nums text-slate-700 font-medium">
+                      {r.inversionTotalUsd != null ? formatUSD(r.inversionTotalUsd) : '—'}
                     </td>
                     <td className="py-3 px-4 text-center tabular-nums text-gray-700">{r.nIngresos}</td>
                     <td className="py-3 px-4 text-center tabular-nums text-gray-700">{r.nGastos}</td>
@@ -522,6 +545,7 @@ const Resumen: React.FC = () => {
                   >
                     {formatCurrency(totales.utilidad)}
                   </td>
+                  <td className="py-3 px-4 text-right tabular-nums text-slate-800">{formatUSD(totales.inversionUsdSum)}</td>
                   <td className="py-3 px-4 text-center tabular-nums">{totales.nIngresos}</td>
                   <td className="py-3 px-4 text-center tabular-nums">{totales.nGastos}</td>
                   <td className="py-3 px-4 text-right text-slate-400">—</td>

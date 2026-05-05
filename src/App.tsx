@@ -11,6 +11,7 @@ import Inicio from './pages/Dashboard/Inicio';
 import FinanzasHub from './pages/Finanzas/FinanzasHub';
 import Ingresos from './pages/Finanzas/Ingresos';
 import Gastos from './pages/Finanzas/Gastos';
+import GastosCaja from './pages/Finanzas/GastosCaja';
 import Descuentos from './pages/Finanzas/Descuentos';
 import Prestamos from './pages/Finanzas/Prestamos';
 import ReportesHub from './pages/Reportes/ReportesHub';
@@ -43,6 +44,7 @@ const AppContent: React.FC = () => {
             <Route path="/finanzas" element={<FinanzasHub />} />
             <Route path="/finanzas/ingresos" element={<Ingresos />} />
             <Route path="/finanzas/gastos" element={<Gastos />} />
+            <Route path="/finanzas/gastos-caja" element={<GastosCaja />} />
             <Route path="/finanzas/descuentos" element={<Descuentos />} />
             <Route path="/finanzas/prestamos" element={<Prestamos />} />
             <Route path="/finanzas/reportes" element={<ReportesHub />} />
