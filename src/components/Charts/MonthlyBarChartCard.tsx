@@ -34,6 +34,11 @@ export interface MonthlyBarChartCardProps {
   footerHint?: string;
 }
 
+const toNumberSafe = (value: unknown): number => {
+  const n = typeof value === 'number' ? value : Number(String(value ?? '0'));
+  return Number.isFinite(n) ? n : 0;
+};
+
 const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
   title,
   subtitle,
@@ -77,12 +82,12 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
               tick={{ fontSize: 11, fill: '#9CA3AF' }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(value) => `S/${(toNumberSafe(value) / 1000).toFixed(0)}k`}
               width={44}
             />
             <Tooltip
-              formatter={(v) => [formatCurrency(Number(v)), tooltipSeriesName]}
-              labelFormatter={(label) => `Mes: ${label}`}
+              formatter={(value) => [formatCurrency(toNumberSafe(value)), tooltipSeriesName]}
+              labelFormatter={(label) => `Mes: ${String(label ?? '')}`}
               contentStyle={{
                 borderRadius: '12px',
                 border: '1px solid #E5E7EB',
@@ -95,7 +100,7 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
                 dataKey="total"
                 position="top"
                 offset={8}
-                formatter={(v: number | string) => formatMontoGraficoBarra(Number(v))}
+                formatter={(value) => formatMontoGraficoBarra(toNumberSafe(value))}
                 style={{
                   fill: vs.labelFill,
                   fontSize: 11,
