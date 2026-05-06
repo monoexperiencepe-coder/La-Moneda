@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Download } from 'lucide-react';
+import { CalendarRange, ChevronLeft, Download } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
@@ -46,6 +46,33 @@ const GastosCaja: React.FC = () => {
   const totalFiltrado = useMemo(() => filtrados.reduce((s, g) => s + g.monto, 0), [filtrados]);
   const totalGlobal = useMemo(() => gastosCaja.reduce((s, g) => s + g.monto, 0), [gastosCaja]);
 
+  /** Rango que cubre todos los movimientos cargados (para «ver todo el historial»). */
+  const rangoHistorialCompleto = useMemo(() => {
+    const hoy = todayStr();
+    if (!gastosCaja.length) return { desde: '2000-01-01', hasta: hoy };
+    let min = '';
+    let max = '';
+    for (const g of gastosCaja) {
+      const d = toDateOnlyString(g.fecha);
+      if (!d) continue;
+      if (!min || d < min) min = d;
+      if (!max || d > max) max = d;
+    }
+    return { desde: min || '2000-01-01', hasta: max || hoy };
+  }, [gastosCaja]);
+
+  const verTodoElHistorial = useCallback(() => {
+    setDesde(rangoHistorialCompleto.desde);
+    setHasta(rangoHistorialCompleto.hasta);
+    setCategoria('');
+  }, [rangoHistorialCompleto]);
+
+  const mostrandoHistorialCompleto =
+    gastosCaja.length > 0 &&
+    categoria === '' &&
+    desde === rangoHistorialCompleto.desde &&
+    hasta === rangoHistorialCompleto.hasta;
+
   const exportCsv = useCallback(() => {
     const header = ['id', 'fecha', 'concepto', 'monto', 'categoria', 'comentarios'];
     const lines = [header.join(';')];
@@ -90,14 +117,25 @@ const GastosCaja: React.FC = () => {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={exportCsv}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold shadow-sm"
-        >
-          <Download size={16} />
-          Exportar CSV
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={verTodoElHistorial}
+            disabled={gastosCaja.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 disabled:pointer-events-none text-amber-950 text-sm font-semibold shadow-sm"
+          >
+            <CalendarRange size={16} />
+            Ver todo el historial
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold shadow-sm"
+          >
+            <Download size={16} />
+            Exportar CSV
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -119,6 +157,11 @@ const GastosCaja: React.FC = () => {
           <Input label="Hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
           <Select label="Categoría" options={categoriasOptions} value={categoria} onChange={setCategoria} />
         </div>
+        {mostrandoHistorialCompleto && (
+          <p className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Mostrando todos los movimientos cargados ({gastosCaja.length} registros). Usa las fechas o categoría para acotar.
+          </p>
+        )}
       </Card>
 
       <Card title="Listado" padding={false}>

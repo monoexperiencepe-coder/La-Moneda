@@ -1,16 +1,23 @@
 /**
- * Mueve filas de public.gastos_caja → public.gastos cuando el concepto/comentario
- * referencia unidad como «Modelo N» (ej. Versa 60, Yaris 12) y N coincide con vehiculos.id.
+ * Audita y opcionalmente mueve public.gastos_caja → public.gastos cuando el texto
+ * referencia unidad como «MODELO id» (ej. VERSA 32 BOMBA, YARIS 06 RADIADOR) e id = vehiculos.id.
+ * Los dígitos del id pueden llevar ceros a la izquierda (06 → vehicle_id 6). Tras el id puede ir
+ * texto libre (ej. 2/3, 2/5, descripción).
  *
- * NO mueve si concepto o comentarios contienen "MPBA" o "abuela" (sin importar mayúsculas),
- * ni inversión por «compra» (palabra completa «compra», p. ej. compra de / compra carro / compra vehículo).
+ * - Candidatos claros: modelo + id exacto en texto (una sola unidad detectada).
+ * - Posibles typos: número más largo que empieza por un id válido del mismo modelo (ej. VERSA 3213 → 32);
+ *   solo auditoría; NO se mueven en modo real.
+ * - Excluye si contiene (normalizado): MPBA/MBPA y variantes con espacios (M P B A, MB PA…);
+ *   «abuela» y variantes con espacios (ABUEL A, ABUE LA…); compra (palabra completa); caja negocio.
+ * - Dedup: no insertar si ya hay gasto misma empresa + fecha + monto + vehicle_id y traza/similitud.
  *
  * Variables: VITE_SUPABASE_URL, VITE_EMPRESA_ID, SUPABASE_SERVICE_ROLE_KEY.
  *
- * DRY_RUN=1 por defecto. Import real:
- *   $env:DRY_RUN='0'; node scripts/mover_gastos_caja_a_vehiculo.mjs
+ * DRY_RUN=1 por defecto (solo informe).
+ * Modo real además requiere ALLOW_GASTOS_CAJA_MOVE=1:
+ *   $env:DRY_RUN='0'; $env:ALLOW_GASTOS_CAJA_MOVE='1'; node scripts/mover_gastos_caja_a_vehiculo.mjs
  *
- * No modifica ingresos, vehiculos, inversiones_vehiculo ni documentación.
+ * No modifica ingresos, caja_negocio_vehiculo, inversiones_vehiculo ni vehículos.
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -40,7 +47,10 @@ const url = (env.VITE_SUPABASE_URL ?? '').trim()
 const serviceKey = (env.SUPABASE_SERVICE_ROLE_KEY || env.SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || '').trim()
 const empresaId = (env.VITE_EMPRESA_ID ?? '').trim()
 const dryRun = env.DRY_RUN !== '0' && env.DRY_RUN !== 'false'
+const allowReal = env.ALLOW_GASTOS_CAJA_MOVE === '1' || env.ALLOW_GASTOS_CAJA_MOVE === 'true'
 const PAGE = 1000
+const CHUNK_INSERT = 80
+const CHUNK_DELETE = 200
 
 function fold(s) {
   return String(s ?? '')
@@ -55,15 +65,148 @@ function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/** Texto ya en minúsculas sin tildes: quita espacios para detectar letras partidas (ABUEL A → abuela). */
+function compactNoSpaces(blobFolded) {
+  return blobFolded.replace(/\s+/g, '')
+}
+
+function hasAbuelaVariant(blobFolded) {
+  return compactNoSpaces(blobFolded).includes('abuela')
+}
+
+function hasMpbaMbpaVariant(blobFolded) {
+  const c = compactNoSpaces(blobFolded)
+  return c.includes('mpba') || c.includes('mbpa')
+}
+
 function hasExcludedTerms(concepto, comentarios) {
   const blob = fold(`${concepto} ${comentarios}`)
-  /** Palabra «compra» sola (no «recompra»); cubre compra, compra de, compra carro, compra vehículo/vehículo tras fold. */
   const compraInversion = /\bcompra\b/.test(blob)
+  const cajaNegocio = /\b(cajas?|caj)\s+((del|de)\s+)?negocio\b/u.test(blob)
+  const mpba = hasMpbaMbpaVariant(blob)
+  const abuela = hasAbuelaVariant(blob)
   return {
-    mpba: blob.includes('mpba'),
-    abuela: blob.includes('abuela'),
+    mpba,
+    abuela,
     compraInversion,
+    cajaNegocio,
+    any: mpba || abuela || compraInversion || cajaNegocio,
   }
+}
+
+/** Entero del token capturado (06 → 6). Solo dígitos (regex ya lo garantiza). */
+function parseIdDigits(numStr) {
+  const n = Number.parseInt(String(numStr), 10)
+  return Number.isFinite(n) ? n : NaN
+}
+
+/**
+ * Typos tipo «3213» → vehículo 32: el token tiene más dígitos que el id y empieza por el id como texto.
+ * No aplica a «06» vs id 6 (misma longitud tras normalizar número → va por match exacto numérico).
+ */
+function maximalPrefixVehiclesSameModel(numStr, sameModel) {
+  const prefix = sameModel.filter((v) => {
+    const idStr = String(v.id)
+    return numStr.startsWith(idStr) && numStr.length > idStr.length
+  })
+  if (!prefix.length) return []
+  const maxLen = Math.max(...prefix.map((v) => String(v.id).length))
+  return prefix.filter((v) => String(v.id).length === maxLen)
+}
+
+/**
+ * Extrae coincidencias «modelo (folded) + bloque de dígitos» en el haystack.
+ * @returns {Array<{ modelFold: string, numStr: string, index: number }>}
+ */
+function extractModelNumberHits(haystackFolded, vehiculos) {
+  const sorted = [...vehiculos].sort((a, b) => fold(b.modelo).length - fold(a.modelo).length)
+  const hits = []
+  const seen = new Set()
+  for (const v of sorted) {
+    const m = fold(v.modelo)
+    if (m.length < 2) continue
+    /** Tras el modelo: bloque de dígitos (permite ceros a la izquierda); \b tras dígitos permite «06 2/3». */
+    const re = new RegExp(`\\b${escapeRe(m)}\\s+(\\d+)\\b`, 'gu')
+    let mm
+    while ((mm = re.exec(haystackFolded)) !== null) {
+      const key = `${mm.index}|${m}|${mm[1]}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      hits.push({ modelFold: m, numStr: mm[1], index: mm.index })
+    }
+  }
+  hits.sort((a, b) => a.index - b.index)
+  return hits
+}
+
+/**
+ * @returns {{
+ *   kind: 'none' | 'clear' | 'typo' | 'ambiguous_exact' | 'ambiguous_multi_unit' | 'ambiguous_typo'
+ *   vehicleId?: number
+ *   matchedModelo?: string
+ *   typoDetail?: { numStr: string, suggestedVehicleId: number, modelo: string }
+ * }}
+ */
+function classifyFromHits(hits, vehiculos) {
+  if (!hits.length) return { kind: 'none' }
+
+  const clearVehicleIds = new Set()
+  /** @type {Array<{ suggestedVehicleId: number, modelo: string, numStr: string }>} */
+  const typoSingles = []
+
+  for (const h of hits) {
+    const sameModel = vehiculos.filter((v) => fold(v.modelo) === h.modelFold)
+    const idParsed = parseIdDigits(h.numStr)
+    const exact =
+      Number.isFinite(idParsed) ? sameModel.filter((v) => Number(v.id) === idParsed) : []
+    if (exact.length === 1) {
+      clearVehicleIds.add(exact[0].id)
+      continue
+    }
+    if (exact.length > 1) return { kind: 'ambiguous_exact' }
+
+    const narrow = maximalPrefixVehiclesSameModel(h.numStr, sameModel)
+    if (narrow.length === 1) {
+      typoSingles.push({
+        suggestedVehicleId: narrow[0].id,
+        modelo: String(narrow[0].modelo ?? '').trim(),
+        numStr: h.numStr,
+      })
+    } else if (narrow.length > 1) {
+      return { kind: 'ambiguous_typo' }
+    }
+  }
+
+  if (clearVehicleIds.size === 1 && typoSingles.length === 0) {
+    const vid = [...clearVehicleIds][0]
+    const vv = vehiculos.find((v) => Number(v.id) === vid)
+    return { kind: 'clear', vehicleId: vid, matchedModelo: vv ? String(vv.modelo).trim() : '' }
+  }
+
+  if (clearVehicleIds.size === 0 && typoSingles.length === 1) {
+    const t = typoSingles[0]
+    return {
+      kind: 'typo',
+      typoDetail: {
+        numStr: t.numStr,
+        suggestedVehicleId: t.suggestedVehicleId,
+        modelo: t.modelo,
+      },
+    }
+  }
+
+  if (clearVehicleIds.size > 1) return { kind: 'ambiguous_multi_unit' }
+  if (clearVehicleIds.size === 1 && typoSingles.length > 0) return { kind: 'ambiguous_multi_unit' }
+  if (typoSingles.length > 1) return { kind: 'ambiguous_typo' }
+
+  return { kind: 'none' }
+}
+
+function classifyRow(concepto, comentarios, vehiculos) {
+  const haystack = fold(`${concepto} ${comentarios}`)
+  if (!haystack) return { kind: 'none' }
+  const hits = extractModelNumberHits(haystack, vehiculos)
+  return classifyFromHits(hits, vehiculos)
 }
 
 async function fetchAllGastosCaja(supabase, empresa) {
@@ -103,35 +246,77 @@ async function fetchVehiculos(supabase, empresa) {
   return out
 }
 
+async function fetchAllGastos(supabase, empresa) {
+  const out = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await supabase
+      .from('gastos')
+      .select('id, fecha, monto, vehicle_id, comentarios, excel_extra, motivo')
+      .eq('empresa_id', empresa)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) throw new Error(`[gastos] ${error.message}`)
+    if (!data?.length) break
+    out.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return out
+}
+
+function dupMapKey(fecha, monto, vehicleId) {
+  return `${fecha}|${Number(monto)}|${Number(vehicleId)}`
+}
+
 /**
- * Busca «modelo normalizado» + espacio + id como palabra.
- * @returns {{ vehicleId: number | null, matchedModelo: string | null, ambiguous: boolean }}
+ * Índice fecha → lista gastos (para acotar comparaciones).
  */
-function resolveVehicleFromText(concepto, comentarios, vehiculos) {
-  const haystack = fold(`${concepto} ${comentarios}`)
-  if (!haystack) return { vehicleId: null, matchedModelo: null, ambiguous: false }
-
-  const sorted = [...vehiculos].sort((a, b) => fold(b.modelo).length - fold(a.modelo).length)
-
-  const hits = []
-  for (const v of sorted) {
-    const m = fold(v.modelo)
-    if (!m || m.length < 2) continue
-    const re = new RegExp(`\\b${escapeRe(m)}\\s+${Number(v.id)}\\b`, 'iu')
-    if (re.test(haystack)) {
-      hits.push({ id: Number(v.id), modelo: String(v.modelo ?? '').trim() })
-    }
+function buildGastosDupIndex(gastosRows) {
+  /** @type {Map<string, Array<Record<string, unknown>>>} */
+  const byFecha = new Map()
+  for (const g of gastosRows) {
+    const f = String(g.fecha ?? '').slice(0, 10)
+    if (!f) continue
+    if (!byFecha.has(f)) byFecha.set(f, [])
+    byFecha.get(f).push(g)
   }
+  return byFecha
+}
 
-  const byId = new Map()
-  for (const h of hits) {
-    if (!byId.has(h.id)) byId.set(h.id, h)
+function extraHasCajaId(extra, cajaId) {
+  if (extra == null || typeof extra !== 'object') return false
+  const id = extra.from_gastos_caja_id
+  return id != null && Number(id) === Number(cajaId)
+}
+
+function isLikelyDuplicate(gastoRow, cajaRow, vehicleId) {
+  const cid = Number(cajaRow.id)
+  const com = fold(gastoRow.comentarios ?? '')
+  if (com.includes(`origen gastos_caja id=${cid}`) || com.includes(`origen gastos_caja id=${cid}]`)) return true
+  if (extraHasCajaId(gastoRow.excel_extra, cid)) return true
+
+  const conceptFold = fold(cajaRow.concepto ?? '').slice(0, 55)
+  if (conceptFold.length >= 6 && com.includes(conceptFold)) return true
+
+  const motivoFold = fold(gastoRow.motivo ?? '').slice(0, 55)
+  if (conceptFold.length >= 6 && motivoFold.includes(conceptFold)) return true
+
+  return false
+}
+
+function findDuplicateForCandidate(byFechaMap, cajaRow, vehicleId) {
+  const f = String(cajaRow.fecha ?? '').slice(0, 10)
+  const monto = Number(cajaRow.monto)
+  const vid = Number(vehicleId)
+  const list = byFechaMap.get(f)
+  if (!list?.length) return null
+  for (const g of list) {
+    if (g.vehicle_id == null || Number(g.vehicle_id) !== vid) continue
+    if (Number(g.monto) !== monto) continue
+    if (isLikelyDuplicate(g, cajaRow, vid)) return g
   }
-  if (byId.size === 0) return { vehicleId: null, matchedModelo: null, ambiguous: false }
-  if (byId.size > 1) return { vehicleId: null, matchedModelo: null, ambiguous: true }
-
-  const only = [...byId.values()][0]
-  return { vehicleId: only.id, matchedModelo: only.modelo, ambiguous: false }
+  return null
 }
 
 function toGastoRow(empresa_id, cajaRow, vehicleId) {
@@ -168,24 +353,51 @@ function toGastoRow(empresa_id, cajaRow, vehicleId) {
   }
 }
 
+function printSample(title, rows, limit, formatter) {
+  console.log(`\n--- ${title} (hasta ${limit}) ---`)
+  const slice = rows.slice(0, limit)
+  for (const r of slice) console.log(formatter(r))
+  if (rows.length > limit) console.log(`… y ${rows.length - limit} más`)
+}
+
 async function main() {
-  console.log('--- mover_gastos_caja_a_vehiculo ---')
-  console.log('DRY_RUN:', dryRun ? '1 (no inserta ni borra)' : '0 (INSERT gastos + DELETE gastos_caja)')
+  console.log('=== mover_gastos_caja_a_vehiculo — auditoría / traslado ===')
+  console.log('DRY_RUN:', dryRun ? '1 (solo informe; no inserta ni borra)' : '0 (modo ejecución)')
+  if (!dryRun && !allowReal) {
+    console.error(
+      '\n[BLOQUEADO] Modo real desactivado por seguridad. Para ejecutar inserciones/borrados añade también:\n  ALLOW_GASTOS_CAJA_MOVE=1\n',
+    )
+    process.exit(1)
+  }
 
   if (!url || !serviceKey) throw new Error('Faltan VITE_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY')
   if (!empresaId) throw new Error('Falta VITE_EMPRESA_ID')
 
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false } })
 
-  const [cajaRows, vehiculos] = await Promise.all([fetchAllGastosCaja(supabase, empresaId), fetchVehiculos(supabase, empresaId)])
+  const [cajaRows, vehiculos, gastosRows] = await Promise.all([
+    fetchAllGastosCaja(supabase, empresaId),
+    fetchVehiculos(supabase, empresaId),
+    fetchAllGastos(supabase, empresaId),
+  ])
+
+  const byFecha = buildGastosDupIndex(gastosRows)
 
   let excludedMpba = 0
   let excludedAbuela = 0
   let excludedCompra = 0
-  let noVehicleMatch = 0
-  let ambiguous = 0
+  let excludedCajaNegocio = 0
+  let sinPatron = 0
+  let ambiguousExact = 0
+  let ambiguousMultiUnit = 0
+  let ambiguousTypo = 0
+  /** candidatos claros antes de dedup */
   /** @type {Array<{ row: object, vehicleId: number, matchedModelo: string }>} */
-  const toMove = []
+  const clearRaw = []
+  /** @type {Array<{ row: object, detail: object }>} */
+  const typoRows = []
+  /** @type {Array<{ row: object, vehicleId: number, dupGastoId: unknown }>} */
+  const duplicateBlocked = []
 
   for (const row of cajaRows) {
     const concepto = row.concepto ?? ''
@@ -194,80 +406,138 @@ async function main() {
     if (ex.mpba) excludedMpba++
     if (ex.abuela) excludedAbuela++
     if (ex.compraInversion) excludedCompra++
-    if (ex.mpba || ex.abuela || ex.compraInversion) continue
+    if (ex.cajaNegocio) excludedCajaNegocio++
+    if (ex.any) continue
 
-    const res = resolveVehicleFromText(concepto, comentarios, vehiculos)
-    if (res.ambiguous) {
-      ambiguous++
+    const cl = classifyRow(concepto, comentarios, vehiculos)
+    if (cl.kind === 'none') {
+      sinPatron++
       continue
     }
-    if (res.vehicleId == null) {
-      noVehicleMatch++
+    if (cl.kind === 'ambiguous_exact') {
+      ambiguousExact++
       continue
     }
-    toMove.push({ row, vehicleId: res.vehicleId, matchedModelo: res.matchedModelo ?? '' })
+    if (cl.kind === 'ambiguous_multi_unit') {
+      ambiguousMultiUnit++
+      continue
+    }
+    if (cl.kind === 'ambiguous_typo') {
+      ambiguousTypo++
+      continue
+    }
+    if (cl.kind === 'typo') {
+      typoRows.push({ row, detail: cl.typoDetail })
+      continue
+    }
+    if (cl.kind === 'clear' && cl.vehicleId != null) {
+      clearRaw.push({ row, vehicleId: cl.vehicleId, matchedModelo: cl.matchedModelo ?? '' })
+    }
   }
 
-  const candidatos = toMove.length + ambiguous
+  /** Tras dedup: solo insertables */
+  /** @type {typeof clearRaw} */
+  const toMove = []
+  for (const m of clearRaw) {
+    const dup = findDuplicateForCandidate(byFecha, m.row, m.vehicleId)
+    if (dup) duplicateBlocked.push({ row: m.row, vehicleId: m.vehicleId, dupGastoId: dup.id })
+    else toMove.push(m)
+  }
+
   const stats = {
     total_gastos_caja: cajaRows.length,
     vehiculos_cargados: vehiculos.length,
+    gastos_cargados_index: gastosRows.length,
     excluidos_mpba: excludedMpba,
     excluidos_abuela: excludedAbuela,
-    excluidos_compra_inversion: excludedCompra,
-    sin_patron_unidad: noVehicleMatch,
-    ambiguos_modelo_id: ambiguous,
-    candidatos_patron_modelo_id: candidatos,
-    se_moverian: toMove.length,
+    excluidos_compra_palabra: excludedCompra,
+    excluidos_caja_negocio: excludedCajaNegocio,
+    sin_patron_modelo_id: sinPatron,
+    ambiguos_match_exacto_multiple: ambiguousExact,
+    ambiguos_varias_unidades_en_texto: ambiguousMultiUnit,
+    ambiguos_typo_multiple: ambiguousTypo,
+    candidatos_claros_patron_exacto: clearRaw.length,
+    posibles_typos: typoRows.length,
+    ya_movidos_o_duplicados_potenciales: duplicateBlocked.length,
+    se_insertarian_tras_dedup: toMove.length,
   }
 
-  console.log('\n--- Resumen ---')
+  console.log('\n--- Resumen (JSON) ---')
   console.log(JSON.stringify(stats, null, 2))
 
-  const muestra = toMove.slice(0, 20)
-  console.log('\nMuestra (hasta 20 movimientos):')
-  for (const m of muestra) {
-    console.log(
+  printSample(
+    'Muestra candidatos claros (patrón exacto; antes de dedup)',
+    clearRaw,
+    50,
+    (m) =>
       JSON.stringify({
         gastos_caja_id: m.row.id,
         fecha: m.row.fecha,
         monto: m.row.monto,
-        concepto: String(m.row.concepto).slice(0, 80),
         vehicle_id: m.vehicleId,
-        modelo_coincidencia: m.matchedModelo,
+        modelo: m.matchedModelo,
+        concepto: String(m.row.concepto).slice(0, 90),
       }),
-    )
-  }
-  if (toMove.length > 20) console.log(`… y ${toMove.length - 20} más`)
+  )
+
+  printSample(
+    'Muestra posibles typos / número extendido (NO se mueven en modo real)',
+    typoRows,
+    50,
+    (x) =>
+      JSON.stringify({
+        gastos_caja_id: x.row.id,
+        fecha: x.row.fecha,
+        monto: x.row.monto,
+        texto_numero: x.detail.numStr,
+        modelo: x.detail.modelo,
+        posible_vehicle_id: x.detail.suggestedVehicleId,
+        concepto: String(x.row.concepto).slice(0, 90),
+      }),
+  )
+
+  printSample(
+    'Muestra bloqueados por duplicado / ya movidos',
+    duplicateBlocked,
+    50,
+    (x) =>
+      JSON.stringify({
+        gastos_caja_id: x.row.id,
+        fecha: x.row.fecha,
+        monto: x.row.monto,
+        vehicle_id: x.vehicleId,
+        gasto_existente_id: x.dupGastoId,
+        concepto: String(x.row.concepto).slice(0, 80),
+      }),
+  )
 
   if (dryRun) {
     console.log('\n✓ DRY_RUN: no se insertó en gastos ni se borró gastos_caja.')
-    console.log('Real:  $env:DRY_RUN=\'0\'; node scripts/mover_gastos_caja_a_vehiculo.mjs')
+    console.log('Modo real (solo candidatos claros sin duplicado; typos NO):')
+    console.log('  PowerShell:')
+    console.log("    $env:DRY_RUN='0'; $env:ALLOW_GASTOS_CAJA_MOVE='1'; node scripts/mover_gastos_caja_a_vehiculo.mjs")
     return
   }
 
-  const insertChunk = 80
+  console.log('\n--- Ejecución real (candidatos claros únicamente) ---')
   const idsMoved = []
-
-  console.log('\n--- Ejecución real ---')
-  for (let i = 0; i < toMove.length; i += insertChunk) {
-    const batch = toMove.slice(i, i + insertChunk)
+  for (let i = 0; i < toMove.length; i += CHUNK_INSERT) {
+    const batch = toMove.slice(i, i + CHUNK_INSERT)
     const inserts = batch.map(({ row, vehicleId }) => toGastoRow(empresaId, row, vehicleId))
     const { error: insErr } = await supabase.from('gastos').insert(inserts)
     if (insErr) throw new Error(`[gastos insert] lote ${i}: ${insErr.message}`)
     for (const { row } of batch) idsMoved.push(row.id)
-    console.log(`  [gastos] +${batch.length} (total insertados hasta ahora: ${idsMoved.length})`)
+    console.log(`  [gastos] +${batch.length} (total: ${idsMoved.length}/${toMove.length})`)
   }
 
-  const delChunk = 200
-  for (let i = 0; i < idsMoved.length; i += delChunk) {
-    const chunk = idsMoved.slice(i, i + delChunk)
+  for (let i = 0; i < idsMoved.length; i += CHUNK_DELETE) {
+    const chunk = idsMoved.slice(i, i + CHUNK_DELETE)
     const { error: delErr } = await supabase.from('gastos_caja').delete().in('id', chunk)
     if (delErr) throw new Error(`[gastos_caja delete] lote ${i}: ${delErr.message}`)
-    console.log(`  [gastos_caja] -${chunk.length} ids`)
+    console.log(`  [gastos_caja] eliminados ${chunk.length}`)
   }
 
-  console.log('\nListo. Movidos:', idsMoved.length)
+  console.log('\nListo. Insertados + eliminados de caja:', idsMoved.length)
 }
 
 main().catch((e) => {
