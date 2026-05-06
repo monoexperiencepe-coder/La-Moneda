@@ -85,3 +85,15 @@ export const isExpired = (dateStr: string): boolean => {
   if (!dateStr) return false;
   return new Date(dateStr) < new Date();
 };
+
+/** Monto compacto encima de barras en gráficos (legible sin saturar). */
+export function formatMontoGraficoBarra(n: number): string {
+  if (n === 0) return '';
+  if (n >= 1_000_000) {
+    return `S/${(n / 1_000_000).toLocaleString('es-PE', { maximumFractionDigits: 1, minimumFractionDigits: 0 })}M`;
+  }
+  if (n >= 1000) {
+    return `S/${(n / 1000).toLocaleString('es-PE', { maximumFractionDigits: n >= 100_000 ? 0 : 1, minimumFractionDigits: 0 })}k`;
+  }
+  return formatCurrency(n);
+}

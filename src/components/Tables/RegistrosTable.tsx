@@ -187,8 +187,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-soft">
       {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
+        <div className="relative flex-1 w-full sm:max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -198,10 +198,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             className="input-field pl-9 text-sm"
           />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           {/* Filtro estado_pago — solo ingresos */}
           {mode === 'ingresos' && (
-            <div className="w-44">
+            <div className="w-full sm:w-44">
               <Select
                 options={ESTADO_PAGO_OPTIONS}
                 value={filterEstadoPago}
@@ -210,7 +210,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             </div>
           )}
           <span className="text-xs text-gray-400">{filtered.length} registros</span>
-          <div className="w-40">
+          <div className="w-full sm:w-40">
             <Select
               options={PAGE_SIZE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
               value={pageSize}
@@ -220,8 +220,91 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         </div>
       </div>
 
-      {/* ── Tabla ── */}
-      <div className="overflow-x-auto">
+      {/* ── Móvil: cards compactas ── */}
+      <div className="block md:hidden px-3 py-3 space-y-2.5">
+        {paginated.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 text-sm">
+            {query || filterEstadoPago
+              ? 'No se encontraron resultados para los filtros aplicados'
+              : 'Sin registros disponibles'}
+          </div>
+        ) : (
+          paginated.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setViewItem(item)}
+              className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-transform"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-400 font-medium">{formatDate(item.fecha)}</p>
+                  <p className="text-xs text-gray-600 mt-0.5 truncate">
+                    {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {mode === 'ingresos' ? (
+                    <p className="text-sm font-bold text-emerald-600 tabular-nums">
+                      +{formatCurrency(ingresoMontoPEN(item as Ingreso))}
+                    </p>
+                  ) : (item as Gasto).monto < 0 ? (
+                    <p className="text-sm font-bold text-emerald-600 tabular-nums">
+                      −{formatCurrency(Math.abs((item as Gasto).monto))}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-bold text-red-500 tabular-nums">
+                      −{formatCurrency((item as Gasto).monto)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2.5 flex items-start gap-2">
+                {mode === 'ingresos' ? (
+                  <Badge variant="success" size="sm">{(item as Ingreso).tipo}</Badge>
+                ) : (
+                  <Badge variant="warning" size="sm">{CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}</Badge>
+                )}
+                <p className="text-xs text-gray-500 truncate">
+                  {mode === 'ingresos'
+                    ? ((item as Ingreso).subTipo || (item as Ingreso).tipoOperacion || '—')
+                    : ((item as Gasto).motivo || (item as Gasto).categoriaReal || '—')}
+                </p>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-gray-500 truncate">
+                  {mode === 'ingresos'
+                    ? ((item as Ingreso).comentarios || (item as Ingreso).detalleOperativo || 'Sin comentario')
+                    : ((item as Gasto).pagadoA || (item as Gasto).comentarios || 'Sin observación')}
+                </p>
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setViewItem(item)}
+                    className="p-1.5 rounded-lg hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-colors"
+                    title="Ver detalles"
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(item.id)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* ── Desktop: tabla completa ── */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[920px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
@@ -272,7 +355,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               </tr>
             ) : (
               paginated.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                <tr
+                  key={item.id}
+                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  title="Clic en la fila para ver detalles"
+                  onClick={() => setViewItem(item)}
+                >
                   {/* Fecha */}
                   <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">
                     {formatDate(item.fecha)}
@@ -401,9 +489,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   </td>
 
                   {/* Acciones */}
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1.5">
                       <button
+                        type="button"
                         onClick={() => setViewItem(item)}
                         className="p-1.5 rounded-lg hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-colors"
                         title="Ver detalles"
@@ -411,6 +500,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                         <Eye size={15} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => setDeleteId(item.id)}
                         className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
                         title="Eliminar"
@@ -427,11 +517,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       </div>
 
       {/* ── Paginación ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-gray-100">
         <p className="text-xs text-gray-500">
           Mostrando {sorted.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} de {sorted.length}
         </p>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 ml-auto">
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}

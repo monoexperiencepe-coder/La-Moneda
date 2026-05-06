@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Star } from 'lucide-react';
+import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -15,7 +15,7 @@ const navItems: NavItem[] = [
   { label: 'Vehículos', path: '/vehiculos', icon: <Car size={15} />, emoji: '🚗' },
   { label: 'Operaciones', path: '/operaciones', icon: <Wrench size={15} />, emoji: '🔧' },
   { label: 'Reportes', path: '/reportes', icon: <BarChart3 size={15} />, emoji: '📊' },
-  { label: 'Logros', path: '/logros', icon: <Star size={15} />, emoji: '⭐' },
+  { label: 'Metas', path: '/metas', icon: <Target size={15} />, emoji: '🎯' },
 ];
 
 const Header: React.FC = () => {

@@ -308,16 +308,33 @@ const Inicio: React.FC = () => {
     <div className="animate-fade-in max-w-lg mx-auto pb-12 space-y-4">
 
       {/* ── STATUS BAR ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400 capitalize">
-          {hoyLabel}
-        </p>
-        <p className="text-[11px] font-mono text-gray-500 tabular-nums">
-          <span className="text-emerald-600 font-bold">{formatCurrency(todayIngresos)}</span>
-          <span className="mx-1.5 text-gray-300">·</span>
-          <span className="text-rose-500 font-bold">{formatCurrency(todayGastos)}</span>
-          <span className="ml-1.5 text-gray-400">hoy</span>
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3 pt-1">
+        {/* Fecha */}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">
+            Hoy
+          </p>
+          <p className="text-sm font-semibold text-gray-700 capitalize leading-tight mt-0.5">
+            {hoyLabel}
+          </p>
+        </div>
+        {/* Pills hoy */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Ing.</span>
+            <span className="text-xs font-bold text-emerald-900 tabular-nums">
+              {formatCurrency(todayIngresos)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+            <span className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Gas.</span>
+            <span className="text-xs font-bold text-rose-900 tabular-nums">
+              {formatCurrency(todayGastos)}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ── COMMAND BAR ────────────────────────────────────────────────── */}

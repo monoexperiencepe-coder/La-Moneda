@@ -5,7 +5,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import Select from '../../components/Common/Select';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import MonthlyBarChartCard from '../../components/Charts/MonthlyBarChartCard';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { MESES } from '../../data/catalogs';
@@ -141,42 +141,16 @@ const Ingresos: React.FC = () => {
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-gray-700">Ingresos por Mes</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              Por año calendario (antes se sumaban todos los años en cada mes).
-            </p>
-          </div>
-          {yearOptions.length > 0 ? (
-            <div className="w-full sm:w-40 shrink-0">
-              <Select
-                label="Año"
-                options={yearOptions}
-                value={chartYear}
-                onChange={setChartYear}
-              />
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">Sin fechas para graficar</p>
-          )}
-        </div>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 0, right: 5, left: -15, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => [formatCurrency(Number(v)), 'Ingresos']}
-                contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }} />
-              <Bar dataKey="total" fill="#10B981" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      <MonthlyBarChartCard
+        title="Ingresos por Mes"
+        subtitle="Por año calendario (antes se sumaban todos los años en cada mes)."
+        chartYear={chartYear}
+        onChartYearChange={setChartYear}
+        yearOptions={yearOptions}
+        chartData={chartData}
+        tooltipSeriesName="Ingresos"
+        variant="emerald"
+      />
 
       {/* Table */}
       <div>

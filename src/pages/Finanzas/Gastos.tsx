@@ -5,10 +5,9 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import Select from '../../components/Common/Select';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency, todayStr } from '../../utils/formatting';
-import { CATEGORIAS_GASTO_LABELS, CATEGORIA_COLORS, MESES } from '../../data/catalogs';
-import { CategoriaGasto } from '../../data/types';
+import { MESES } from '../../data/catalogs';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 const Gastos: React.FC = () => {
@@ -93,18 +92,6 @@ const Gastos: React.FC = () => {
     return gastosOperativos.filter((g) => g.fecha.startsWith(prefix));
   }, [gastosOperativos, historyYear]);
 
-  const pieData = useMemo(() => {
-    const totals: Record<string, number> = {};
-    gastosDelAnioGrafico.forEach((g) => {
-      totals[g.categoria] = (totals[g.categoria] ?? 0) + g.monto;
-    });
-    return Object.entries(totals).map(([cat, value]) => ({
-      name: CATEGORIAS_GASTO_LABELS[cat as CategoriaGasto] ?? cat,
-      value,
-      color: CATEGORIA_COLORS[cat as CategoriaGasto] ?? '#6B7280',
-    }));
-  }, [gastosDelAnioGrafico]);
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -176,27 +163,6 @@ const Gastos: React.FC = () => {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {pieData.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-1">Distribución por Categoría</h3>
-          <p className="text-xs text-gray-500 mb-4">Solo gastos del año seleccionado arriba ({chartYear || '—'}).</p>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
-                  {pieData.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => [formatCurrency(Number(v)), '']}
-                  contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
 
       <div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
