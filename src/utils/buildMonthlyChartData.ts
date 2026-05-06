@@ -1,4 +1,5 @@
 import type { Ingreso, Gasto } from '../data/types';
+import { gastosOperativosSolamente } from './cajaNegocio';
 import { ingresoMontoPEN } from './moneda';
 
 const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -15,13 +16,14 @@ export function buildMonthlyChartData(
   ingresos: Ingreso[],
   gastos: Gasto[],
 ): MonthlyChartPoint[] {
+  const gastosOp = gastosOperativosSolamente(gastos);
   return MESES_CORTO.map((mes, idx) => {
     const month = String(idx + 1).padStart(2, '0');
     const prefix = `${year}-${month}`;
     const ingTotal = ingresos
       .filter((i) => i.fecha.startsWith(prefix))
       .reduce((sum, i) => sum + ingresoMontoPEN(i), 0);
-    const gasTotal = gastos.filter((g) => g.fecha.startsWith(prefix)).reduce((sum, g) => sum + g.monto, 0);
+    const gasTotal = gastosOp.filter((g) => g.fecha.startsWith(prefix)).reduce((sum, g) => sum + g.monto, 0);
     return { mes, ingresos: ingTotal, gastos: gasTotal };
   });
 }

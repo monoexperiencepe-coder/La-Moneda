@@ -8,10 +8,12 @@ import { formatCurrency } from '../../utils/formatting';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { MESES, CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
 import { CategoriaGasto } from '../../data/types';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 const ReportesHub: React.FC = () => {
   const navigate = useNavigate();
   const { ingresos, gastos, descuentos, vehicles } = useRegistrosContext();
+  const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
   const kpis = useMemo(() => calculateKPIs(ingresos, gastos, descuentos), [ingresos, gastos, descuentos]);
   const rentability = useMemo(
     () => calculateVehicleRentability(vehicles, ingresos, gastos, descuentos),
@@ -21,19 +23,19 @@ const ReportesHub: React.FC = () => {
   const monthlyData = useMemo(() => MESES.map(mes => {
     const month = String(mes.value).padStart(2, '0');
     const ing = ingresos.filter(i => i.fecha.includes(`-${month}-`)).reduce((s, i) => s + ingresoMontoPEN(i), 0);
-    const gas = gastos.filter(g => g.fecha.includes(`-${month}-`)).reduce((s, g) => s + g.monto, 0);
+    const gas = gastosOp.filter(g => g.fecha.includes(`-${month}-`)).reduce((s, g) => s + g.monto, 0);
     const reb = descuentos.filter(d => d.fecha.includes(`-${month}-`)).reduce((s, d) => s + d.monto, 0);
     return { mes: mes.label.slice(0, 3), Ingresos: ing, Gastos: gas, Rebajes: reb, Margen: ing - gas + reb };
-  }), [ingresos, gastos, descuentos]);
+  }), [ingresos, gastosOp, descuentos]);
 
   const gastosCat = useMemo(() => {
     const totals: Record<string, number> = {};
-    gastos.forEach(g => { totals[g.categoria] = (totals[g.categoria] ?? 0) + g.monto; });
+    gastosOp.forEach(g => { totals[g.categoria] = (totals[g.categoria] ?? 0) + g.monto; });
     return Object.entries(totals).map(([cat, total]) => ({
       cat: CATEGORIAS_GASTO_LABELS[cat as CategoriaGasto]?.replace('Gastos ', '') ?? cat,
       Total: total,
     }));
-  }, [gastos]);
+  }, [gastosOp]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -57,7 +59,7 @@ const ReportesHub: React.FC = () => {
         <div className="bg-red-50 border border-red-100 rounded-2xl p-5">
           <p className="text-xs text-red-600 font-medium mb-1">Total Gastos</p>
           <p className="text-2xl font-bold text-red-700">{formatCurrency(kpis.totalGastos)}</p>
-          <p className="text-xs text-red-500 mt-1">{gastos.length} registros</p>
+          <p className="text-xs text-red-500 mt-1">{gastosOp.length} registros</p>
         </div>
         <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5">
           <p className="text-xs text-amber-800 font-medium mb-1">Rebajes (descuentos)</p>

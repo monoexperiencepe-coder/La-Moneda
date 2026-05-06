@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Vehicle, Ingreso, Gasto, Documentacion } from '../../data/types';
 import { formatCurrency, formatUSD, todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { Eye, Edit } from 'lucide-react';
 
 interface VehicleCardProps {
@@ -25,7 +26,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
     .filter(i => i.vehicleId === vehicle.id)
     .reduce((s, i) => s + ingresoMontoPEN(i), 0);
 
-  const monthGastos = gastos
+  const monthGastos = gastosOperativosSolamente(gastos)
     .filter(g => g.vehicleId === vehicle.id)
     .reduce((s, g) => s + g.monto, 0);
 

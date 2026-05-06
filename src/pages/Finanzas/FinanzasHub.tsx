@@ -6,9 +6,10 @@ import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/formatting';
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, gastosCaja } = useRegistrosContext();
+  const { ingresos, gastos, gastosCaja, cajaNegocioVehiculo } = useRegistrosContext();
   const kpis = calculateKPIs(ingresos, gastos, []);
   const totalGastosCaja = useMemo(() => gastosCaja.reduce((s, g) => s + g.monto, 0), [gastosCaja]);
+  const totalCajaNegocio = useMemo(() => cajaNegocioVehiculo.reduce((s, x) => s + x.monto, 0), [cajaNegocioVehiculo]);
 
   const options = [
     { title: 'Ingresos', desc: 'Tabla y gráficos de ingresos', emoji: '💰', path: '/finanzas/ingresos', gradient: 'from-emerald-500/10 to-teal-500/10', border: 'border-emerald-200 hover:border-emerald-400', stat: formatCurrency(kpis.totalIngresos), statColor: 'text-emerald-600' },
@@ -23,6 +24,16 @@ const FinanzasHub: React.FC = () => {
       border: 'border-amber-200 hover:border-amber-400',
       stat: formatCurrency(totalGastosCaja),
       statColor: 'text-amber-800',
+    },
+    {
+      title: 'Caja negocio',
+      desc: 'Utilidad por vehículo — aparte de gastos operativos e ingresos',
+      emoji: '🏪',
+      path: '/finanzas/caja-negocio',
+      gradient: 'from-teal-500/10 to-cyan-500/10',
+      border: 'border-teal-200 hover:border-teal-400',
+      stat: formatCurrency(totalCajaNegocio),
+      statColor: 'text-teal-800',
     },
     { title: 'Reportes', desc: 'Análisis y comparativas', emoji: '📊', path: '/finanzas/reportes', gradient: 'from-purple-500/10 to-pink-500/10', border: 'border-purple-200 hover:border-purple-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-primary-600' : 'text-red-600' },
   ];
@@ -39,7 +50,7 @@ const FinanzasHub: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-7 gap-4">
         {options.map(o => (
           <button key={o.path} onClick={() => navigate(o.path)}
             className={`mission-btn bg-gradient-to-br ${o.gradient} border-2 ${o.border} group text-left`}>

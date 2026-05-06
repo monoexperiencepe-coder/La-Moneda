@@ -7,6 +7,7 @@ import { calculateVehicleRentability } from '../../utils/calculations';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS, MESES } from '../../data/catalogs';
 import { TrendingUp, Car, DollarSign } from 'lucide-react';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 interface ReportesViewProps {
   ingresos: Ingreso[];
@@ -16,6 +17,7 @@ interface ReportesViewProps {
 }
 
 const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuentos = [], vehicles }) => {
+  const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
   const vehicleRentability = useMemo(
     () => calculateVehicleRentability(vehicles, ingresos, gastos, descuentos),
     [vehicles, ingresos, gastos, descuentos],
@@ -27,7 +29,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuento
       const monthIngresos = ingresos
         .filter(i => i.fecha.includes(`-${month}-`))
         .reduce((s, i) => s + ingresoMontoPEN(i), 0);
-      const monthGastos = gastos
+      const monthGastos = gastosOp
         .filter(g => g.fecha.includes(`-${month}-`))
         .reduce((s, g) => s + g.monto, 0);
       const monthRebajes = descuentos
@@ -40,21 +42,21 @@ const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuento
         Margen: monthIngresos - monthGastos + monthRebajes,
       };
     });
-  }, [ingresos, gastos, descuentos]);
+  }, [ingresos, gastosOp, descuentos]);
 
   const gastosPorCategoria = useMemo(() => {
     const totals: Record<string, number> = {};
-    gastos.forEach(g => {
+    gastosOp.forEach(g => {
       totals[g.categoria] = (totals[g.categoria] ?? 0) + g.monto;
     });
     return Object.entries(totals).map(([cat, total]) => ({
       categoria: CATEGORIAS_GASTO_LABELS[cat as keyof typeof CATEGORIAS_GASTO_LABELS] ?? cat,
       Total: total,
     }));
-  }, [gastos]);
+  }, [gastosOp]);
 
   const totalIngresos = ingresos.reduce((s, i) => s + ingresoMontoPEN(i), 0);
-  const totalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const totalGastos = gastosOp.reduce((s, g) => s + g.monto, 0);
 
   return (
     <div className="space-y-6">
@@ -79,7 +81,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuento
             <span className="text-sm font-semibold text-red-800">Total Gastos</span>
           </div>
           <p className="text-2xl font-bold text-red-700">{formatCurrency(totalGastos)}</p>
-          <p className="text-xs text-red-500 mt-1">{gastos.length} registros</p>
+          <p className="text-xs text-red-500 mt-1">{gastosOp.length} registros</p>
         </div>
         <div className={`border rounded-xl p-5 ${totalIngresos - totalGastos >= 0 ? 'bg-primary-50 border-primary-100' : 'bg-gray-50 border-gray-100'}`}>
           <div className="flex items-center gap-3 mb-2">

@@ -162,6 +162,22 @@ export interface GastoCaja {
   createdAt: string;
 }
 
+/**
+ * Caja negocio / utilidad por vehículo (no gasto operativo ni ingreso de arriendo).
+ * Tabla public.caja_negocio_vehiculo.
+ */
+export interface CajaNegocioVehiculo {
+  id: number;
+  vehicleId: number;
+  fecha: string;
+  monto: number;
+  concepto: string;
+  origenGastoId: number | null;
+  comentarios: string;
+  excelExtra?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 /** Categoría operativa de rebaja (no es tipo Fact de gastos). */
 export type CategoriaDescuento =
   | 'CHOQUE'

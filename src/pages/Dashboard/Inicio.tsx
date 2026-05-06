@@ -5,6 +5,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { formatCurrency, todayStr } from '../../utils/formatting';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { computeTodayReview, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
@@ -165,7 +166,10 @@ const Inicio: React.FC = () => {
     [ingresos],
   );
   const todayGastos = useMemo(
-    () => gastos.filter((g) => g.fecha === todayStr()).reduce((s, g) => s + g.monto, 0),
+    () =>
+      gastosOperativosSolamente(gastos)
+        .filter((g) => g.fecha === todayStr())
+        .reduce((s, g) => s + g.monto, 0),
     [gastos],
   );
 

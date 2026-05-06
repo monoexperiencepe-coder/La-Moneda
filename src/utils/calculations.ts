@@ -1,13 +1,15 @@
 import { Ingreso, Gasto, Descuento, Vehicle, KPIData, VehicleRentability } from '../data/types';
 import { ingresoMontoPEN } from './moneda';
+import { gastosOperativosSolamente } from './cajaNegocio';
 
 export const calculateKPIs = (
   ingresos: Ingreso[],
   gastos: Gasto[],
   descuentos: Descuento[] = [],
 ): KPIData => {
+  const gastosOp = gastosOperativosSolamente(gastos);
   const totalIngresos = ingresos.reduce((sum, i) => sum + ingresoMontoPEN(i), 0);
-  const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
+  const totalGastos = gastosOp.reduce((sum, g) => sum + g.monto, 0);
   const totalDescuentos = descuentos.reduce((sum, d) => sum + d.monto, 0);
   /** totalDescuentos suele ser ≤ 0; sumarlo resta del margen de forma consistente */
   const margenNeto = totalIngresos - totalGastos + totalDescuentos;
@@ -21,7 +23,7 @@ export const calculateKPIs = (
   });
 
   const gastosPorCategoria: Record<string, number> = {};
-  gastos.forEach(g => {
+  gastosOp.forEach(g => {
     gastosPorCategoria[g.categoria] = (gastosPorCategoria[g.categoria] ?? 0) + g.monto;
   });
 
@@ -48,11 +50,12 @@ export const calculateVehicleRentability = (
   gastos: Gasto[],
   descuentos: Descuento[] = [],
 ): VehicleRentability[] => {
+  const gastosOp = gastosOperativosSolamente(gastos);
   return vehicles
     .filter(v => v.activo)
     .map(vehicle => {
       const vehicleIngresos = ingresos.filter(i => i.vehicleId === vehicle.id);
-      const vehicleGastos = gastos.filter(g => g.vehicleId === vehicle.id);
+      const vehicleGastos = gastosOp.filter(g => g.vehicleId === vehicle.id);
       const vehicleDescuentos = descuentos.filter(d => d.vehicleId === vehicle.id);
 
       const totalIngresos = vehicleIngresos.reduce((sum, i) => sum + ingresoMontoPEN(i), 0);

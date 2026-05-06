@@ -6,6 +6,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, formatCurrency, todayStr } from '../../utils/formatting';
 import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
 import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperativeAlerts';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 const ID_TIPOS_INGRESO = ['ALQUILER', 'GARANTIA', 'PAPELETAS', 'CHOQUES / DANOS', 'INTERESES', 'PRESTAMOS'];
 const ID_G_MECANICOS = ['AIRE A/C', 'AUTOPARTES', 'BATERIA', 'DIRECCION Y SUSPENSION', 'GNV', 'GPS'];
@@ -46,7 +47,9 @@ const ControlGlobal: React.FC = () => {
         const ingresosV = ingresos.filter((i) => i.vehicleId === v.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
         const ultimoIngreso = ingresosV[0] ?? null;
 
-        const gastosV = gastos.filter((g) => g.vehicleId === v.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+        const gastosV = gastosOperativosSolamente(gastos)
+          .filter((g) => g.vehicleId === v.id)
+          .sort((a, b) => b.fecha.localeCompare(a.fecha));
         const ultimoGasto = gastosV[0] ?? null;
 
         const diasSinIngreso = ultimoIngreso ? Math.abs(diffDays(ultimoIngreso.fecha)) : null;

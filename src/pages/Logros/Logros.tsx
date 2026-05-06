@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Lock } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 interface Achievement {
   id: string;
@@ -19,12 +20,13 @@ const Logros: React.FC = () => {
   const navigate = useNavigate();
   const { ingresos, gastos, vehicles, kilometrajes } = useRegistrosContext();
 
+  const gastosOp = gastosOperativosSolamente(gastos);
   const totalIngresos = ingresos.length;
-  const totalGastos = gastos.length;
+  const totalGastos = gastosOp.length;
   const totalVehicles = vehicles.filter(v => v.activo).length;
   const totalKmRegistros = kilometrajes.length;
   const netMargin =
-    ingresos.reduce((s, i) => s + ingresoMontoPEN(i), 0) - gastos.reduce((s, g) => s + g.monto, 0);
+    ingresos.reduce((s, i) => s + ingresoMontoPEN(i), 0) - gastosOp.reduce((s, g) => s + g.monto, 0);
 
   const achievements: Achievement[] = [
     { id: 'first_income', emoji: '💰', title: 'Primer Ingreso', description: 'Registraste tu primer ingreso', unlocked: totalIngresos >= 1, color: 'from-emerald-400 to-teal-500' },

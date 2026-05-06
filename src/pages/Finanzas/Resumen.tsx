@@ -8,7 +8,16 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatCurrency, formatUSD, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
-import type { Vehicle, Ingreso, Gasto, KilometrajeRegistro, ControlFecha, InversionVehiculo } from '../../data/types';
+import type {
+  Vehicle,
+  Ingreso,
+  Gasto,
+  KilometrajeRegistro,
+  ControlFecha,
+  InversionVehiculo,
+  CajaNegocioVehiculo,
+} from '../../data/types';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -28,9 +37,12 @@ export interface ResumenVehiculoFila {
   vehicle: Vehicle;
   totalIngresos: number;
   totalGastos: number;
+  /** Ingresos − gastos operativos (sin caja negocio). */
   utilidad: number;
+  totalCajaNegocio: number;
   nIngresos: number;
   nGastos: number;
+  nCajaNegocio: number;
   ultimoKm: number | null;
   vencidos: number;
   proximos30: number;
@@ -54,6 +66,7 @@ function buildRows(
   vehicles: Vehicle[],
   ingresos: Ingreso[],
   gastos: Gasto[],
+  cajaNegocio: CajaNegocioVehiculo[],
   kilometrajes: KilometrajeRegistro[],
   controlFechas: ControlFecha[],
   inversiones: InversionVehiculo[],
@@ -65,12 +78,16 @@ function buildRows(
     return d !== '' && d >= desde && d <= hasta;
   };
 
+  const gastosOp = gastosOperativosSolamente(gastos);
+
   return vehicles.map((v) => {
     const ingFiltrados = ingresos.filter((i) => vehicleIdMatch(i.vehicleId, v.id) && inPeriod(i.fecha));
-    const gasFiltrados = gastos.filter((g) => vehicleIdMatch(g.vehicleId, v.id) && inPeriod(g.fecha));
+    const gasFiltrados = gastosOp.filter((g) => vehicleIdMatch(g.vehicleId, v.id) && inPeriod(g.fecha));
+    const cajaFiltrados = cajaNegocio.filter((c) => vehicleIdMatch(c.vehicleId, v.id) && inPeriod(c.fecha));
 
     const totalIngresos = ingFiltrados.reduce((s, i) => s + ingresoMontoPEN(i), 0);
     const totalGastos = gasFiltrados.reduce((s, g) => s + g.monto, 0);
+    const totalCajaNegocio = cajaFiltrados.reduce((s, c) => s + c.monto, 0);
 
     const kmRows = kilometrajes
       .filter((k) => vehicleIdMatch(k.vehicleId, v.id) && toDateOnlyString(k.fecha) <= hasta)
@@ -96,8 +113,10 @@ function buildRows(
       totalIngresos,
       totalGastos,
       utilidad: totalIngresos - totalGastos,
+      totalCajaNegocio,
       nIngresos: ingFiltrados.length,
       nGastos: gasFiltrados.length,
+      nCajaNegocio: cajaFiltrados.length,
       ultimoKm,
       vencidos,
       proximos30,
@@ -140,7 +159,8 @@ const MESES = [
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo } = useRegistrosContext();
+  const { vehicles, ingresos, gastos, cajaNegocioVehiculo, kilometrajes, controlFechas, inversionesVehiculo } =
+    useRegistrosContext();
 
   const now = new Date();
   const [periodMode, setPeriodMode] = useState<'mes' | 'rango'>('mes');
@@ -178,8 +198,18 @@ const Resumen: React.FC = () => {
 
   const rows = useMemo(
     () =>
-      buildRows(vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta),
-    [vehiclesForTable, ingresos, gastos, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta],
+      buildRows(
+        vehiclesForTable,
+        ingresos,
+        gastos,
+        cajaNegocioVehiculo,
+        kilometrajes,
+        controlFechas,
+        inversionesVehiculo,
+        desde,
+        hasta,
+      ),
+    [vehiclesForTable, ingresos, gastos, cajaNegocioVehiculo, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta],
   );
 
   const totales = useMemo(() => {
@@ -188,8 +218,10 @@ const Resumen: React.FC = () => {
         totalIngresos: acc.totalIngresos + r.totalIngresos,
         totalGastos: acc.totalGastos + r.totalGastos,
         utilidad: acc.utilidad + r.utilidad,
+        totalCajaNegocio: acc.totalCajaNegocio + r.totalCajaNegocio,
         nIngresos: acc.nIngresos + r.nIngresos,
         nGastos: acc.nGastos + r.nGastos,
+        nCajaNegocio: acc.nCajaNegocio + r.nCajaNegocio,
         vencidos: acc.vencidos + r.vencidos,
         proximos30: acc.proximos30 + r.proximos30,
         inversionUsdSum: acc.inversionUsdSum + (r.inversionTotalUsd ?? 0),
@@ -198,8 +230,10 @@ const Resumen: React.FC = () => {
         totalIngresos: 0,
         totalGastos: 0,
         utilidad: 0,
+        totalCajaNegocio: 0,
         nIngresos: 0,
         nGastos: 0,
+        nCajaNegocio: 0,
         vencidos: 0,
         proximos30: 0,
         inversionUsdSum: 0,
@@ -223,10 +257,11 @@ const Resumen: React.FC = () => {
     };
     ingresos.forEach((i) => bump(i.fecha));
     gastos.forEach((g) => bump(g.fecha));
+    cajaNegocioVehiculo.forEach((c) => bump(c.fecha));
     const list: { value: string; label: string }[] = [];
     for (let yy = maxY; yy >= minY; yy--) list.push({ value: String(yy), label: String(yy) });
     return list;
-  }, [now, ingresos, gastos]);
+  }, [now, ingresos, gastos, cajaNegocioVehiculo]);
 
   const vehicleFilterOptions = [
     { value: '', label: 'Todos los vehículos' },
@@ -244,10 +279,12 @@ const Resumen: React.FC = () => {
       'Modelo',
       'Ingresos_S/',
       'Gastos_S/',
-      'Utilidad_S/',
+      'Utilidad_operativa_S/',
+      'Caja_negocio_S/',
       'Inversion_USD_hist',
       'N_ingresos',
       'N_gastos',
+      'N_caja_negocio',
       'Ultimo_km',
       'Vencidos',
       'Proximos_30d',
@@ -263,9 +300,11 @@ const Resumen: React.FC = () => {
           r.totalIngresos.toFixed(2),
           r.totalGastos.toFixed(2),
           r.utilidad.toFixed(2),
+          r.totalCajaNegocio.toFixed(2),
           r.inversionTotalUsd != null ? r.inversionTotalUsd.toFixed(2) : '',
           r.nIngresos,
           r.nGastos,
+          r.nCajaNegocio,
           r.ultimoKm ?? '',
           r.vencidos,
           r.proximos30,
@@ -281,9 +320,11 @@ const Resumen: React.FC = () => {
         totales.totalIngresos.toFixed(2),
         totales.totalGastos.toFixed(2),
         totales.utilidad.toFixed(2),
+        totales.totalCajaNegocio.toFixed(2),
         totales.inversionUsdSum.toFixed(2),
         totales.nIngresos,
         totales.nGastos,
+        totales.nCajaNegocio,
         '',
         totales.vencidos,
         totales.proximos30,
@@ -350,8 +391,9 @@ const Resumen: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">📋 Resumen</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Por periodo y vehículo (estilo Excel RESUMEN) — ingresos, gastos, KMS y vencimientos por periodo. La columna{' '}
-              <strong>Inversión USD</strong> es costo histórico de adquisición (no es gasto del periodo).
+              Por periodo y vehículo — ingresos, <strong>gastos operativos</strong> (sin «caja negocio»), utilidad operativa
+              (ingresos − esos gastos), y <strong>caja negocio</strong> aparte. La columna <strong>Inversión USD</strong> es
+              costo histórico de adquisición (no es gasto del periodo).
             </p>
           </div>
         </div>
@@ -446,7 +488,7 @@ const Resumen: React.FC = () => {
         )}
 
         <p className="text-xs text-gray-400 mt-3">
-          Ingresos/gastos usan <strong>fecha de movimiento</strong> dentro del periodo. En <strong>rango</strong> puedes cruzar meses o trimestres.
+          Ingresos y gastos operativos usan <strong>fecha de movimiento</strong> dentro del periodo; caja negocio igual pero no entra en gastos ni utilidad operativa. En <strong>rango</strong> puedes cruzar meses o trimestres.
           Si ves ceros, revisa fechas o el año donde cargaste datos. Último km: último KMS con fecha ≤ fin del periodo. Vencimientos: estado actual (no dependen del periodo).{' '}
           <strong>Inversión USD</strong>: total desde <code className="text-[10px] bg-gray-100 px-1 rounded">inversiones_vehiculo</code> por unidad (referencia de compra, no operativo).
         </p>
@@ -459,8 +501,16 @@ const Resumen: React.FC = () => {
               <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100 bg-gray-50/90">
                 <th className="py-3 px-4 font-semibold">Vehículo</th>
                 <th className="py-3 px-4 font-semibold text-right">Ingresos</th>
-                <th className="py-3 px-4 font-semibold text-right">Gastos</th>
-                <th className="py-3 px-4 font-semibold text-right">Utilidad</th>
+                <th className="py-3 px-4 font-semibold text-right">Gastos op.</th>
+                <th className="py-3 px-4 font-semibold text-right" title="Ingresos − gastos operativos">
+                  Utilidad op.
+                </th>
+                <th
+                  className="py-3 px-4 font-semibold text-right text-teal-800"
+                  title="Utilidad/caja por unidad; no es ingreso de arriendo ni gasto operativo"
+                >
+                  Caja negocio
+                </th>
                 <th className="py-3 px-4 font-semibold text-right" title="Costo histórico de adquisición (USD)">
                   Inversión USD
                 </th>
@@ -474,7 +524,7 @@ const Resumen: React.FC = () => {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-400">
+                  <td colSpan={11} className="py-12 text-center text-gray-400">
                     No hay vehículos en la flota para este filtro.
                   </td>
                 </tr>
@@ -499,6 +549,9 @@ const Resumen: React.FC = () => {
                       }`}
                     >
                       {formatCurrency(r.utilidad)}
+                    </td>
+                    <td className="py-3 px-4 text-right tabular-nums font-medium text-teal-800">
+                      {r.totalCajaNegocio !== 0 ? formatCurrency(r.totalCajaNegocio) : '—'}
                     </td>
                     <td className="py-3 px-4 text-right tabular-nums text-slate-700 font-medium">
                       {r.inversionTotalUsd != null ? formatUSD(r.inversionTotalUsd) : '—'}
@@ -545,6 +598,7 @@ const Resumen: React.FC = () => {
                   >
                     {formatCurrency(totales.utilidad)}
                   </td>
+                  <td className="py-3 px-4 text-right tabular-nums text-teal-900">{formatCurrency(totales.totalCajaNegocio)}</td>
                   <td className="py-3 px-4 text-right tabular-nums text-slate-800">{formatUSD(totales.inversionUsdSum)}</td>
                   <td className="py-3 px-4 text-center tabular-nums">{totales.nIngresos}</td>
                   <td className="py-3 px-4 text-center tabular-nums">{totales.nGastos}</td>

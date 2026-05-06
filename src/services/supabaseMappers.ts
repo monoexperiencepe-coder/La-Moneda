@@ -5,6 +5,7 @@ import type {
   Conductor,
   Ingreso,
   Gasto,
+  CajaNegocioVehiculo,
   InversionVehiculo,
   GastoCaja,
   Moneda,
@@ -188,6 +189,20 @@ export function mapGastoCajaRow(r: Record<string, unknown>): GastoCaja {
     concepto: str(r.concepto),
     monto: num(r.monto),
     categoria: str(r.categoria) || 'CAJA_GENERAL',
+    comentarios: str(r.comentarios),
+    excelExtra: jsonRecordOrNull(r.excel_extra),
+    createdAt: isoCreated(r.created_at),
+  };
+}
+
+export function mapCajaNegocioVehiculoRow(r: Record<string, unknown>): CajaNegocioVehiculo {
+  return {
+    id: num(r.id),
+    vehicleId: num(r.vehicle_id),
+    fecha: toDateOnlyString(r.fecha),
+    monto: num(r.monto),
+    concepto: str(r.concepto),
+    origenGastoId: numOrNull(r.origen_gasto_id),
     comentarios: str(r.comentarios),
     excelExtra: jsonRecordOrNull(r.excel_extra),
     createdAt: isoCreated(r.created_at),

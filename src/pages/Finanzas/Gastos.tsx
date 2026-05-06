@@ -9,22 +9,25 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Ba
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { CATEGORIAS_GASTO_LABELS, CATEGORIA_COLORS, MESES } from '../../data/catalogs';
 import { CategoriaGasto } from '../../data/types';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 const Gastos: React.FC = () => {
   const navigate = useNavigate();
   const { gastos, vehicles, deleteGasto } = useRegistrosContext();
   const { open } = useDrawer();
 
-  const todayTotal = gastos.filter(g => g.fecha === todayStr()).reduce((s, g) => s + g.monto, 0);
+  const gastosOperativos = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
+
+  const todayTotal = gastosOperativos.filter(g => g.fecha === todayStr()).reduce((s, g) => s + g.monto, 0);
 
   const availableYears = useMemo(() => {
     const ys = new Set<number>();
-    for (const g of gastos) {
+    for (const g of gastosOperativos) {
       const y = Number(g.fecha.slice(0, 4));
       if (Number.isFinite(y) && y > 0) ys.add(y);
     }
     return [...ys].sort((a, b) => b - a);
-  }, [gastos]);
+  }, [gastosOperativos]);
 
   const [chartYear, setChartYear] = useState<string>('');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
@@ -59,8 +62,8 @@ const Gastos: React.FC = () => {
   const gastosDelAnioGrafico = useMemo(() => {
     if (!Number.isFinite(chartYearNum)) return [];
     const prefix = `${chartYearNum}-`;
-    return gastos.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastos, chartYearNum]);
+    return gastosOperativos.filter((g) => g.fecha.startsWith(prefix));
+  }, [gastosOperativos, chartYearNum]);
 
   const totalAnioGrafico = gastosDelAnioGrafico.reduce((s, g) => s + g.monto, 0);
 
@@ -85,10 +88,10 @@ const Gastos: React.FC = () => {
   );
 
   const gastosHistorialFiltrados = useMemo(() => {
-    if (historyYear === 'ALL') return gastos;
+    if (historyYear === 'ALL') return gastosOperativos;
     const prefix = `${historyYear}-`;
-    return gastos.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastos, historyYear]);
+    return gastosOperativos.filter((g) => g.fecha.startsWith(prefix));
+  }, [gastosOperativos, historyYear]);
 
   const pieData = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -111,7 +114,10 @@ const Gastos: React.FC = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">💸 Gastos</h1>
-            <p className="text-sm text-gray-500">{gastos.length} registros totales</p>
+            <p className="text-sm text-gray-500">{gastosOperativos.length} gastos operativos</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              «Caja negocio» va en Finanzas → Caja negocio (no se lista aquí).
+            </p>
           </div>
         </div>
         <button onClick={() => open('expense')}

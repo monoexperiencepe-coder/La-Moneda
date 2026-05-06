@@ -16,6 +16,7 @@ import {
   Vehicle,
   InversionVehiculo,
   GastoCaja,
+  CajaNegocioVehiculo,
 } from '../data/types';
 import { fetchVehiculos } from '../services/vehiculosService';
 import { fetchUnidades, insertUnidad, removeUnidad } from '../services/unidadesService';
@@ -50,6 +51,7 @@ import {
 } from '../services/registrosTiempoService';
 import { fetchInversionesVehiculo } from '../services/inversionesVehiculoService';
 import { fetchGastosCaja } from '../services/gastosCajaService';
+import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
@@ -88,6 +90,7 @@ export const useRegistros = () => {
   const [registrosTiempo, setRegistrosTiempo] = useState<RegistroTiempo[]>([]);
   const [inversionesVehiculo, setInversionesVehiculo] = useState<InversionVehiculo[]>([]);
   const [gastosCaja, setGastosCaja] = useState<GastoCaja[]>([]);
+  const [cajaNegocioVehiculo, setCajaNegocioVehiculo] = useState<CajaNegocioVehiculo[]>([]);
 
   const loadControlFechasHistory = useCallback(async (filters: ControlFechasHistoryFilters, page: number) => {
     historyQueryRef.current = { filters, page };
@@ -111,7 +114,7 @@ export const useRegistros = () => {
   }, [historyPageSize]);
 
   const refreshFromSupabase = useCallback(async () => {
-    const [v, u, c, i, g, latest, km, pen, rt, inv, gc] = await Promise.all([
+    const [v, u, c, i, g, latest, km, pen, rt, inv, gc, cn] = await Promise.all([
       fetchVehiculos(),
       fetchUnidades(),
       fetchConductores(),
@@ -123,6 +126,7 @@ export const useRegistros = () => {
       fetchRegistrosTiempo(),
       fetchInversionesVehiculo(),
       fetchGastosCaja(),
+      fetchCajaNegocioVehiculo(),
     ]);
     setVehicles(v);
     setUnidades(u);
@@ -135,6 +139,7 @@ export const useRegistros = () => {
     setRegistrosTiempo(rt);
     setInversionesVehiculo(inv);
     setGastosCaja(gc);
+    setCajaNegocioVehiculo(cn);
 
     const q = historyQueryRef.current;
     if (q) {
@@ -470,6 +475,7 @@ export const useRegistros = () => {
     registrosTiempo,
     inversionesVehiculo,
     gastosCaja,
+    cajaNegocioVehiculo,
     addIngreso,
     addGasto,
     addMantenimiento,

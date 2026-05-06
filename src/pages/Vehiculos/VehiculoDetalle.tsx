@@ -9,7 +9,8 @@ import { conductorAsignadoLabel, formatConductorDisplayLabel, ultimoKmPorVehicul
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
 import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
-import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha } from '../../data/types';
+import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha, CajaNegocioVehiculo } from '../../data/types';
+import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import Badge from '../../components/Common/Badge';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
@@ -58,6 +59,7 @@ const VehiculoDetalle: React.FC = () => {
     addKilometraje,
     deleteKilometraje,
     inversionesVehiculo,
+    cajaNegocioVehiculo,
   } = useRegistrosContext();
   const { open, setLastVehicleId } = useDrawer();
 
@@ -77,6 +79,14 @@ const VehiculoDetalle: React.FC = () => {
 
   const vehicleIngresos = useMemo(() => ingresos.filter((i) => Number(i.vehicleId) === vid), [ingresos, vid]);
   const vehicleGastos = useMemo(() => gastos.filter((g) => Number(g.vehicleId) === vid), [gastos, vid]);
+  const vehicleGastosOperativos = useMemo(
+    () => gastosOperativosSolamente(vehicleGastos),
+    [vehicleGastos],
+  );
+  const vehicleCajaNegocio = useMemo(
+    () => cajaNegocioVehiculo.filter((c) => Number(c.vehicleId) === vid),
+    [cajaNegocioVehiculo, vid],
+  );
   const vehicleDescuentos = useMemo(() => descuentos.filter((d) => Number(d.vehicleId) === vid), [descuentos, vid]);
   const vehicleInversiones = useMemo(
     () => inversionesVehiculo.filter((inv) => inv.vehicleId != null && Number(inv.vehicleId) === vid),
@@ -91,9 +101,10 @@ const VehiculoDetalle: React.FC = () => {
   );
 
   const totalIngresos = vehicleIngresos.reduce((s, i) => s + ingresoMontoPEN(i), 0);
-  const totalGastos = vehicleGastos.reduce((s, g) => s + g.monto, 0);
+  const totalGastosOperativos = vehicleGastosOperativos.reduce((s, g) => s + g.monto, 0);
+  const totalCajaNegocio = vehicleCajaNegocio.reduce((s, c) => s + c.monto, 0);
   const totalDescuentos = vehicleDescuentos.reduce((s, d) => s + d.monto, 0);
-  const utilidad = totalIngresos - totalGastos + totalDescuentos;
+  const utilidad = totalIngresos - totalGastosOperativos + totalDescuentos;
 
   const pivot = useMemo(() => buildControlFechasPivotMapByTipos(controlFechas, DOC_TIPOS), [controlFechas]);
   const docForVehicle = vehicle ? pivot.get(vehicle.id) : undefined;
@@ -219,21 +230,26 @@ const VehiculoDetalle: React.FC = () => {
       <div className="pt-1" role="tabpanel">
         {tab === 'resumen' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-4">
                 <p className="text-[11px] font-medium text-emerald-800">Ingresos (total)</p>
                 <p className="text-lg font-bold text-emerald-900 tabular-nums">{formatCurrency(totalIngresos)}</p>
               </div>
               <div className="rounded-xl border border-red-100 bg-red-50/80 p-4">
-                <p className="text-[11px] font-medium text-red-800">Gastos (total)</p>
-                <p className="text-lg font-bold text-red-900 tabular-nums">{formatCurrency(totalGastos)}</p>
+                <p className="text-[11px] font-medium text-red-800">Gastos operativos</p>
+                <p className="text-lg font-bold text-red-900 tabular-nums">{formatCurrency(totalGastosOperativos)}</p>
+              </div>
+              <div className="rounded-xl border border-teal-100 bg-teal-50/80 p-4">
+                <p className="text-[11px] font-medium text-teal-900">Caja negocio / utilidad</p>
+                <p className="text-lg font-bold text-teal-950 tabular-nums">{formatCurrency(totalCajaNegocio)}</p>
+                <p className="text-[10px] text-teal-800 mt-1">No suma a gastos ni a ingresos de arriendo</p>
               </div>
               <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-4">
-                <p className="text-[11px] font-medium text-violet-800">Utilidad</p>
+                <p className="text-[11px] font-medium text-violet-800">Utilidad operativa</p>
                 <p className={`text-lg font-bold tabular-nums ${utilidad >= 0 ? 'text-violet-900' : 'text-red-800'}`}>
                   {formatCurrency(utilidad)}
                 </p>
-                <p className="text-[10px] text-violet-700 mt-1">Ingresos − gastos + rebajes del vehículo</p>
+                <p className="text-[10px] text-violet-700 mt-1">Ingresos − gastos operativos + rebajes</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <p className="text-[11px] font-medium text-gray-600">Último km registrado</p>
@@ -290,17 +306,21 @@ const VehiculoDetalle: React.FC = () => {
 
         {tab === 'finanzas' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border p-3 bg-emerald-50/50 border-emerald-100">
                 <span className="text-gray-600">Ingresos</span>
                 <p className="font-bold text-emerald-800 tabular-nums">{formatCurrency(totalIngresos)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-red-50/50 border-red-100">
-                <span className="text-gray-600">Gastos</span>
-                <p className="font-bold text-red-800 tabular-nums">{formatCurrency(totalGastos)}</p>
+                <span className="text-gray-600">Gastos operativos</span>
+                <p className="font-bold text-red-800 tabular-nums">{formatCurrency(totalGastosOperativos)}</p>
+              </div>
+              <div className="rounded-lg border p-3 bg-teal-50/50 border-teal-100">
+                <span className="text-gray-600">Caja negocio</span>
+                <p className="font-bold text-teal-900 tabular-nums">{formatCurrency(totalCajaNegocio)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-white border-gray-200">
-                <span className="text-gray-600">Utilidad</span>
+                <span className="text-gray-600">Utilidad operativa</span>
                 <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(utilidad)}</p>
               </div>
             </div>
@@ -347,8 +367,47 @@ const VehiculoDetalle: React.FC = () => {
               <RegistrosTable mode="ingresos" ingresos={vehicleIngresos} vehicles={vehicles} onDeleteIngreso={deleteIngreso} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-800 mb-2">Gastos de esta unidad</h3>
-              <RegistrosTable mode="gastos" gastos={vehicleGastos} vehicles={vehicles} onDeleteGasto={deleteGasto} />
+              <h3 className="text-sm font-bold text-gray-800 mb-2">Gastos operativos de esta unidad</h3>
+              <RegistrosTable mode="gastos" gastos={vehicleGastosOperativos} vehicles={vehicles} onDeleteGasto={deleteGasto} />
+            </div>
+            <div className="rounded-xl border border-teal-100 bg-teal-50/30 overflow-hidden">
+              <div className="px-4 py-3 border-b border-teal-100 bg-teal-50/80">
+                <h3 className="text-sm font-bold text-teal-950">Caja negocio / utilidad registrada</h3>
+                <p className="text-xs text-teal-900/85 mt-0.5">
+                  Movimientos separados de gastos operativos. No editar desde esta tabla (gestión vía base o script).
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[520px]">
+                  <thead className="bg-white/80 text-left text-[10px] uppercase text-teal-900/80 border-b border-teal-100">
+                    <tr>
+                      <th className="py-2 px-3">Fecha</th>
+                      <th className="py-2 px-3">Concepto</th>
+                      <th className="py-2 px-3 text-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-teal-100/80 bg-white/60">
+                    {vehicleCajaNegocio.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-6 px-3 text-center text-gray-500 text-xs">
+                          Sin registros de caja negocio para esta unidad.
+                        </td>
+                      </tr>
+                    ) : (
+                      vehicleCajaNegocio
+                        .slice()
+                        .sort((a, b) => b.fecha.localeCompare(a.fecha))
+                        .map((row: CajaNegocioVehiculo) => (
+                          <tr key={row.id}>
+                            <td className="py-2 px-3 text-gray-700 whitespace-nowrap">{formatDate(row.fecha)}</td>
+                            <td className="py-2 px-3 text-gray-900">{row.concepto}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-semibold text-teal-950">{formatCurrency(row.monto)}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
