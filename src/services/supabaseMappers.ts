@@ -260,6 +260,15 @@ export function mapGastoRow(r: Record<string, unknown>): Gasto {
     categoriaReal: strOrNull(r.categoria_real),
     subcategoria: strOrNull(r.subcategoria),
     excelExtra: jsonRecordOrNull(r.excel_extra),
+    tipo_gasto: strOrNull(r.tipo_gasto),
+    subtipo_gasto: strOrNull(r.subtipo_gasto),
+    clasificacion_confianza: numOrNull(r.clasificacion_confianza),
+    requiere_revision: r.requiere_revision == null ? null : bool(r.requiere_revision),
+    clasificacion_manual: r.clasificacion_manual == null ? null : bool(r.clasificacion_manual),
+    revisado_por: strOrNull(r.revisado_por),
+    revisado_at: strOrNull(r.revisado_at),
+    es_global_flota: r.es_global_flota == null ? null : bool(r.es_global_flota),
+    origen_clasificacion: strOrNull(r.origen_clasificacion),
     createdAt: isoCreated(r.created_at),
   };
 }
@@ -403,6 +412,13 @@ export function gastoToInsert(empresaId: string, row: Omit<Gasto, 'id' | 'create
     categoria_real: row.categoriaReal ?? null,
     subcategoria: row.subcategoria ?? null,
     excel_extra: row.excelExtra ?? null,
+    tipo_gasto: row.tipo_gasto ?? null,
+    subtipo_gasto: row.subtipo_gasto ?? null,
+    es_global_flota: row.es_global_flota ?? false,
+    origen_clasificacion: row.origen_clasificacion ?? null,
+    requiere_revision: row.requiere_revision ?? false,
+    clasificacion_manual: row.clasificacion_manual ?? false,
+    clasificacion_confianza: row.clasificacion_confianza ?? null,
   };
 }
 

@@ -18,6 +18,15 @@ import type {
   CajaNegocioVehiculo,
 } from '../../data/types';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import {
+  calculateFinancialKPIsInPeriod,
+  legacyTotalGastosOperativosEnPeriodo,
+  rollupsInteligenteFlota,
+  vehiculosMasRentables,
+  vehiculosMayorGastoMotor,
+  vehiculosMayorGastoFinanciero,
+  computeFinancialFleetAlerts,
+} from '../../utils/financialFleetAnalytics';
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -211,6 +220,54 @@ const Resumen: React.FC = () => {
       ),
     [vehiclesForTable, ingresos, gastos, cajaNegocioVehiculo, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta],
   );
+
+  const ingresosScope = useMemo(() => {
+    if (!filterVehicleId) return ingresos;
+    const id = Number(filterVehicleId);
+    return ingresos.filter((i) => Number(i.vehicleId) === id);
+  }, [ingresos, filterVehicleId]);
+
+  const gastosScope = useMemo(() => {
+    if (!filterVehicleId) return gastos;
+    const id = Number(filterVehicleId);
+    return gastos.filter((g) => Number(g.vehicleId) === id);
+  }, [gastos, filterVehicleId]);
+
+  const intelKpiPeriodo = useMemo(
+    () => calculateFinancialKPIsInPeriod(ingresosScope, gastosScope, desde, hasta),
+    [ingresosScope, gastosScope, desde, hasta],
+  );
+
+  const legacyGastosOpPeriodo = useMemo(
+    () => legacyTotalGastosOperativosEnPeriodo(gastosScope, desde, hasta),
+    [gastosScope, desde, hasta],
+  );
+
+  const totalIngresosPeriodoScope =
+    intelKpiPeriodo.utilidad_operativa + intelKpiPeriodo.gastos_operativos;
+
+  const rollupsIntel = useMemo(
+    () => rollupsInteligenteFlota(vehiclesForTable, ingresos, gastos, desde, hasta),
+    [vehiclesForTable, ingresos, gastos, desde, hasta],
+  );
+
+  const rollupsConMovimiento = useMemo(
+    () =>
+      rollupsIntel.filter(
+        (r) =>
+          r.totalIngresos > 0 ||
+          r.kpi.gastos_operativos > 0 ||
+          r.gastoMotor > 0 ||
+          r.kpi.gastos_financieros > 0 ||
+          r.kpi.gastos_administrativos > 0,
+      ),
+    [rollupsIntel],
+  );
+
+  const topRentables = useMemo(() => vehiculosMasRentables(rollupsConMovimiento, 5), [rollupsConMovimiento]);
+  const topMotor = useMemo(() => vehiculosMayorGastoMotor(rollupsConMovimiento, 5), [rollupsConMovimiento]);
+  const topFin = useMemo(() => vehiculosMayorGastoFinanciero(rollupsConMovimiento, 5), [rollupsConMovimiento]);
+  const alertasFlota = useMemo(() => computeFinancialFleetAlerts(rollupsIntel), [rollupsIntel]);
 
   const totales = useMemo(() => {
     return rows.reduce(
@@ -493,6 +550,213 @@ const Resumen: React.FC = () => {
           <strong>Inversión USD</strong>: total desde <code className="text-[10px] bg-gray-100 px-1 rounded">inversiones_vehiculo</code> por unidad (referencia de compra, no operativo).
         </p>
       </Card>
+
+      <Card
+        title="KPIs financieros (clasificación)"
+        subtitle={`Misma ventana de fechas · ${desde} → ${hasta}${filterVehicleId ? ' · vehículo filtrado' : ''}. Usa tipo_gasto en gastos; no reemplaza el resumen legacy.`}
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { label: 'Gastos operativos', value: intelKpiPeriodo.gastos_operativos, tone: 'red' as const },
+            { label: 'Gastos financieros', value: intelKpiPeriodo.gastos_financieros, tone: 'amber' as const },
+            { label: 'Gastos administrativos', value: intelKpiPeriodo.gastos_administrativos, tone: 'slate' as const },
+            { label: 'Utilidad operativa', value: intelKpiPeriodo.utilidad_operativa, tone: 'emerald' as const },
+            { label: 'Utilidad neta simple', value: intelKpiPeriodo.utilidad_neta_simple, tone: 'violet' as const },
+          ].map((c) => {
+            const neg = c.value < 0;
+            const color =
+              c.tone === 'red'
+                ? 'border-red-100 bg-red-50/80 text-red-900'
+                : c.tone === 'amber'
+                  ? 'border-amber-100 bg-amber-50/80 text-amber-950'
+                  : c.tone === 'slate'
+                    ? 'border-slate-200 bg-slate-50/90 text-slate-900'
+                    : c.tone === 'emerald'
+                      ? neg
+                        ? 'border-red-100 bg-red-50/80 text-red-900'
+                        : 'border-emerald-100 bg-emerald-50/80 text-emerald-900'
+                      : neg
+                        ? 'border-red-100 bg-red-50/80 text-red-900'
+                        : 'border-violet-100 bg-violet-50/80 text-violet-900';
+            return (
+              <div key={c.label} className={`rounded-xl border p-3 ${color}`}>
+                <p className="text-[11px] font-medium opacity-90">{c.label}</p>
+                <p className="text-lg font-bold tabular-nums mt-0.5">{formatCurrency(c.value)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card
+        title="Comparativa financiera"
+        subtitle="Legacy = heurística «caja negocio» excluida · Inteligente = sumas por tipo_gasto en el mismo periodo y alcance (filtro vehículo)."
+      >
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr className="text-left text-xs uppercase text-gray-500 bg-gray-50 border-b border-gray-100">
+                <th className="py-2.5 px-3 font-semibold">Métrica</th>
+                <th className="py-2.5 px-3 font-semibold text-right">Legacy</th>
+                <th className="py-2.5 px-3 font-semibold text-right">Inteligente</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              <tr>
+                <td className="py-2.5 px-3 text-gray-800">Ingresos (periodo)</td>
+                <td className="py-2.5 px-3 text-right tabular-nums font-medium text-emerald-800" colSpan={2}>
+                  {formatCurrency(totalIngresosPeriodoScope)}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 text-gray-800">Gastos operativos</td>
+                <td className="py-2.5 px-3 text-right tabular-nums text-red-700 font-medium">
+                  {formatCurrency(legacyGastosOpPeriodo)}
+                </td>
+                <td className="py-2.5 px-3 text-right tabular-nums text-red-800 font-medium">
+                  {formatCurrency(intelKpiPeriodo.gastos_operativos)}
+                </td>
+              </tr>
+              <tr className="bg-gray-50/80">
+                <td className="py-2.5 px-3 text-gray-700">Δ legacy − operativo intel.</td>
+                <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-slate-800" colSpan={2}>
+                  {formatCurrency(legacyGastosOpPeriodo - intelKpiPeriodo.gastos_operativos)}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 text-gray-800">Gastos financieros + administrativos</td>
+                <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">—</td>
+                <td className="py-2.5 px-3 text-right tabular-nums font-medium text-amber-900">
+                  {formatCurrency(intelKpiPeriodo.gastos_financieros + intelKpiPeriodo.gastos_administrativos)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card
+        title="Resumen analítico"
+        subtitle="Top 5 por utilidad operativa (inteligente), mayor gasto motor (subtipo) y mayor gasto financiero (tipo_gasto)."
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Más rentables (utilidad op.)</p>
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 text-left">
+                  <tr>
+                    <th className="py-2 px-2">Unidad</th>
+                    <th className="py-2 px-2 text-right">Util. op.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {topRentables.map((r) => (
+                    <tr key={r.vehicle.id}>
+                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]" title={r.vehicle.placa}>
+                        {r.vehicle.placa}
+                      </td>
+                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-emerald-800">
+                        {formatCurrency(r.kpi.utilidad_operativa)}
+                      </td>
+                    </tr>
+                  ))}
+                  {topRentables.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
+                        Sin datos
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Mayor gasto motor</p>
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 text-left">
+                  <tr>
+                    <th className="py-2 px-2">Unidad</th>
+                    <th className="py-2 px-2 text-right">Motor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {topMotor.map((r) => (
+                    <tr key={r.vehicle.id}>
+                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]">{r.vehicle.placa}</td>
+                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-red-800">
+                        {formatCurrency(r.gastoMotor)}
+                      </td>
+                    </tr>
+                  ))}
+                  {topMotor.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
+                        Sin datos
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Mayor gasto financiero</p>
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 text-left">
+                  <tr>
+                    <th className="py-2 px-2">Unidad</th>
+                    <th className="py-2 px-2 text-right">Financ.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {topFin.map((r) => (
+                    <tr key={r.vehicle.id}>
+                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]">{r.vehicle.placa}</td>
+                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-amber-900">
+                        {formatCurrency(r.kpi.gastos_financieros)}
+                      </td>
+                    </tr>
+                  ))}
+                  {topFin.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
+                        Sin datos
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {alertasFlota.length > 0 && (
+        <Card title="Alertas (reglas fijas)" subtitle="Solo lectura en cliente; umbrales porcentuales o montos absolutos si no hay ingresos.">
+          <ul className="space-y-2">
+            {alertasFlota.map((a) => (
+              <li
+                key={a.id}
+                className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  a.severity === 'danger'
+                    ? 'border-red-200 bg-red-50/90 text-red-900'
+                    : 'border-amber-200 bg-amber-50/90 text-amber-950'
+                }`}
+              >
+                <span className="font-semibold shrink-0">{a.severity === 'danger' ? '●' : '◆'}</span>
+                <span>
+                  {a.message}
+                  <span className="text-gray-500 text-xs ml-1">· id {a.vehicleId}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card title={`Resumen — ${periodoLabel}`} padding={false}>
         <div className="overflow-x-auto rounded-b-2xl">

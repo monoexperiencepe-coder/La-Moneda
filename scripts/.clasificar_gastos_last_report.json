@@ -1,0 +1,39 @@
+{
+  "at": "2026-05-06T18:17:02.135Z",
+  "pendingCount": 237,
+  "pendientesTipoPendienteRevision": 0,
+  "confidenceLt03": 0,
+  "confidenceBuckets": {
+    "altaGte09": 5002,
+    "media06to09": 4553,
+    "baja03to06": 237
+  },
+  "pctClasificadoAutomatico": 100,
+  "tipoCounts": {
+    "operativo_vehiculo": 9463,
+    "operativo_flota_global": 0,
+    "administrativo_empresa": 92,
+    "financiero": 179,
+    "inversion": 58,
+    "personal_socios": 0,
+    "pendiente_revision": 0
+  },
+  "subtipoCounts": {
+    "combustible": 336,
+    "gnv": 1339,
+    "soat": 223,
+    "motor": 4963,
+    "electricidad": 443,
+    "llantas": 355,
+    "frenos": 748,
+    "tributario_operativo_empresa": 92,
+    "interior": 266,
+    "impuesto_vehicular": 56,
+    "suspension": 181,
+    "aire_acondicionado": 156,
+    "accesorios": 332,
+    "planchado_pintura": 65,
+    "compra_unidad": 58,
+    "prestamo_interes_banca": 179
+  }
+}

@@ -1,0 +1,238 @@
+id,fecha,monto,vehicle_id,comentarios,tipo_gasto,subtipo_gasto,clasificacion_confianza,requiere_revision
+fb2b3366-b216-4376-a1c3-fb8573a01278,2020-12-03,475,11,RIO 11 · Excel GASTOS fila 158 [origen gastos_caja id=155],operativo_vehiculo,motor,0.55,true
+86c19a81-9dd4-4fb8-b65a-b621b180327c,2020-12-03,225,10,RIO 10 · Excel GASTOS fila 160 [origen gastos_caja id=157],operativo_vehiculo,motor,0.55,true
+6c4d8970-248a-4788-8760-59ea62d0039d,2020-12-03,675,12,RIO 12 · Excel GASTOS fila 161 [origen gastos_caja id=158],operativo_vehiculo,motor,0.55,true
+0040194a-914d-4d37-863c-216290b5449b,2022-06-03,20,22,VERSA 22 GAS ENTREGA · Excel GASTOS fila 663 [origen gastos_caja id=656],operativo_vehiculo,motor,0.55,true
+01783f22-a622-4c51-8c24-756062392d4a,2022-07-04,20,28,limpieza aros versa 28 · Excel GASTOS fila 712 [origen gastos_caja id=705],operativo_vehiculo,motor,0.55,true
+aa687e67-0d7f-4d01-a3a8-61ab8672464b,2022-10-27,40,11,RIO 11 REGULACION GAS · Excel GASTOS fila 861 [origen gastos_caja id=853],operativo_vehiculo,motor,0.55,true
+6fb7c474-8ee4-4bde-814d-af4d6af2e282,2023-03-02,30,25,VERSA 25 FRENOS REGULACION · Excel GASTOS fila 1123 [origen gastos_caja id=1113],operativo_vehiculo,frenos,0.55,true
+c88841be-4018-4b64-8ef6-a1dc571e9e1b,2023-03-08,50,23,VERSA 23 FRENOS · Excel GASTOS fila 1145 [origen gastos_caja id=1135],operativo_vehiculo,frenos,0.55,true
+d8322fe3-6cd9-40fd-b1cb-5f784c3e60e5,2023-04-05,35,35,ASIENTO ARREGLO PILOTO VERSA 35 · Excel GASTOS fila 1210 [origen gastos_caja id=1200],operativo_vehiculo,motor,0.55,true
+f6987cf6-c46d-4813-9dd2-84713a0c7434,2023-06-04,43,18,PLUMILLAS Y ARREGLO SALIDA DE AGUA VERSA 18 · Excel GASTOS fila 1358 [origen gastos_caja id=1348],operativo_vehiculo,motor,0.55,true
+009129ea-255d-4b34-aad7-0b8b31d138bd,2023-11-03,100,16,VERSA 16 2/4 2 DISCOS DE FRENO MAS 1 PASTILLA · Excel GASTOS fila 1852 [origen gastos_caja id=1838],operativo_vehiculo,frenos,0.55,true
+20351d60-e472-49fd-9371-429c0decfeaf,2023-10-03,100,16,VERSA 16 1/4 2 DISCOS DE FRENO MAS 1 PASTILLA · Excel GASTOS fila 1708 [origen gastos_caja id=1694],operativo_vehiculo,frenos,0.55,true
+cfbaff6b-cee8-4a78-8728-99277a52acb1,2019-02-28,90,1,[FEBRERO] YARIS 01 ANF-599 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+dd9b11a2-4339-41b0-b0aa-e0615e1e8094,2023-12-07,100,16,VERSA 16 3/4 2 DISCOS DE FRENO MAS 1 PASTILLA · Excel GASTOS fila 1983 [origen gastos_caja id=1969],operativo_vehiculo,frenos,0.55,true
+1ffa916e-f7e5-46c1-a18c-f802d71788e0,2024-01-02,80,13,RIO 13 ARRELO LUNAS ERICK · Excel GASTOS fila 2112 [origen gastos_caja id=2098],operativo_vehiculo,motor,0.55,true
+b9223c83-c5b4-4e3c-ad0f-2393c6554390,2024-01-09,150,21,VERSA 21 CAMBIO DE BOCINAS Y REGULACION FRENOS · Excel GASTOS fila 2135 [origen gastos_caja id=2121],operativo_vehiculo,frenos,0.55,true
+59929289-645d-4c6f-bdef-d0ff369123c3,2024-01-11,100,16,VERSA 16 4/4 2 DISCOS DE FRENO MAS 1 PASTILLA · Excel GASTOS fila 2153 [origen gastos_caja id=2139],operativo_vehiculo,frenos,0.55,true
+c6ddde25-e1ca-4b67-8f43-88225d918692,2024-01-11,130,12,RIO 12 1/5 ARREGLO CAJA · Excel GASTOS fila 2163 [origen gastos_caja id=2149],operativo_vehiculo,motor,0.55,true
+518f173e-084e-45bb-a1b0-b3d1863136f8,2024-01-11,50,23,VERSA 23 LIQUIDO FRENOS 1 LITRO · Excel GASTOS fila 2173 [origen gastos_caja id=2159],operativo_vehiculo,frenos,0.55,true
+add2050b-9def-4606-9773-73560de51ca0,2024-02-13,150,16,VERSA 16 1/2 RODAJES · Excel GASTOS fila 2229 [origen gastos_caja id=2215],operativo_vehiculo,motor,0.55,true
+82299bb7-8d5f-472f-b3c8-c9fe88585eee,2024-02-08,70,34,VERSA 34 PERMISO DE LUNAS · Excel GASTOS fila 2231 [origen gastos_caja id=2217],operativo_vehiculo,motor,0.55,true
+63cd786c-143f-4602-880e-63703880c2de,2024-02-08,70,25,VERSA 25 PERMISO DE LUNAS · Excel GASTOS fila 2232 [origen gastos_caja id=2218],operativo_vehiculo,motor,0.55,true
+87d83844-56f4-4f95-9a45-90c865e25477,2024-04-06,100,23,VERSA 23 2/2 PASTILLA Y TORNO PERNO · Excel GASTOS fila 2464 [origen gastos_caja id=2450],operativo_vehiculo,motor,0.55,true
+e2368a76-b24d-40c0-9f88-489a53685b31,2024-02-22,105.87,37,IMPUESTO VEHICULAR VERSA 37 DSB · Excel GASTOS fila 2295 [origen gastos_caja id=2281],operativo_vehiculo,impuesto_vehicular,0.55,true
+1a98cbcd-df48-46a1-b2dd-a251d665da00,2024-02-22,92.38,34,IMPUESTO VEHICULAR VERSA 34 DSB · Excel GASTOS fila 2299 [origen gastos_caja id=2285],operativo_vehiculo,impuesto_vehicular,0.55,true
+107326fc-139f-4dda-959d-ad6be2799d0e,2024-02-22,100.51,36,IMPUESTO VEHICULAR VERSA 36 DSB · Excel GASTOS fila 2300 [origen gastos_caja id=2286],operativo_vehiculo,impuesto_vehicular,0.55,true
+278028ad-d301-45b2-bf52-f61c2f833f2d,2024-02-22,114.1,25,IMPUESTO VEHICULAR VERSA 25 DSB · Excel GASTOS fila 2301 [origen gastos_caja id=2287],operativo_vehiculo,impuesto_vehicular,0.55,true
+a0948478-81db-4644-bfc6-f3b7c40eff4c,2024-02-22,136.95,40,IMPUESTO VEHICULAR VERSA 40 DSB · Excel GASTOS fila 2302 [origen gastos_caja id=2288],operativo_vehiculo,impuesto_vehicular,0.55,true
+4f6a8a39-ab95-4721-bcbf-69a127f6c411,2024-02-22,141.48,41,IMPUESTO VEHICULAR VERSA 41 DSB · Excel GASTOS fila 2303 [origen gastos_caja id=2289],operativo_vehiculo,impuesto_vehicular,0.55,true
+81e3ac12-0d4c-438c-881d-85dd55361ff2,2024-03-07,150,16,VERSA 16 2/2 RODAJES · Excel GASTOS fila 2351 [origen gastos_caja id=2337],operativo_vehiculo,motor,0.55,true
+cac671e5-ba8b-45ef-b349-6cf36a2d763e,2024-03-07,100,23,VERSA 23 1/2 PASTILLA Y TORNO PERNO · Excel GASTOS fila 2359 [origen gastos_caja id=2345],operativo_vehiculo,motor,0.55,true
+70b3f19a-f71a-4c1e-af0e-38140ec139af,2024-03-07,60,44,VERSA 44 PRUEBA DE ESTANQUEDAD · Excel GASTOS fila 2378 [origen gastos_caja id=2364],operativo_vehiculo,motor,0.55,true
+1330ec9f-96ec-4d61-a265-eb644b5430a3,2024-03-07,30,16,VERSA 16 ARREGLO CABLE TIERRA JUAN · Excel GASTOS fila 2395 [origen gastos_caja id=2381],operativo_vehiculo,motor,0.55,true
+666c113e-2afc-48d6-b926-ae8b82abb32f,2024-03-07,120,44,VERSA 44 ARREGLO CONDENSADOR JESUS · Excel GASTOS fila 2399 [origen gastos_caja id=2385],operativo_vehiculo,motor,0.55,true
+db879474-2af9-40af-9d4c-b1da6f42c5d0,2024-04-08,50,26,VERSA 26 PERMISO DE LUNAS · Excel GASTOS fila 2514 [origen gastos_caja id=2500],operativo_vehiculo,motor,0.55,true
+d32f9b47-f073-4ef6-9dcf-ad49dab9d5f0,2024-05-09,100,13,RIO 13 1/6 REPARACION CAJA 4 RODAJES · Excel GASTOS fila 2577 [origen gastos_caja id=2563],operativo_vehiculo,motor,0.55,true
+d8f0bb5a-33b1-4481-bfe8-a93d327fd855,2024-05-09,120,23,VERSA 23 1/4 CENSOR cigüeñal · Excel GASTOS fila 2583 [origen gastos_caja id=2569],operativo_vehiculo,motor,0.55,true
+aeb2823b-c076-415b-acf8-050bb67ccba6,2024-04-20,20,46,VERSA 46 SEGUROS ESPEJOS · Excel GASTOS fila 2596 [origen gastos_caja id=2582],operativo_vehiculo,motor,0.55,true
+1b344c49-7b8f-4168-9628-2737fe5a0943,2024-04-20,20,48,VERSA 48 GAS · Excel GASTOS fila 2598 [origen gastos_caja id=2584],operativo_vehiculo,motor,0.55,true
+09c2c435-4657-4b12-b94b-02ba37e8f591,2024-06-10,120,23,VERSA 23 CUOTA  2/4 CENSOR DE cigüeñal · Excel GASTOS fila 2809 [origen gastos_caja id=2794],operativo_vehiculo,motor,0.55,true
+0fd32be1-d340-4c6f-998d-697c56aaa7f4,2024-04-20,330,37,"VERSA 37 RESORTES DELANTEROS, SUPLES  Y MOD GUEMRCINDO · Excel GASTOS fila 2624 [origen gastos_caja id=2610]",operativo_vehiculo,motor,0.55,true
+2278b525-6c16-4920-b0ff-26137b6aa105,2024-04-20,20,37,VERSA 37 REGULACION DE FRENOS GUERRERO · Excel GASTOS fila 2625 [origen gastos_caja id=2611],operativo_vehiculo,frenos,0.55,true
+8e94115e-ff15-454b-886f-642ef1f9e384,2024-05-23,65,50,VERSA 50 ARREGLO CONECTOR DE CARGADOR PARA CELULAR · Excel GASTOS fila 2665 [origen gastos_caja id=2651],operativo_vehiculo,motor,0.55,true
+95756f61-0177-41ce-9de2-09a7573112af,2024-05-23,100,51,VERSA 51  DUPLICADO LLAVE · Excel GASTOS fila 2675 [origen gastos_caja id=2661],operativo_vehiculo,motor,0.55,true
+b68abfbe-2bc8-45b3-889f-a850b2b52878,2024-06-03,20,54,VERSA 54 GAS ENTREGA · Excel GASTOS fila 2732 [origen gastos_caja id=2718],operativo_vehiculo,motor,0.55,true
+a7102033-62d6-4fa8-8bbc-2fb0a6ade7cf,2024-06-03,35,54,VERSA 54 EXTINTOR · Excel GASTOS fila 2738 [origen gastos_caja id=2724],operativo_vehiculo,motor,0.55,true
+06986f41-04d8-4f8b-90db-981cb1413d89,2024-07-08,20,23,VERSA 23 REGULACION DE FRENOS · Excel GASTOS fila 2950 [origen gastos_caja id=2935],operativo_vehiculo,frenos,0.55,true
+5d655408-b1c0-4dac-9a7b-24c2411923a3,2024-07-08,100,44,VERSA 44 BOCINAS DE ARTICULACION Y MOD · Excel GASTOS fila 2954 [origen gastos_caja id=2939],operativo_vehiculo,suspension,0.55,true
+32446c42-a257-46f4-9264-b8437f4dfc1f,2024-06-10,100,13,RIO 13 CUOTA 2/6 ARREGLO CAJA 4 RODAJES MAS 1 RETEN · Excel GASTOS fila 2814 [origen gastos_caja id=2799],operativo_vehiculo,motor,0.55,true
+f9c2e96e-499e-464e-9802-0a994e8950e5,2024-06-10,150,16,VERSA 16 FAJA MOD · Excel GASTOS fila 2830 [origen gastos_caja id=2815],operativo_vehiculo,motor,0.55,true
+05d2c277-b120-4596-9b0b-0bb64db71f8d,2024-07-06,10,49,VERSA 49 EXTINTOR Y PLUMILLAS PARTE · Excel GASTOS fila 2905 [origen gastos_caja id=2890],operativo_vehiculo,motor,0.55,true
+8f433575-a34a-4b70-8642-8996ae22764f,2024-07-06,45,55,VERSA 55 CERTIFICADO GAS · Excel GASTOS fila 2907 [origen gastos_caja id=2892],operativo_vehiculo,motor,0.55,true
+69ce255d-106c-412d-a915-e68dcc67db03,2024-07-08,120,23,VERSA 23 CUOTA  3/4 CENSOR DE cigüeñal · Excel GASTOS fila 2922 [origen gastos_caja id=2907],operativo_vehiculo,motor,0.55,true
+16d2c296-8142-45d8-a7c1-b998d70c4434,2024-07-08,100,13,RIO 13 CUOTA 3/6 ARREGLO CAJA 4 RODAJES MAS 1 RETEN · Excel GASTOS fila 2927 [origen gastos_caja id=2912],operativo_vehiculo,motor,0.55,true
+92ea28f1-8776-4dc5-bf76-6e9baff2a68f,2024-07-24,270,33,VERSA 33 CAMBIO DE RESORTE DOS · Excel GASTOS fila 2960 [origen gastos_caja id=2945],operativo_vehiculo,motor,0.55,true
+fdf50e52-a46a-4952-92fe-be025c187f44,2024-07-24,280,14,RIO 14 CAMBIO DE AMORTIGUARDOR TRASERO2 Y MOD · Excel GASTOS fila 2964 [origen gastos_caja id=2949],operativo_vehiculo,motor,0.55,true
+a5d931b4-df3b-4f66-a8d1-ec1ef11d35ca,2024-07-24,390,43,VERSA 43 2 ROTULAS MAS 2 BOCINAS MAS RELLENO DE ARAñA Y MOD · Excel GASTOS fila 2966 [origen gastos_caja id=2951],operativo_vehiculo,motor,0.55,true
+a60e1dcc-78b0-40e7-95d9-0ae716e8d678,2024-07-24,40,29,VERSA 29 CERTIFICADO GAS ANUAL · Excel GASTOS fila 2967 [origen gastos_caja id=2952],operativo_vehiculo,motor,0.55,true
+f592e2a3-ff3d-48ce-8e0f-c346dd4578a9,2024-08-07,100,23,VERSA 23 4/4 CENSOR CIGUEñAL · Excel GASTOS fila 3019 [origen gastos_caja id=3004],operativo_vehiculo,motor,0.55,true
+24640f0e-32b5-416e-bcce-7b9edde9166b,2024-08-07,100,13,RIO 13 4/6 ARREGLO CAJA · Excel GASTOS fila 3022 [origen gastos_caja id=3007],operativo_vehiculo,motor,0.55,true
+be14dfe7-c2e3-4ba3-a67b-7578e25d69b7,2024-08-07,70,14,RIO 14 CERTIFICADO DE GAS · Excel GASTOS fila 3055 [origen gastos_caja id=3040],operativo_vehiculo,motor,0.55,true
+91f81641-032c-4473-80ec-168f31846483,2024-08-07,20,57,VERSA 57 PLUMILLAS · Excel GASTOS fila 3059 [origen gastos_caja id=3044],operativo_vehiculo,motor,0.55,true
+0b045ddb-7589-4c1f-b4f3-f7c2ccb23a42,2024-08-07,50,14,RIO 14 CINTURON  NUEVO · Excel GASTOS fila 3074 [origen gastos_caja id=3059],operativo_vehiculo,motor,0.55,true
+9f1caebc-df9d-4257-8dfc-de0d0750d3e9,2024-08-07,35,14,RIO 14 EXTINTOR · Excel GASTOS fila 3076 [origen gastos_caja id=3061],operativo_vehiculo,motor,0.55,true
+972edf35-e11f-4fe3-9a43-7566d593545b,2024-08-07,30,19,VERSA 19 ARREGLO PARA CHOQUE · Excel GASTOS fila 3078 [origen gastos_caja id=3063],operativo_vehiculo,motor,0.55,true
+fcd89e27-79f9-4ba0-9c53-52ddc00cd4ca,2024-09-06,100,13,RIO 13 5/6  ARREGLO CAJA · Excel GASTOS fila 3166 [origen gastos_caja id=3151],operativo_vehiculo,motor,0.55,true
+39f72b85-ee2f-4c3d-bb54-97a877539d8f,2024-09-06,160,32,VERSA 32 4/4 DISCOS · Excel GASTOS fila 3171 [origen gastos_caja id=3156],operativo_vehiculo,frenos,0.55,true
+55cba8f7-dd95-4651-a79b-bd270f22af3e,2024-09-06,150,13,RIO 13  2/3  RODAJES · Excel GASTOS fila 3183 [origen gastos_caja id=3168],operativo_vehiculo,motor,0.55,true
+d22a7ed7-071d-425f-a468-c64686cfcd7e,2024-10-07,140,13,RIO 13 6/6  ARREGLO CAJA · Excel GASTOS fila 3245 [origen gastos_caja id=3230],operativo_vehiculo,motor,0.55,true
+5a6e2d81-7f79-4ada-89d1-4ae9b3900296,2024-10-07,120,13,RIO 13  3/3  RODAJES · Excel GASTOS fila 3256 [origen gastos_caja id=3241],operativo_vehiculo,motor,0.55,true
+ef957b2a-249e-41df-8452-2cffbfd6d729,2024-10-07,25,26,VERSA 26 PLUMILLAS · Excel GASTOS fila 3278 [origen gastos_caja id=3263],operativo_vehiculo,motor,0.55,true
+5ee24db4-5251-430e-95fd-881d11683e85,2024-11-08,20,21,VERSA 21 REGULACION FRENOS · Excel GASTOS fila 3383 [origen gastos_caja id=3368],operativo_vehiculo,frenos,0.55,true
+479a73ca-6ea3-46e9-869e-01a177dc07bd,2024-11-08,10,16,VERSA 16 FOCO · Excel GASTOS fila 3407 [origen gastos_caja id=3392],operativo_vehiculo,motor,0.55,true
+e1386644-8164-41d1-b0b1-81b01b1472a6,2024-11-19,20,38,VERSA 38 ARREGLO TUBO ESCAPE · Excel GASTOS fila 3416 [origen gastos_caja id=3401],operativo_vehiculo,motor,0.55,true
+49b0601a-f3de-48e1-aa65-27ae3f1eb953,2024-11-26,100,61,VERSA 61 LLAVE DUPLICADO · Excel GASTOS fila 3438 [origen gastos_caja id=3423],operativo_vehiculo,motor,0.55,true
+e2492b4e-44bf-4621-bf8a-981eacf0b6bd,2024-12-03,155,12,RIO 12 1 FAJA RETEN DE CIGUENAL · Excel GASTOS fila 3521 [origen gastos_caja id=3506],operativo_vehiculo,motor,0.55,true
+27b88833-750b-42ed-8dd7-1d98e596af5d,2024-12-10,50,32,VERSA 32 JEBES DE ESCAPE · Excel GASTOS fila 3561 [origen gastos_caja id=3546],operativo_vehiculo,motor,0.55,true
+1c4e4e17-19cb-4fa8-b3e6-8b5d9ef221bd,2024-12-23,20,11,RIO 11 REGULACION FRENOS TRASEROS · Excel GASTOS fila 3574 [origen gastos_caja id=3559],operativo_vehiculo,frenos,0.55,true
+1a96a5ff-1e79-4aaf-bd8e-21296359b5a9,2025-01-07,20,51,VERSA 51 FRENO REGULACION · Excel GASTOS fila 3658 [origen gastos_caja id=3643],operativo_vehiculo,frenos,0.55,true
+cb16af14-af90-4ce8-b291-28784ec5bba9,2025-02-06,20,11,RIO 11 FOCO H4 · Excel GASTOS fila 3786 [origen gastos_caja id=3771],operativo_vehiculo,motor,0.55,true
+08718be7-2915-4bac-86c8-8d886302524e,2025-02-06,10,63,VERSA 63 CAMBIO FARO · Excel GASTOS fila 3808 [origen gastos_caja id=3792],operativo_vehiculo,motor,0.55,true
+d91b9530-ef88-40d7-b0f9-6d49eb12c4b3,2025-02-10,440,44,"VERSA 44 CAMBIO DE PALIER LADO DERECHO UNA GRASA, BOCINA DE TAPECIO, 2 PINES DE COLIPER Y RELLENAR EN TORNO Y MOD · Excel GASTOS fila 3827 [origen gastos_caja id=3811]",operativo_vehiculo,motor,0.55,true
+abdb149a-e34f-4478-a71f-36ffdea2c528,2025-04-04,150,18,VERSA 18 1/3 CENSOR OXIGENO · Excel GASTOS fila 4050 [origen gastos_caja id=4034],operativo_vehiculo,motor,0.55,true
+9f4ffe39-f566-49b8-97cc-34639c917934,2025-03-08,90,23,VERSA 23 1 FAJA · Excel GASTOS fila 3926 [origen gastos_caja id=3910],operativo_vehiculo,motor,0.55,true
+d4191286-9636-47ec-a412-b61407a190f8,2019-05-31,90,1,[MAYO] YARIS 01 ANF-599 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+d1dbc697-52f8-4ec9-b64b-590a44dda637,2025-04-04,60,18,VERSA 18 CAMBIO DE CLAXON  Y ARREGLO EQUIPO ROY · Excel GASTOS fila 4073 [origen gastos_caja id=4057],operativo_vehiculo,motor,0.55,true
+f18fc85a-8ca7-458d-b90d-8412bb3d6450,2025-05-08,150,18,VERSA 18 2/3 CENSOR OXIGENO · Excel GASTOS fila 4188 [origen gastos_caja id=4172],operativo_vehiculo,motor,0.55,true
+2fd08e5c-1906-45c0-892e-0cc46d3f7360,2025-05-08,100,36,VERSA 36 1/2 PASTILLA · Excel GASTOS fila 4200 [origen gastos_caja id=4184],operativo_vehiculo,motor,0.55,true
+edd353ed-f4f4-46f4-b49c-563a0ac01f41,2025-05-08,90,14,RIO 14 1/2 PASTILLA · Excel GASTOS fila 4205 [origen gastos_caja id=4189],operativo_vehiculo,motor,0.55,true
+5378435d-380d-435a-8d2b-0c9469ce0603,2025-05-08,80,48,VERSA 48 1/2 PASTILLA · Excel GASTOS fila 4210 [origen gastos_caja id=4194],operativo_vehiculo,motor,0.55,true
+91634105-f74e-4b09-9528-2b67c034ceda,2025-06-03,130,18,VERSA 18 3/3 CENSOR OXIGENO · Excel GASTOS fila 4367 [origen gastos_caja id=4351],operativo_vehiculo,motor,0.55,true
+1e074f51-59fc-41f0-9ab8-603dfa4192e2,2019-08-29,90,1,[AGOSTO] YARIS 01 ANF-599 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+1348b80f-ed18-4fb4-b927-2e4b5d6f9c91,2025-05-09,50,25,VERSA 25 1 RETEN MOD · Excel GASTOS fila 4217 [origen gastos_caja id=4201],operativo_vehiculo,motor,0.55,true
+dfab843d-bf48-44b2-9e4c-33ba95e70c0a,2025-05-09,90,24,VERSA 24 1 RETEN MOD · Excel GASTOS fila 4221 [origen gastos_caja id=4205],operativo_vehiculo,motor,0.55,true
+a4331d4f-cf9c-4037-8e18-0480d4ed44c0,2025-05-07,30,65,VERSA 65 GAS · Excel GASTOS fila 4245 [origen gastos_caja id=4229],operativo_vehiculo,motor,0.55,true
+1ca6796e-0b03-438d-9bd0-2d162206a83a,2025-05-07,25,65,VERSA 65 PLUMILLAS · Excel GASTOS fila 4248 [origen gastos_caja id=4232],operativo_vehiculo,motor,0.55,true
+9c1b2c8e-d7d0-4844-8703-348cd8d378de,2025-05-12,20,16,VERSA 16 REGULACION FRENOS GUMERCINDO · Excel GASTOS fila 4259 [origen gastos_caja id=4243],operativo_vehiculo,frenos,0.55,true
+326472d1-e5cc-4183-9d81-77debe2756b1,2025-05-12,20,54,VERSA 54 REGULACION FRENOS POSTERIORES GUMERCINDO · Excel GASTOS fila 4262 [origen gastos_caja id=4246],operativo_vehiculo,frenos,0.55,true
+78b1fbfc-92f3-4575-a95a-569038b6e1a0,2025-05-12,20,56,VERSA 56 REGULACION DE FRENOS POSTERIOR · Excel GASTOS fila 4269 [origen gastos_caja id=4253],operativo_vehiculo,frenos,0.55,true
+3334d8ef-35b6-40ba-8dda-4cb60d2f7fc0,2019-11-14,90,1,[NOVIEMBRE] YARIS 01 ANF-599 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+e33d29c3-252a-486c-b64f-0b039be0e568,2025-05-27,35,65,VERSA 65 EXTINTOR · Excel GASTOS fila 4291 [origen gastos_caja id=4275],operativo_vehiculo,motor,0.55,true
+59cd1376-0799-48ab-b9af-3d3320a5f037,2025-07-04,45,66,RIO 66 PLUMILLA Y PROTECTOR DE ESPEJO · Excel GASTOS fila 4552 [origen gastos_caja id=4536],operativo_vehiculo,motor,0.55,true
+1d5e7b94-fe36-46db-9595-9697862cb3d0,2025-07-04,30,67,RIO 67 GAS ENTREGA · Excel GASTOS fila 4557 [origen gastos_caja id=4541],operativo_vehiculo,motor,0.55,true
+db0d2ff2-0152-4642-8db3-780d6687eaf3,2025-06-03,110,36,VERSA 36 2/2 PASTILLA · Excel GASTOS fila 4377 [origen gastos_caja id=4361],operativo_vehiculo,motor,0.55,true
+75da10b7-fd1d-44ff-81f4-15b5eb3e71db,2025-06-03,90,14,RIO 14 2/2 PASTILLA · Excel GASTOS fila 4382 [origen gastos_caja id=4366],operativo_vehiculo,motor,0.55,true
+d5c898c5-216b-4266-a958-99f39f1089c3,2025-06-03,80,48,VERSA 48 2/2 PASTILLA · Excel GASTOS fila 4387 [origen gastos_caja id=4371],operativo_vehiculo,motor,0.55,true
+fea7e4f1-6c05-4e39-bbc0-5da12b7f76a6,2025-06-03,80,39,VERSA 39 1/2 PASTILLA · Excel GASTOS fila 4400 [origen gastos_caja id=4384],operativo_vehiculo,motor,0.55,true
+e07a4989-e9ca-4108-83d0-3269e848ebf2,2025-06-04,100,16,VERSA 16 ARREGLO PARACHQOUE MAS FARO DELANTERO Y TRASERO · Excel GASTOS fila 4432 [origen gastos_caja id=4416],operativo_vehiculo,motor,0.55,true
+9e580e13-70c5-473f-b1c6-013ea0e68df1,2025-07-04,30,68,RIO 68 FRENOS GUERREROS REGULACION · Excel GASTOS fila 4563 [origen gastos_caja id=4547],operativo_vehiculo,frenos,0.55,true
+1402c5b9-9898-4cf8-8a10-0ed9a97b4836,2025-07-04,60,68,RIO 68 EXTINTOR Y BOTIQUIN · Excel GASTOS fila 4564 [origen gastos_caja id=4548],operativo_vehiculo,motor,0.55,true
+e3d45087-d353-40cf-9436-d2be24ad76d8,2025-07-08,80,39,VERSA 39 2/2 PASTILLA · Excel GASTOS fila 4628 [origen gastos_caja id=4612],operativo_vehiculo,motor,0.55,true
+c2cb062c-6318-43db-833a-1e7620ba99ad,2025-07-21,70,70,VERSA 70 EXTINTOR BOTIQUIN Y TRIANGULO · Excel GASTOS fila 4669 [origen gastos_caja id=4653],operativo_vehiculo,motor,0.55,true
+d1eabe58-e2d2-446e-b6d2-e3aad3cfbb3c,2025-08-06,80,48,VERSA 48 PALNCA DE CAMBIOS ARREGLO · Excel GASTOS fila 4787 [origen gastos_caja id=4771],operativo_vehiculo,motor,0.55,true
+937914f9-36ab-419f-bc93-7a05935ee3da,2025-08-28,220,66,RIO 66 CAMBIO DE 2 RESORTES POSTERIOR MAS MOD · Excel GASTOS fila 4833 [origen gastos_caja id=4817],operativo_vehiculo,motor,0.55,true
+b5de3110-60d4-4679-91ab-979085f37751,2025-08-28,20,65,VERSA 65 ARREGLO DE TUBO DE ESCAPE · Excel GASTOS fila 4834 [origen gastos_caja id=4818],operativo_vehiculo,motor,0.55,true
+03151707-5283-4ee3-9e9e-c50f5c093a95,2025-08-28,112,48,VERSA 48 RELLENADO DE CALIPES DE FRENO Y ORINES MAS MOD · Excel GASTOS fila 4836 [origen gastos_caja id=4820],operativo_vehiculo,frenos,0.55,true
+934ac171-3a02-4972-9c94-cd95f24a89b6,2025-09-04,100,10,RIO 10 1/2 CENSOR DE VALVULA DE AIRE · Excel GASTOS fila 4939 [origen gastos_caja id=4923],operativo_vehiculo,motor,0.55,true
+3e003cfe-3a05-49ae-8552-994888b28cfe,2025-09-04,200,24,VERSA 24 1/2 CENSOR DE OXIGENO  MDO · Excel GASTOS fila 4954 [origen gastos_caja id=4938],operativo_vehiculo,motor,0.55,true
+51784366-a944-4db9-806d-81cf35fa9a46,2025-09-04,20,19,VERSA 19 MANT FRENOS · Excel GASTOS fila 4977 [origen gastos_caja id=4961],operativo_vehiculo,frenos,0.55,true
+1ca27ee8-77be-4684-9ced-e0d1a03cf25c,2025-09-04,80,24,VERSA 24 LIMPIEZA CATALIZADOR Y REGULACION · Excel GASTOS fila 5004 [origen gastos_caja id=4988],operativo_vehiculo,motor,0.55,true
+ac551b7a-707e-4c1c-9d12-c0962d2c67b0,2025-08-30,220,12,RIO 12 CAMBIO DE 2 RESORTES POSTERIOR Y MOD · Excel GASTOS fila 5178 [origen gastos_caja id=5162],operativo_vehiculo,motor,0.55,true
+78151fbf-0c0f-4e57-8239-3673508ed56c,2025-09-04,150,10,RIO 10 2/2 CENSOR DE VALVULA DE AIRE · Excel GASTOS fila 5089 [origen gastos_caja id=5073],operativo_vehiculo,motor,0.55,true
+9d7c1f08-e80b-460b-8513-44ee2fb7491a,2025-09-04,230,24,VERSA 24 2/2 CENSOR DE OXIGENO  MDO · Excel GASTOS fila 5104 [origen gastos_caja id=5088],operativo_vehiculo,motor,0.55,true
+8ce88156-bbfe-4ecb-972e-5f45cc630685,2025-10-06,450,75,VERSA 75 COPIA DE LLAVE DE AUTO · Excel GASTOS fila 5144 [origen gastos_caja id=5128],operativo_vehiculo,motor,0.55,true
+c2ab4bde-631a-44a9-8585-1525f37b3583,2025-09-18,130,33,VERSA 33 CAMBIO DE TERMINAL DE DIRECCION LADO DERECHO · Excel GASTOS fila 5188 [origen gastos_caja id=5172],operativo_vehiculo,motor,0.55,true
+3651038c-0925-47b0-8da7-827bba6ff860,2025-09-24,110,56,VERSA 56 SUPLES POSTERIOR Y REGULACION DE FRENO POSTERIOR · Excel GASTOS fila 5190 [origen gastos_caja id=5174],operativo_vehiculo,frenos,0.55,true
+78fbd143-a177-40e6-afce-fa011b27dc1a,2025-10-13,20,50,VERSA 50 TUBO DE ESCAPE · Excel GASTOS fila 5201 [origen gastos_caja id=5185],operativo_vehiculo,motor,0.55,true
+91caa34d-6dca-4701-8872-ee51fa2adcc6,2025-11-04,15,38,VERSA 38 CORREGIR TUBO DE ESCAPE · Excel GASTOS fila 5412 [origen gastos_caja id=5396],operativo_vehiculo,motor,0.55,true
+e2ca67d4-d1cf-4d47-8e3b-4e3e8d295253,2025-11-04,170,49,VERSA 49 SUPLES Y MOD POR PUENTE (NUEVO PUENTE PAGA DANEIL ) · Excel GASTOS fila 5415 [origen gastos_caja id=5399],operativo_vehiculo,motor,0.55,true
+8fca4367-0555-4039-859e-c4d7656b082f,2026-01-06,14,23,VERSA 23 GAS · Excel GASTOS fila 5793 [origen gastos_caja id=5777],operativo_vehiculo,motor,0.55,true
+5fa93290-8a88-4fad-b261-8918eab638ae,2026-01-29,150,63,VERSA 63 PERMISO EJECUTIVO · Excel GASTOS fila 5875 [origen gastos_caja id=5859],operativo_vehiculo,motor,0.55,true
+3b8feb29-2b28-4f66-9798-15dbabcddee1,2026-02-04,30,22,VERSA 22 LIQUIDO FRENO · Excel GASTOS fila 6008 [origen gastos_caja id=5992],operativo_vehiculo,frenos,0.55,true
+35e8adc1-bae7-46a4-b056-85e600292420,2026-02-04,30,80,VERNA 80 LIMPIEZA Y REGULACION · Excel GASTOS fila 6066 [origen gastos_caja id=6050],operativo_vehiculo,motor,0.55,true
+d4b379f0-0baf-4e96-97f9-77f8759e536e,2026-02-24,90,53,versa 53 2 bieletas · Excel GASTOS fila 6259 [origen gastos_caja id=6243],operativo_vehiculo,motor,0.55,true
+760671a4-5641-41f8-976a-d2fe16d4a340,2026-03-30,20,75,VERSA 75 BUK 151 regulación de freno posterior 20 · Excel GASTOS fila 6336 [origen gastos_caja id=6319],operativo_vehiculo,frenos,0.55,true
+fa44dae1-89d2-4297-97ce-92e294118d4b,2020-10-07,675,8,YARIS 08 · Excel GASTOS fila 95 [origen gastos_caja id=92],operativo_vehiculo,motor,0.55,true
+8556c9cb-1ac3-4a0c-a653-95698ef6cf31,2026-04-06,20,13,RIO 13 ARREGLO ASIENTO PILOTO · Excel GASTOS fila 6525 [origen gastos_caja id=6508],operativo_vehiculo,motor,0.55,true
+093faf65-dbb1-4a96-9c79-7bd54840c29b,2026-04-06,14,70,VERSA 70 2 ENLALNTES · Excel GASTOS fila 6528 [origen gastos_caja id=6511],operativo_vehiculo,motor,0.55,true
+3dcbab42-e53e-4aa0-8940-837fbeb1faed,2020-11-21,50,1,ARREGLO YARIS 01 · Excel GASTOS fila 146 [origen gastos_caja id=143],operativo_vehiculo,motor,0.55,true
+e40fc156-5ef3-4f6f-a4e7-facd4c90c5f1,2020-12-03,675,4,YARIS 04 · Excel GASTOS fila 157 [origen gastos_caja id=154],operativo_vehiculo,motor,0.55,true
+2d2bcb05-cfcd-4700-a2ac-c52207bbb51e,2020-12-03,675,8,YARIS 08 · Excel GASTOS fila 159 [origen gastos_caja id=156],operativo_vehiculo,motor,0.55,true
+7fd3c26a-6c31-4d58-aa7f-f51e3d1a9047,2020-12-07,130,2,yaris 02 valvula de presion · Excel GASTOS fila 174 [origen gastos_caja id=171],operativo_vehiculo,motor,0.55,true
+a6d7c97b-fa84-41fe-bd21-8365ab8d5204,2021-05-05,520,9,YARIS 09 · Excel GASTOS fila 252 [origen gastos_caja id=249],operativo_vehiculo,motor,0.55,true
+08009d1e-dd92-4f15-ad2c-45b172dcc107,2021-05-05,260,5,YARIS 05 · Excel GASTOS fila 253 [origen gastos_caja id=250],operativo_vehiculo,motor,0.55,true
+d4cbb5ba-aeb9-4efc-b764-b4ce8f40973b,2021-06-09,100,4,YARIS 04 CENSOR OXIGENO · Excel GASTOS fila 268 [origen gastos_caja id=265],operativo_vehiculo,motor,0.55,true
+fc9dea18-429d-4a94-a695-75526f411896,2022-01-06,50,9,ESPEJO YARIS 09 ARREGLO · Excel GASTOS fila 442 [origen gastos_caja id=435],operativo_vehiculo,motor,0.55,true
+52c755d8-9152-4cc6-81e2-87e17b72c25e,2022-02-09,90,8,CINTA Y CLAXON YARIS 08 MEDIA CON MM · Excel GASTOS fila 478 [origen gastos_caja id=471],operativo_vehiculo,motor,0.55,true
+94da5c63-2ec2-4290-9a38-e61460eda157,2022-03-03,20,6,YARIS 06 ARREGLO FARO · Excel GASTOS fila 496 [origen gastos_caja id=489],operativo_vehiculo,motor,0.55,true
+26c279f8-3c76-4379-a288-b0beb7b5c32f,2022-03-07,340,3,VERSA 03 CAMBIO DISCOS DE FRENO Y MANO DE OBRA · Excel GASTOS fila 500 [origen gastos_caja id=493],operativo_vehiculo,frenos,0.55,true
+b5699ca1-b214-44cb-bebf-675c46d370a4,2022-03-24,50,4,YARIS 04 ARREGLO BASE AMORTIGUADRO GUMER · Excel GASTOS fila 538 [origen gastos_caja id=531],operativo_vehiculo,motor,0.55,true
+6d17496c-f1db-4ee4-b32e-268dfed37f72,2022-07-04,210,5,yaris 05 valvula de gass tanque nueva · Excel GASTOS fila 726 [origen gastos_caja id=719],operativo_vehiculo,motor,0.55,true
+6ec715cd-8475-4265-856f-5188613dad1b,2022-08-20,20,8,yaris 08 mant frenos · Excel GASTOS fila 781 [origen gastos_caja id=774],operativo_vehiculo,frenos,0.55,true
+f3c4da09-0995-4921-848a-5029414ee50a,2022-09-02,920,1,2 CERTIFICADO QUINQUENAL + 2 VALVULAS YARIS 01/02 ROMANO · Excel GASTOS fila 802 [origen gastos_caja id=795],operativo_vehiculo,motor,0.55,true
+833ac282-f1eb-4943-bffd-699a353b49eb,2023-09-07,30,5,YARIS 05 PLUMILLAS YENNY · Excel GASTOS fila 1634 [origen gastos_caja id=1620],operativo_vehiculo,motor,0.55,true
+7c4b4a58-b9e7-469f-a097-f3d0cab8a871,2023-10-03,120,9,YARIS 09 1/2 VALVULA PCV Y SIMPLE · Excel GASTOS fila 1707 [origen gastos_caja id=1693],operativo_vehiculo,motor,0.55,true
+990c7606-4058-4ab0-b9a4-855c1b21fbe4,2023-11-03,120,9,YARIS 09 2/2 VALVULA PCV Y SIMPLE · Excel GASTOS fila 1851 [origen gastos_caja id=1837],operativo_vehiculo,motor,0.55,true
+437e7080-48a4-4755-85d8-834b8227e61a,2023-10-05,80,6,YARIS 06 CUADARADA DE PARACHOQUES · Excel GASTOS fila 1909 [origen gastos_caja id=1895],operativo_vehiculo,motor,0.55,true
+fc9f1f0b-4733-4667-b3e0-a65288dd2c13,2023-12-07,45,9,YARIS 09 LAMINA PARA FARO TRASEROS · Excel GASTOS fila 2012 [origen gastos_caja id=1998],operativo_vehiculo,motor,0.55,true
+6f7bedc2-d5d7-4f87-8d26-779cfd5473ae,2024-02-13,50,9,YARIS 09 REGULACION FRENOS · Excel GASTOS fila 2275 [origen gastos_caja id=2261],operativo_vehiculo,frenos,0.55,true
+b1e1b6ae-107c-490c-95e7-4ac8148c893a,2024-03-07,170,1,YARIS 01 CUOTAS 3/6 CUALTA Y VALVULA · Excel GASTOS fila 2350 [origen gastos_caja id=2336],operativo_vehiculo,motor,0.55,true
+72d70c68-03a6-4174-bbfb-490d80c05cee,2024-03-07,60,5,YARIS 05 REVISON DE LUZ DE VALVULA · Excel GASTOS fila 2376 [origen gastos_caja id=2362],operativo_vehiculo,motor,0.55,true
+3a3d0733-a623-4875-b8a4-b4753c33166b,2024-03-07,15,9,YARIS 09 REGULACION FRENOS · Excel GASTOS fila 2380 [origen gastos_caja id=2366],operativo_vehiculo,frenos,0.55,true
+0379bb6c-bb99-421e-aba4-f7da02610fd9,2024-04-06,170,1,YARIS 01 CUOTAS 4/6 CUALTA Y VALVULA · Excel GASTOS fila 2456 [origen gastos_caja id=2442],operativo_vehiculo,motor,0.55,true
+c9281859-98a6-428c-b648-3c5a9e60574f,2024-05-09,170,1,YARIS 01 CUOTAS 5/6 CUALTA Y VALVULA · Excel GASTOS fila 2558 [origen gastos_caja id=2544],operativo_vehiculo,motor,0.55,true
+79b732d5-3609-4d27-8946-15a8b0d882fa,2024-05-09,200,4,YARIS 04 1/7 CAMBIO DIRECCION TOTAL · Excel GASTOS fila 2581 [origen gastos_caja id=2567],operativo_vehiculo,motor,0.55,true
+667b6f9d-b584-480a-a8ea-f98d458e95cf,2024-07-06,50,4,YARIS 04 CERTDICADO GAS FH · Excel GASTOS fila 2887 [origen gastos_caja id=2872],operativo_vehiculo,motor,0.55,true
+e63a60ec-986f-4964-8de9-455bacbaf9a2,2024-11-08,20,3,VERSA 03 REGULACION FRENOS · Excel GASTOS fila 3388 [origen gastos_caja id=3373],operativo_vehiculo,frenos,0.55,true
+f2c5c970-0065-4f9b-97fb-af9bc0923700,2024-11-08,50,1,YARIS 01 REC. TAMBOR  TRASERO · Excel GASTOS fila 3410 [origen gastos_caja id=3395],operativo_vehiculo,motor,0.55,true
+aaf8b49a-d195-4c3a-907c-8ed8778c7f72,2024-12-03,60,9,YARIS 09 REGULACION FRENOS ELECTRICOS · Excel GASTOS fila 3523 [origen gastos_caja id=3508],operativo_vehiculo,frenos,0.55,true
+0a49379f-5863-41e0-82cf-ea71b87c4735,2025-01-07,50,7,YARIS 07 GAS Y GASOLINSA · Excel GASTOS fila 3661 [origen gastos_caja id=3646],operativo_vehiculo,motor,0.55,true
+f02f4dfd-b6cb-411d-b320-14df5a81c6fd,2025-01-07,25,7,YARIS 07 PLUMILLAS · Excel GASTOS fila 3663 [origen gastos_caja id=3648],operativo_vehiculo,motor,0.55,true
+5c975b7c-23e6-419d-b8b0-fa116b1e6a87,2025-02-10,20,3,VERSA 03 REGULACION FRENOS · Excel GASTOS fila 3824 [origen gastos_caja id=3808],operativo_vehiculo,frenos,0.55,true
+e2d17fb1-f2e2-491e-acae-b79d873bbadf,2025-05-12,20,5,YARIS 05 REGULACION FRENOS · Excel GASTOS fila 4271 [origen gastos_caja id=4255],operativo_vehiculo,frenos,0.55,true
+c8d1e6e7-2d7d-4ba7-a7d8-861fb07fafb2,2025-08-07,50,4,YARIS 04 SEGURO  DE TAPAS  Y ARREGLO TAPA BARRO · Excel GASTOS fila 4789 [origen gastos_caja id=4773],operativo_vehiculo,motor,0.55,true
+fc8cbf4c-ee32-4c7d-a545-862fe78f40bb,2025-10-06,80,5,YARIS 05 1/2 FAJA MAS RETEN DE SIGUEÑAL · Excel GASTOS fila 5113 [origen gastos_caja id=5097],operativo_vehiculo,motor,0.55,true
+eba0fbfd-a8f6-490e-8e94-143ab1bdd6ca,2025-09-03,28,9,YARIS 09 REGULACION DE FRENOS POSTERIOR MAS LIQUIDO · Excel GASTOS fila 5181 [origen gastos_caja id=5165],operativo_vehiculo,frenos,0.55,true
+088948c4-2b92-4028-9312-0d7b1c3270da,2025-10-14,30,3,VERSA 03 REGULACION DE FRENO POSTERIOR MAS LA PASTILLA · Excel GASTOS fila 5204 [origen gastos_caja id=5188],operativo_vehiculo,frenos,0.55,true
+62ed842c-b0f9-4b44-a97f-3f04475ffa2d,2025-11-04,75,5,YARIS 05 2/2 FAJA MAS RETEN DE SIGUEÑAL · Excel GASTOS fila 5288 [origen gastos_caja id=5272],operativo_vehiculo,motor,0.55,true
+d13a2905-c0e7-44d5-b9a9-5ea2b22f2e30,2026-01-06,140,5,YARIS 05 1/2 ARREGLO COMPUTADORA · Excel GASTOS fila 5743 [origen gastos_caja id=5727],operativo_vehiculo,motor,0.55,true
+16779c13-7429-43ce-845f-2e7cd5ce7f76,2026-01-06,90,7,YARIS 07 ARREGLO · Excel GASTOS fila 5845 [origen gastos_caja id=5829],operativo_vehiculo,motor,0.55,true
+d3a147ca-c01e-437a-9922-5716e64cca9b,2026-02-04,40,8,YARIS 08 LIMPIEZA CONDENSADOR · Excel GASTOS fila 6029 [origen gastos_caja id=6013],operativo_vehiculo,motor,0.55,true
+5b6d5d73-6403-4e4d-bca7-d42893ff5a95,2026-02-04,25,3,VERSA 03 PLUMILLAS · Excel GASTOS fila 6083 [origen gastos_caja id=6067],operativo_vehiculo,motor,0.55,true
+421d1164-8d2d-47a2-9df9-a85f42435d7c,2026-02-04,30,3,VERSA 03  ARREGLO GUANTERA · Excel GASTOS fila 6087 [origen gastos_caja id=6071],operativo_vehiculo,motor,0.55,true
+4542b986-9fd5-44b0-9e54-09e7799b71c3,2026-04-06,65,8,YARIS 08 CLAXON CARACOL HELLA · Excel GASTOS fila 6541 [origen gastos_caja id=6524],operativo_vehiculo,motor,0.55,true
+0ac0520b-1892-423c-b3d4-5f636525aea7,2024-02-08,72,22,VERSA 22 PERMISO LUNAS · Excel GASTOS fila 2255 [origen gastos_caja id=2241],operativo_vehiculo,motor,0.55,true
+c97006dc-3d01-47b2-a107-203d44375fda,2024-09-06,130,26,VERSA 26  3/4  2 AMORTIGUADRES · Excel GASTOS fila 3179 [origen gastos_caja id=3164],operativo_vehiculo,motor,0.55,true
+a1874b8a-b260-4d69-9f81-30fb628bdd02,2024-10-07,130,26,VERSA 26  4/4  2 AMORTIGUADRES · Excel GASTOS fila 3253 [origen gastos_caja id=3238],operativo_vehiculo,motor,0.55,true
+67ba361f-66e0-4ab0-8bcc-9b1483273d58,2026-04-07,100,27,VERSA 27 1/2 FLOTADOR MAS MEDIDOR DE GAS MOD · Excel GASTOS fila 6442 [origen gastos_caja id=6425],operativo_vehiculo,motor,0.55,true
+05c4d69c-6372-412a-85f8-816834b9a59f,2023-04-05,240,2,YARIS 02 LIMPIEZA CONDENSADOR SACARLO MAS ORRINES VALVULA Y RECARGA · Excel GASTOS fila 1208 [origen gastos_caja id=1198],operativo_vehiculo,motor,0.55,true
+a2b17119-90a2-4425-b222-540bd678744e,2024-02-08,170,1,YARIS 01 CUOTAS 2/6 CUALTA Y VALVULA · Excel GASTOS fila 2228 [origen gastos_caja id=2214],operativo_vehiculo,motor,0.55,true
+ed240112-c5a2-4b60-9195-ee44ee8b8b4f,2026-02-04,140,5,YARIS 05 2/2 ARREGLO COMPUTADORA · Excel GASTOS fila 5974 [origen gastos_caja id=5958],operativo_vehiculo,motor,0.55,true
+e42d7cd5-c3b9-4539-9b50-988a6cf9eb02,2019-05-31,90,5,[MAYO] YARIS 05 ANS-117 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+de44b8d1-46b8-4a0a-bf35-77d03379d545,2019-02-28,100,3,[FEBRERO] VERSA 03 AVW-255 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+2738c0ce-209a-4d82-9d23-e3a2504f5c18,2019-05-31,100,3,[MAYO] VERSA 03 AVW-255 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+1703eac9-a7f0-48d5-aa0b-8a6e1a129a48,2019-08-29,100,3,[AGOSTO] VERSA 03 AVW-255 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+139510a2-74b6-4ba1-9aab-1a3450a877e7,2019-11-14,100,3,[NOVIEMBRE] VERSA 03 AVW-255 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+d4f67d39-ceaa-41e0-b54d-9a13545482d8,2024-04-09,60,4,[ABRIL] YARIS  04 F7S-684 — GATA MAS SEGURO ESPEJO,operativo_vehiculo,motor,0.55,true
+8725084f-1c29-4904-915c-0b363a036be6,2019-02-28,90,5,[FEBRERO] YARIS 05 ANS-117 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+0f17c290-6b12-47d4-ad70-1af36218a192,2019-08-29,90,5,[AGOSTO] YARIS 05 ANS-117 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+def440b5-3029-490c-a4f4-df816d7e76e5,2019-11-14,90,5,[NOVIEMBRE] YARIS 05 ANS-117 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+552f394d-f543-4b08-a6e2-3ace02a19dd6,2022-05-20,100,5,[MAYO] YARIS 05 ANS-117 — TAPAS ARO Y SEGURO,operativo_vehiculo,motor,0.55,true
+2194bb4a-b7d4-4824-a4a4-7aec2cbf1b48,2023-10-13,100,5,[OCTUBRE] YARIS 05 ANS-117 — tapas mas seguro aro,operativo_vehiculo,motor,0.55,true
+0b4c217b-c868-452d-9b07-7c9813a0842e,2025-07-10,110,5,[JULIO] YARIS 05 ANS-117 — 4 TAPAS Y SEGURO,operativo_vehiculo,motor,0.55,true
+9b014d09-b4fe-4739-b8f7-9feaea420054,2025-12-20,125,5,[DICIEMBRE] YARIS 05 ANS-117 — SEGURO COMPUTADORA,operativo_vehiculo,motor,0.55,true
+e9cb129c-4b72-4567-81e2-2a02a5f41c22,2019-05-16,100,6,[MAYO] YARIS 06 ARF-480 — impuesto sat,operativo_vehiculo,motor,0.55,true
+16bda875-917d-4d12-9e50-b4f9d26b0b51,2019-08-29,50,6,[AGOSTO] YARIS 06 ARF-480 — impuesto sat,operativo_vehiculo,motor,0.55,true
+f1362a51-71da-4bca-b567-1068373e59ad,2019-11-14,100,6,[NOVIEMBRE] YARIS 06 ARF-480 — impuesto sat,operativo_vehiculo,motor,0.55,true
+5d1b6bdb-f759-49df-9d81-3f81c997f55f,2025-05-20,10,8,[MAYO] YARIS 08 AHB-559 — CAMBIO DE TUERCA SEGURO,operativo_vehiculo,motor,0.55,true
+87839099-3c47-4107-aa2a-0ae89a6e6a12,2019-01-20,210,9,[ENERO (2019)] YARIS 09 AUG-396 — seguro rimac cuota,operativo_vehiculo,motor,0.55,true
+47a70b4f-16cd-4a08-abec-9df2f17e9ba6,2019-02-28,100,9,[FEBRERO] YARIS 09 AUG-396 — IMPUESTO CARRO,operativo_vehiculo,motor,0.55,true
+c472e222-b885-4105-92bb-4cda224b2ed7,2019-05-31,100,9,[MAYO] YARIS 09 AUG-396 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+20d69b56-6bb2-4028-86de-623f0c137715,2019-08-29,100,9,[AGOSTO] YARIS 09 AUG-396 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+9e08ccfc-cebf-4bca-b1f2-1a88c39dcaad,2019-11-14,100,9,[NOVIEMBRE] YARIS 09 AUG-396 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+b70092dd-c0d1-418a-abfa-a194a685b467,2022-12-28,40,9,[DICIEMBRE] YARIS 09 AUG-396 — JESUS EDGAR DOCUMENTO ATU,operativo_vehiculo,motor,0.55,true
+f019ff82-dc49-4e13-b299-8df6dbd7f76c,2019-01-29,200,10,[ENERO (2019)] RIO 10 ARD-444 — impuesto nils sat,operativo_vehiculo,motor,0.55,true
+d0cf342e-5e23-4eb9-abd0-9909333032d2,2019-12-18,30,10,[DICIEMBRE] RIO 10 ARD-444 — SEGURO ESPEJOS,operativo_vehiculo,motor,0.55,true
+84ea4291-cb3d-46da-b125-2dd85f6118c6,2020-02-21,100,11,[FEBRERO] RIO 11 AVG-048 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+4279893c-9f68-4320-bc6b-dbc2ed61e2d9,2020-02-21,100,12,[FEBRERO] RIO 12 BBL-091 — PAGO IMPUESTOS SAT,operativo_vehiculo,motor,0.55,true
+3e830204-19f7-401d-a99a-a6f8f9e3f41e,2020-02-21,100,13,[FEBRERO] RIO 13 BDI-391 — PAGO IMPUESTOS SAT,operativo_vehiculo,motor,0.55,true
+cc015e82-615a-4c59-b486-603b66314f59,2019-05-26,560,14,[MAYO] RIO 14 APP-260 — PAGO RIMAC SEGUROS,operativo_vehiculo,motor,0.55,true
+a9e50a79-ecf0-4d69-b02c-8c925c2b6091,2019-08-29,50,15,[AGOSTO] YARIS 15 APZ-588 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+0d5d9f19-6663-48d8-a557-db3c5ff22bd2,2019-11-14,100,15,[NOVIEMBRE] YARIS 15 APZ-588 — IMPUESTO SAT,operativo_vehiculo,motor,0.55,true
+79fe97ae-7f0b-476e-9abe-d882ed0b22a2,2020-11-16,100,16,[NOVIEMBRE] VERSA 16 ANW-033 — DOCUMENTO SUNARP 22 Y DUPLICADO TARJETA DE PROPIEDAD 01,operativo_vehiculo,motor,0.55,true
+55fbfe38-c8fc-4190-9c7a-a7439647f94f,2023-08-02,9,18,[AGOSTO] VERSA 18 AWC-679 — TAXI DOCUMENTOS ATU,operativo_vehiculo,motor,0.55,true
+aa4bd1aa-d47e-4c2a-aaea-963a1dcfbbc4,2023-02-17,135,19,[FEBRERO] versa 19 BET-613 — 110 tapas mas seguro ruedas + 25plumillas,operativo_vehiculo,motor,0.55,true
+ce60a77b-75ef-41ef-99c7-0295df26646a,2020-12-09,25,21,[DICIEMBRE] VERSA 21 BJL-403 — SEGURO DE AROS,operativo_vehiculo,motor,0.55,true
+10a0a9df-c3fb-4bba-ade4-d5ac8616e0fd,2023-04-21,310,24,[ABRIL] VERSA 24 BMY-499 — gastos notariales compra versa 37,operativo_vehiculo,motor,0.55,true
+436d8088-bf6c-414d-9d03-12c33014b335,2023-07-25,110,24,[JULIO] VERSA 24 BMY-499 — tapas y seguros aro,operativo_vehiculo,motor,0.55,true
+bca1647c-5fb6-4116-88c9-926bea6906b3,2023-06-26,200,28,[JUNIO] VERSA 28 BRL-073 — JESUS EDGAR SETAME DOCUMENTO INDECOPI ATU POR 10 ANOS,operativo_vehiculo,motor,0.55,true
+b67c39ba-9cb7-4e2c-90b4-edf02c803ba8,2024-11-07,10,30,[NOVIEMBRE] VERSA 30 (BLF-037) — SEGUROS TAPAS AROS,operativo_vehiculo,motor,0.55,true
+e424967e-050c-4832-b6ee-33acd33c7e20,2025-05-27,50,30,[MAYO] VERSA 30 (BLF-037) — SEGUROS TAPAS AROS,operativo_vehiculo,motor,0.55,true
+50c5cb3b-c88e-40de-9c6e-a4cfd58762c8,2023-01-31,18,32,[ENERO (2023)] VERSA 32 BTN-465 — seguro ruedas,operativo_vehiculo,motor,0.55,true
+0949123c-ff76-4e9e-affa-faabe093d25b,2025-02-25,35,59,[FEBRERO] VERSA 59 BXV-477 — ENLLANTE Y NUVO SEGUROS,operativo_vehiculo,motor,0.55,true
+886afe7f-46b3-4507-aed7-5c7470c7e92f,2025-05-07,100,64,[MAYO] VERSA 64 MK5-584 — GASTOS NOTARIALES,operativo_vehiculo,motor,0.55,true
+1ead0a92-922a-4caf-9181-b64aedcad1b5,2025-05-06,80,64,[MAYO] VERSA 64 MK5-584 — SEGURO CAPOT CADENA,operativo_vehiculo,motor,0.55,true
+d9839c62-2b29-43c1-90f7-1f712092ccd7,2025-07-29,30,69,[JULIO] VERSA 69 CBJ-476 — SEGURO DE TAPAS,operativo_vehiculo,motor,0.55,true
+bb6e5367-29b2-4426-b247-6193c3768096,2025-11-28,120,70,[NOVIEMBRE] VERSA 70 CBK-370 — CADENA CAPOT  SEGURO,operativo_vehiculo,motor,0.55,true

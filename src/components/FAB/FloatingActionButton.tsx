@@ -50,14 +50,6 @@ const sections: FabSection[] = [
       },
       {
         kind: 'nav',
-        path: '/finanzas/gastos-caja',
-        icon: '🏧',
-        label: 'Gastos de caja',
-        subtitle: 'Hoja Excel caja',
-        gradient: 'from-stone-400 to-neutral-600',
-      },
-      {
-        kind: 'nav',
         path: '/finanzas/caja-negocio',
         icon: '🏪',
         label: 'Caja negocio',

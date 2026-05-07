@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   Ingreso,
   Gasto,
@@ -452,10 +452,16 @@ export const useRegistros = () => {
     [vehicles],
   );
 
+  const gastosPendientesRevision = useMemo(
+    () => gastos.filter((g) => g.requiere_revision === true),
+    [gastos],
+  );
+
   return {
     vehicles,
     ingresos,
     gastos,
+    gastosPendientesRevision,
     mantenimientos,
     documentaciones,
     descuentos,

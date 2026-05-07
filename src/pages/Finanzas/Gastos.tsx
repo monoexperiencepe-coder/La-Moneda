@@ -5,28 +5,76 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import Select from '../../components/Common/Select';
+import type { Gasto } from '../../data/types';
 import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
-import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+
+/** Tabs por tipo_gasto (Excel migración final + legacy); sin pestaña «Todos». */
+const GASTO_TABS: {
+  id: string;
+  label: string;
+  tipo_gasto: string;
+  emoji: string;
+  gradient: string;
+  border: string;
+}[] = [
+  { id: 'op', label: 'Operativos', tipo_gasto: 'operativo_vehiculo', emoji: '🔧', gradient: 'from-red-500/10 to-rose-500/10', border: 'border-red-200 hover:border-red-400' },
+  { id: 'adm', label: 'Administrativos', tipo_gasto: 'administrativo_empresa', emoji: '🏢', gradient: 'from-slate-500/10 to-gray-500/10', border: 'border-slate-200 hover:border-slate-400' },
+  { id: 'fin', label: 'Financieros', tipo_gasto: 'financiero_prestamo', emoji: '🏦', gradient: 'from-amber-500/10 to-orange-500/10', border: 'border-amber-200 hover:border-amber-400' },
+  { id: 'pla', label: 'Planilla', tipo_gasto: 'planilla_laboral', emoji: '👥', gradient: 'from-indigo-500/10 to-blue-500/10', border: 'border-indigo-200 hover:border-indigo-400' },
+  { id: 'inv', label: 'Inversiones', tipo_gasto: 'inversion_compra', emoji: '🚗', gradient: 'from-violet-500/10 to-fuchsia-500/10', border: 'border-violet-200 hover:border-violet-400' },
+  { id: 'per', label: 'Personales', tipo_gasto: 'personal_socios_familiares', emoji: '🏠', gradient: 'from-pink-500/10 to-rose-500/10', border: 'border-pink-200 hover:border-pink-400' },
+  { id: 'glob', label: 'Globales', tipo_gasto: 'gastos_globales', emoji: '🌐', gradient: 'from-teal-500/10 to-cyan-500/10', border: 'border-teal-200 hover:border-teal-400' },
+];
+
+/** Legacy tipo_gasto antes de migración (compat). */
+const LEGACY_TIPO_MAP: Record<string, string> = {
+  financiero: 'financiero_prestamo',
+  inversion: 'inversion_compra',
+  personal_socios: 'personal_socios_familiares',
+  operativo_flota_global: 'gastos_globales',
+};
+
+function tipoGastoEffective(g: Gasto): string | null {
+  const raw = g.tipo_gasto?.trim();
+  if (!raw) {
+    if (g.vehicleId != null) return 'operativo_vehiculo';
+    return 'gastos_globales';
+  }
+  return LEGACY_TIPO_MAP[raw] ?? raw;
+}
+
+function gastoEnTab(g: Gasto, tabTipo: string): boolean {
+  return tipoGastoEffective(g) === tabTipo;
+}
 
 const Gastos: React.FC = () => {
   const navigate = useNavigate();
   const { gastos, vehicles, deleteGasto } = useRegistrosContext();
   const { open } = useDrawer();
 
-  const gastosOperativos = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
+  const [tabIndex, setTabIndex] = useState<number | null>(null);
+  const tab = tabIndex == null ? null : (GASTO_TABS[tabIndex] ?? null);
 
-  const todayTotal = gastosOperativos.filter(g => g.fecha === todayStr()).reduce((s, g) => s + g.monto, 0);
+  const gastosTab = useMemo(
+    () => (tab ? gastos.filter((g) => gastoEnTab(g, tab.tipo_gasto)) : []),
+    [gastos, tab],
+  );
+
+  const todayTotal = useMemo(
+    () => gastosTab.filter((g) => g.fecha === todayStr()).reduce((s, g) => s + g.monto, 0),
+    [gastosTab],
+  );
 
   const availableYears = useMemo(() => {
     const ys = new Set<number>();
-    for (const g of gastosOperativos) {
+    for (const g of gastosTab) {
       const y = Number(g.fecha.slice(0, 4));
       if (Number.isFinite(y) && y > 0) ys.add(y);
     }
     return [...ys].sort((a, b) => b - a);
-  }, [gastosOperativos]);
+  }, [gastosTab]);
 
   const [chartYear, setChartYear] = useState<string>('');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
@@ -61,8 +109,8 @@ const Gastos: React.FC = () => {
   const gastosDelAnioGrafico = useMemo(() => {
     if (!Number.isFinite(chartYearNum)) return [];
     const prefix = `${chartYearNum}-`;
-    return gastosOperativos.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastosOperativos, chartYearNum]);
+    return gastosTab.filter((g) => g.fecha.startsWith(prefix));
+  }, [gastosTab, chartYearNum]);
 
   const totalAnioGrafico = gastosDelAnioGrafico.reduce((s, g) => s + g.monto, 0);
 
@@ -82,15 +130,53 @@ const Gastos: React.FC = () => {
   );
 
   const historyYearOptions = useMemo(
-    () => [{ value: 'ALL', label: 'Todos' }, ...yearOptions],
+    () => [{ value: 'ALL', label: 'Todos los años' }, ...yearOptions],
     [yearOptions],
   );
 
   const gastosHistorialFiltrados = useMemo(() => {
-    if (historyYear === 'ALL') return gastosOperativos;
+    if (historyYear === 'ALL') return gastosTab;
     const prefix = `${historyYear}-`;
-    return gastosOperativos.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastosOperativos, historyYear]);
+    return gastosTab.filter((g) => g.fecha.startsWith(prefix));
+  }, [gastosTab, historyYear]);
+
+  const [filterSubtipoGasto, setFilterSubtipoGasto] = useState('');
+  const [filterReqRevision, setFilterReqRevision] = useState('');
+
+  const subtipoGastoOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of gastosHistorialFiltrados) {
+      const t = g.subtipo_gasto?.trim();
+      if (t) s.add(t);
+    }
+    return [{ value: '', label: 'Todos subtipo' }, ...[...s].sort().map((v) => ({ value: v, label: v }))];
+  }, [gastosHistorialFiltrados]);
+
+  const reqRevisionOptions = [
+    { value: '', label: 'Todas (revisión)' },
+    { value: 'si', label: 'Requiere revisión' },
+    { value: 'no', label: 'Sin marca de revisión' },
+  ];
+
+  const gastosParaTabla = useMemo(() => {
+    let d = gastosHistorialFiltrados;
+    if (filterSubtipoGasto) d = d.filter((g) => (g.subtipo_gasto ?? '') === filterSubtipoGasto);
+    if (filterReqRevision === 'si') d = d.filter((g) => g.requiere_revision === true);
+    if (filterReqRevision === 'no') d = d.filter((g) => g.requiere_revision !== true);
+    return d;
+  }, [gastosHistorialFiltrados, filterSubtipoGasto, filterReqRevision]);
+
+  const totalFlota = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
+  const resumenPorCategoria = useMemo(
+    () =>
+      Object.fromEntries(
+        GASTO_TABS.map((t) => {
+          const rows = gastos.filter((g) => gastoEnTab(g, t.tipo_gasto));
+          return [t.tipo_gasto, { count: rows.length, monto: rows.reduce((s, g) => s + g.monto, 0) }];
+        }),
+      ),
+    [gastos],
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -101,9 +187,11 @@ const Gastos: React.FC = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">💸 Gastos</h1>
-            <p className="text-sm text-gray-500">{gastosOperativos.length} gastos operativos</p>
+            <p className="text-sm text-gray-500">
+              {gastos.length} movimientos · S/ {totalFlota.toLocaleString('es-PE', { minimumFractionDigits: 2 })} total tabla
+            </p>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              «Caja negocio» va en Finanzas → Caja negocio (no se lista aquí).
+              Selecciona una categoría para ver su resumen y su historial. «Caja negocio» sigue en Finanzas → Caja negocio.
             </p>
           </div>
         </div>
@@ -113,17 +201,58 @@ const Gastos: React.FC = () => {
         </button>
       </div>
 
+      {tab == null && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-3" role="tablist" aria-label="Categoría de gasto">
+          {GASTO_TABS.map((t, i) => {
+            const data = resumenPorCategoria[t.tipo_gasto] ?? { count: 0, monto: 0 };
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={false}
+                onClick={() => setTabIndex(i)}
+                className={`mission-btn bg-gradient-to-br ${t.gradient} border-2 ${t.border} group text-left`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <span className="text-3xl group-hover:scale-110 transition-transform">{t.emoji}</span>
+                  <span className="text-sm font-bold text-gray-800 tabular-nums">{formatCurrency(data.monto)}</span>
+                </div>
+                <h3 className="text-base font-bold text-gray-900 mb-1">{t.label}</h3>
+                <p className="text-xs text-gray-500">{data.count} registros</p>
+                <div className="mt-3 text-[11px] font-semibold text-primary-700/80">
+                  Entrar a {t.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!tab ? null : (
+        <>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base sm:text-lg font-bold text-gray-800">Categoría: {tab.label}</h2>
+        <button
+          type="button"
+          onClick={() => setTabIndex(null)}
+          className="px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          ← Volver a categorías
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
-          <p className="text-xs text-red-600 font-medium mb-1">Total HOY</p>
+          <p className="text-xs text-red-600 font-medium mb-1">Total HOY ({tab.label})</p>
           <p className="text-2xl font-bold text-red-700">{formatCurrency(todayTotal)}</p>
         </div>
         <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-soft">
           <p className="text-xs text-gray-500 font-medium mb-1">
-            {chartYear ? `Total ${chartYear}` : 'Total año'}
+            {chartYear ? `Total ${chartYear}` : 'Total año'} ({tab.label})
           </p>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalAnioGrafico)}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Mismo año que el gráfico inferior</p>
+          <p className="text-[11px] text-gray-400 mt-1">Mismo año que el gráfico inferior · pestaña actual</p>
         </div>
       </div>
 
@@ -132,7 +261,7 @@ const Gastos: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-gray-700">Gastos por Mes</h3>
             <p className="text-xs text-gray-500 mt-1">
-              Por año calendario (suma de montos por mes en ese año).
+              Pestaña «{tab.label}» · año calendario.
             </p>
           </div>
           {yearOptions.length > 0 ? (
@@ -140,7 +269,7 @@ const Gastos: React.FC = () => {
               <Select label="Año" options={yearOptions} value={chartYear} onChange={setChartYear} />
             </div>
           ) : (
-            <p className="text-xs text-gray-400">Sin fechas para graficar</p>
+            <p className="text-xs text-gray-400">Sin fechas para graficar en esta pestaña</p>
           )}
         </div>
         <div className="h-48">
@@ -166,8 +295,8 @@ const Gastos: React.FC = () => {
 
       <div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-800">Historial de Gastos</h2>
-          <div className="w-full sm:w-40">
+          <h2 className="text-base font-bold text-gray-800">Historial · {tab.label}</h2>
+          <div className="w-full sm:w-44">
             <Select
               label="Año historial"
               options={historyYearOptions}
@@ -176,8 +305,34 @@ const Gastos: React.FC = () => {
             />
           </div>
         </div>
-        <RegistrosTable mode="gastos" gastos={gastosHistorialFiltrados} vehicles={vehicles} onDeleteGasto={deleteGasto} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap mb-3">
+          <div className="w-full sm:w-52">
+            <Select
+              label="subtipo_gasto"
+              options={subtipoGastoOptions}
+              value={filterSubtipoGasto}
+              onChange={setFilterSubtipoGasto}
+            />
+          </div>
+          <div className="w-full sm:w-56">
+            <Select
+              label="Revisión"
+              options={reqRevisionOptions}
+              value={filterReqRevision}
+              onChange={setFilterReqRevision}
+            />
+          </div>
+        </div>
+        <RegistrosTable
+          mode="gastos"
+          gastos={gastosParaTabla}
+          vehicles={vehicles}
+          onDeleteGasto={deleteGasto}
+          showClasificacionFinanciera
+        />
       </div>
+        </>
+      )}
     </div>
   );
 };

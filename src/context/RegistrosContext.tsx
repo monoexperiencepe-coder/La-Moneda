@@ -28,6 +28,8 @@ interface RegistrosContextValue {
   vehicles: Vehicle[];
   ingresos: Ingreso[];
   gastos: Gasto[];
+  /** Subconjunto: requiere revisión de clasificación (cliente; misma regla que cola de revisión). */
+  gastosPendientesRevision: Gasto[];
   descuentos: Descuento[];
   prestamos: Prestamo[];
   prestamoAbonos: PrestamoAbono[];
@@ -93,6 +95,7 @@ interface RegistrosContextValue {
     warning: (title: string, message?: string) => void;
     info: (title: string, message?: string) => void;
   };
+  refreshFromSupabase: () => Promise<void>;
 }
 
 const RegistrosContext = createContext<RegistrosContextValue | null>(null);
@@ -388,6 +391,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       vehicles: registros.vehicles,
       ingresos: registros.ingresos,
       gastos: registros.gastos,
+      gastosPendientesRevision: registros.gastosPendientesRevision,
       descuentos: registros.descuentos,
       prestamos: registros.prestamos,
       prestamoAbonos: registros.prestamoAbonos,
@@ -444,6 +448,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
         warning: toastHook.warning,
         info: toastHook.info,
       },
+      refreshFromSupabase: registros.refreshFromSupabase,
     }}>
       {children}
     </RegistrosContext.Provider>

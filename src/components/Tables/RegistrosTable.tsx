@@ -10,6 +10,10 @@ import { Ingreso, Gasto, Vehicle } from '../../data/types';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
+import {
+  confianzaTier,
+  confianzaBadgeVariant,
+} from '../../utils/clasificacionGasto';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -22,6 +26,8 @@ interface RegistrosTableProps {
   onDeleteGasto?: (id: number) => void;
   /** Desde URL (ej. Inicio → cobros pendientes): preselecciona filtro estado de pago en ingresos. */
   initialEstadoPago?: string;
+  /** Muestra columna de capa financiera (tipo_gasto, confianza, etc.) en modo gastos. */
+  showClasificacionFinanciera?: boolean;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -79,8 +85,16 @@ const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number
 };
 
 const RegistrosTable: React.FC<RegistrosTableProps> = ({
-  mode, ingresos = [], gastos = [], vehicles, onDeleteIngreso, onDeleteGasto, initialEstadoPago = '',
+  mode,
+  ingresos = [],
+  gastos = [],
+  vehicles,
+  onDeleteIngreso,
+  onDeleteGasto,
+  initialEstadoPago = '',
+  showClasificacionFinanciera = false,
 }) => {
+  const colCount = mode === 'gastos' && showClasificacionFinanciera ? 9 : 8;
   const [query, setQuery] = useState('');
   const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
   useEffect(() => {
@@ -138,6 +152,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           g.comentarios.toLowerCase().includes(lower) ||
           (g.detalleOperativo ?? '').toLowerCase().includes(lower) ||
           (g.categoriaReal ?? '').toLowerCase().includes(lower) ||
+          (g.tipo_gasto ?? '').toLowerCase().includes(lower) ||
+          (g.subtipo_gasto ?? '').toLowerCase().includes(lower) ||
+          (g.origen_clasificacion ?? '').toLowerCase().includes(lower) ||
           g.fecha.includes(lower) ||
           vehicleLabel.includes(lower)
         );
@@ -273,6 +290,31 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </p>
               </div>
 
+              {mode === 'gastos' && showClasificacionFinanciera && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {(item as Gasto).tipo_gasto ? (
+                    <Badge variant="secondary" size="sm">{(item as Gasto).tipo_gasto}</Badge>
+                  ) : null}
+                  {(item as Gasto).subtipo_gasto ? (
+                    <span className="text-[10px] text-gray-500 truncate max-w-[140px]">
+                      {(item as Gasto).subtipo_gasto}
+                    </span>
+                  ) : null}
+                  <Badge
+                    variant={confianzaBadgeVariant(confianzaTier((item as Gasto).clasificacion_confianza))}
+                    size="sm"
+                    dot
+                  >
+                    {(item as Gasto).clasificacion_confianza != null
+                      ? `${((item as Gasto).clasificacion_confianza! * 100).toFixed(0)}%`
+                      : '—'}
+                  </Badge>
+                  {(item as Gasto).clasificacion_manual ? (
+                    <span className="text-[10px] font-semibold text-violet-600">Manual</span>
+                  ) : null}
+                </div>
+              )}
+
               <div className="mt-2 flex items-center justify-between gap-2">
                 <p className="text-[11px] text-gray-500 truncate">
                   {mode === 'ingresos'
@@ -305,7 +347,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
       {/* ── Desktop: tabla completa ── */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[920px]">
+        <table className={`w-full ${mode === 'gastos' && showClasificacionFinanciera ? 'min-w-[1040px]' : 'min-w-[920px]'}`}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               <th
@@ -327,6 +369,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
                 {mode === 'ingresos' ? 'Operación / Estado' : 'Cat. real / Contexto'}
               </th>
+              {mode === 'gastos' && showClasificacionFinanciera && (
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3 max-w-[200px]">
+                  Capa inteligente
+                </th>
+              )}
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
                 Método de pago
               </th>
@@ -347,7 +394,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           <tbody className="divide-y divide-gray-50">
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-400 text-sm">
+                <td colSpan={colCount} className="text-center py-12 text-gray-400 text-sm">
                   {query || filterEstadoPago
                     ? 'No se encontraron resultados para los filtros aplicados'
                     : 'Sin registros disponibles'}
@@ -423,6 +470,47 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       </div>
                     )}
                   </td>
+
+                  {mode === 'gastos' && showClasificacionFinanciera && (
+                    <td className="px-3 py-3 text-xs max-w-[200px] align-top">
+                      {(() => {
+                        const g = item as Gasto;
+                        const tier = confianzaTier(g.clasificacion_confianza);
+                        const cv = confianzaBadgeVariant(tier);
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap gap-1">
+                              {g.tipo_gasto ? (
+                                <Badge variant="secondary" size="sm" className="max-w-[140px] truncate">
+                                  {g.tipo_gasto}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </div>
+                            {g.subtipo_gasto ? (
+                              <p className="text-[10px] text-gray-500 truncate" title={g.subtipo_gasto}>
+                                {g.subtipo_gasto}
+                              </p>
+                            ) : null}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant={cv} size="sm" dot>
+                                {g.clasificacion_confianza != null
+                                  ? `${(g.clasificacion_confianza * 100).toFixed(0)}%`
+                                  : '—'}
+                              </Badge>
+                              {g.clasificacion_manual ? (
+                                <span className="text-[10px] font-semibold text-violet-600 uppercase">Manual</span>
+                              ) : null}
+                              {g.requiere_revision ? (
+                                <span className="text-[10px] font-semibold text-amber-700 uppercase">Revisar</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                  )}
 
                   {/* Método de pago */}
                   <td className="px-3 py-3 text-xs text-gray-700 max-w-[160px]">
@@ -694,6 +782,49 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   <dt className="text-xs text-gray-500 font-medium">Motivo</dt>
                   <dd className="text-sm text-gray-900">{(viewItem as Gasto).motivo}</dd>
                 </div>
+
+                {mode === 'gastos' && showClasificacionFinanciera && (
+                  <div className="rounded-lg border border-violet-100 bg-violet-50/50 p-3 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">Capa financiera</p>
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-gray-500">tipo_gasto</span>
+                      <span className="text-gray-900 text-right">{(viewItem as Gasto).tipo_gasto ?? '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-gray-500">subtipo_gasto</span>
+                      <span className="text-gray-900 text-right">{(viewItem as Gasto).subtipo_gasto ?? '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 text-xs items-center">
+                      <span className="text-gray-500">Confianza</span>
+                      <Badge
+                        variant={confianzaBadgeVariant(confianzaTier((viewItem as Gasto).clasificacion_confianza))}
+                        size="sm"
+                        dot
+                      >
+                        {(viewItem as Gasto).clasificacion_confianza != null
+                          ? `${((viewItem as Gasto).clasificacion_confianza! * 100).toFixed(1)}%`
+                          : '—'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-gray-500">Origen</span>
+                      <span className="text-gray-900 text-right">{(viewItem as Gasto).origen_clasificacion ?? '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-gray-500">Requiere revisión</span>
+                      <span className="text-gray-900">{(viewItem as Gasto).requiere_revision ? 'Sí' : 'No'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-gray-500">Manual / revisado</span>
+                      <span className="text-gray-900 text-right">
+                        {(viewItem as Gasto).clasificacion_manual ? 'Sí' : 'No'}
+                        {(viewItem as Gasto).revisado_at
+                          ? ` · ${formatDate(String((viewItem as Gasto).revisado_at).slice(0, 10))}`
+                          : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* ─ Contexto operativo (gastos) ─ */}
                 {(viewItem as Gasto).categoriaReal && (

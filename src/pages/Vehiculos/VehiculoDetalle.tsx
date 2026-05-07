@@ -11,6 +11,19 @@ import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
 import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha, CajaNegocioVehiculo } from '../../data/types';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import {
+  rollupInteligentePorVehiculoTodoPeriodo,
+  computeFinancialFleetAlerts,
+} from '../../utils/financialFleetAnalytics';
+import type { FinancialKPIData } from '../../utils/calculations';
+
+const EMPTY_INTEL_KPI: FinancialKPIData = {
+  gastos_operativos: 0,
+  gastos_financieros: 0,
+  gastos_administrativos: 0,
+  utilidad_operativa: 0,
+  utilidad_neta_simple: 0,
+};
 import Badge from '../../components/Common/Badge';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
@@ -105,6 +118,16 @@ const VehiculoDetalle: React.FC = () => {
   const totalCajaNegocio = vehicleCajaNegocio.reduce((s, c) => s + c.monto, 0);
   const totalDescuentos = vehicleDescuentos.reduce((s, d) => s + d.monto, 0);
   const utilidad = totalIngresos - totalGastosOperativos + totalDescuentos;
+
+  const rollupIntelVehiculo = useMemo(() => {
+    if (!vehicle) return null;
+    return rollupInteligentePorVehiculoTodoPeriodo(vehicle, ingresos, gastos);
+  }, [vehicle, ingresos, gastos]);
+  const intelKpi = rollupIntelVehiculo?.kpi ?? EMPTY_INTEL_KPI;
+  const alertasFinanzasVeh = useMemo(
+    () => (rollupIntelVehiculo ? computeFinancialFleetAlerts([rollupIntelVehiculo]) : []),
+    [rollupIntelVehiculo],
+  );
 
   const pivot = useMemo(() => buildControlFechasPivotMapByTipos(controlFechas, DOC_TIPOS), [controlFechas]);
   const docForVehicle = vehicle ? pivot.get(vehicle.id) : undefined;
@@ -256,6 +279,59 @@ const VehiculoDetalle: React.FC = () => {
                 <p className="text-lg font-bold text-gray-900 tabular-nums">{ultimoKm != null ? ultimoKm.toLocaleString('es-PE') : '—'}</p>
               </div>
             </div>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-sky-950 uppercase tracking-wide">
+                Clasificación financiera (tipo_gasto) — histórico unidad
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <div className="rounded-lg border border-emerald-100 bg-white/90 p-2.5">
+                  <p className="text-[10px] font-medium text-emerald-800">Ingresos</p>
+                  <p className="text-sm font-bold text-emerald-900 tabular-nums">
+                    {formatCurrency(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-red-100 bg-white/90 p-2.5">
+                  <p className="text-[10px] font-medium text-red-800">Gastos operativos</p>
+                  <p className="text-sm font-bold text-red-900 tabular-nums">{formatCurrency(intelKpi.gastos_operativos)}</p>
+                </div>
+                <div className="rounded-lg border border-amber-100 bg-white/90 p-2.5">
+                  <p className="text-[10px] font-medium text-amber-900">Gastos financieros</p>
+                  <p className="text-sm font-bold text-amber-950 tabular-nums">{formatCurrency(intelKpi.gastos_financieros)}</p>
+                </div>
+                <div className="rounded-lg border border-violet-100 bg-white/90 p-2.5">
+                  <p className="text-[10px] font-medium text-violet-800">Utilidad operativa</p>
+                  <p
+                    className={`text-sm font-bold tabular-nums ${intelKpi.utilidad_operativa >= 0 ? 'text-violet-900' : 'text-red-800'}`}
+                  >
+                    {formatCurrency(intelKpi.utilidad_operativa)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-indigo-100 bg-white/90 p-2.5">
+                  <p className="text-[10px] font-medium text-indigo-800">Utilidad neta simple</p>
+                  <p
+                    className={`text-sm font-bold tabular-nums ${intelKpi.utilidad_neta_simple >= 0 ? 'text-indigo-900' : 'text-red-800'}`}
+                  >
+                    {formatCurrency(intelKpi.utilidad_neta_simple)}
+                  </p>
+                </div>
+              </div>
+              {alertasFinanzasVeh.length > 0 && (
+                <ul className="space-y-1.5 pt-1">
+                  {alertasFinanzasVeh.map((a) => (
+                    <li
+                      key={a.id}
+                      className={`text-xs rounded-md border px-2 py-1.5 ${
+                        a.severity === 'danger'
+                          ? 'border-red-200 bg-red-50 text-red-900'
+                          : 'border-amber-200 bg-amber-50 text-amber-950'
+                      }`}
+                    >
+                      {a.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {inversionTotalUsd != null && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
                 <p className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">Inversión histórica (adquisición)</p>
@@ -324,6 +400,55 @@ const VehiculoDetalle: React.FC = () => {
                 <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(utilidad)}</p>
               </div>
             </div>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-sky-950 uppercase tracking-wide">
+                Por tipo_gasto (no reemplaza cifras legacy de arriba)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-sm">
+                <div className="rounded-lg border border-emerald-100 bg-white/90 p-2.5">
+                  <span className="text-gray-600 text-xs">Ingresos</span>
+                  <p className="font-bold text-emerald-800 tabular-nums">
+                    {formatCurrency(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-red-100 bg-white/90 p-2.5">
+                  <span className="text-gray-600 text-xs">Gastos operativos</span>
+                  <p className="font-bold text-red-800 tabular-nums">{formatCurrency(intelKpi.gastos_operativos)}</p>
+                </div>
+                <div className="rounded-lg border border-amber-100 bg-white/90 p-2.5">
+                  <span className="text-gray-600 text-xs">Gastos financieros</span>
+                  <p className="font-bold text-amber-950 tabular-nums">{formatCurrency(intelKpi.gastos_financieros)}</p>
+                </div>
+                <div className="rounded-lg border border-violet-100 bg-white/90 p-2.5">
+                  <span className="text-gray-600 text-xs">Utilidad operativa</span>
+                  <p className={`font-bold tabular-nums ${intelKpi.utilidad_operativa >= 0 ? 'text-violet-900' : 'text-red-700'}`}>
+                    {formatCurrency(intelKpi.utilidad_operativa)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-indigo-100 bg-white/90 p-2.5">
+                  <span className="text-gray-600 text-xs">Utilidad neta simple</span>
+                  <p className={`font-bold tabular-nums ${intelKpi.utilidad_neta_simple >= 0 ? 'text-indigo-900' : 'text-red-700'}`}>
+                    {formatCurrency(intelKpi.utilidad_neta_simple)}
+                  </p>
+                </div>
+              </div>
+              {alertasFinanzasVeh.length > 0 && (
+                <ul className="space-y-1">
+                  {alertasFinanzasVeh.map((a) => (
+                    <li
+                      key={`fin-${a.id}`}
+                      className={`text-xs rounded-md border px-2 py-1 ${
+                        a.severity === 'danger'
+                          ? 'border-red-200 bg-red-50 text-red-900'
+                          : 'border-amber-200 bg-amber-50 text-amber-950'
+                      }`}
+                    >
+                      {a.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {vehicleInversiones.length > 0 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/40 overflow-hidden">
                 <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/80">
@@ -368,7 +493,13 @@ const VehiculoDetalle: React.FC = () => {
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-800 mb-2">Gastos operativos de esta unidad</h3>
-              <RegistrosTable mode="gastos" gastos={vehicleGastosOperativos} vehicles={vehicles} onDeleteGasto={deleteGasto} />
+              <RegistrosTable
+                mode="gastos"
+                gastos={vehicleGastosOperativos}
+                vehicles={vehicles}
+                onDeleteGasto={deleteGasto}
+                showClasificacionFinanciera
+              />
             </div>
             <div className="rounded-xl border border-teal-100 bg-teal-50/30 overflow-hidden">
               <div className="px-4 py-3 border-b border-teal-100 bg-teal-50/80">

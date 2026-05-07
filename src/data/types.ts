@@ -123,6 +123,16 @@ export interface Gasto {
   subcategoria?: string | null;
   /** Columnas Excel no mapeadas a campos dedicados (Supabase: excel_extra). */
   excelExtra?: Record<string, unknown> | null;
+  /** Capa financiera inteligente (public.gastos). */
+  tipo_gasto?: string | null;
+  subtipo_gasto?: string | null;
+  clasificacion_confianza?: number | null;
+  requiere_revision?: boolean | null;
+  clasificacion_manual?: boolean | null;
+  revisado_por?: string | null;
+  revisado_at?: string | null;
+  es_global_flota?: boolean | null;
+  origen_clasificacion?: string | null;
   createdAt: string;
 }
 

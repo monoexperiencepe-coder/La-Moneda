@@ -77,6 +77,28 @@ const Configuracion: React.FC = () => {
         </div>
       ))}
 
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-50">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Auditoría / datos históricos</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/finanzas/gastos-caja')}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+        >
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-stone-600 bg-stone-100">
+            🏧
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-900">Gastos de caja (ledger bruto)</p>
+            <p className="text-xs text-gray-400">
+              Ya no aparece en el hub principal de Finanzas; solo lectura / exportación.
+            </p>
+          </div>
+          <ChevronRight size={16} className="text-gray-300" />
+        </button>
+      </div>
+
       {/* Version */}
       <p className="text-center text-xs text-gray-300">La Moneda v2.0 · Sistema de Gestión Financiera</p>
     </div>

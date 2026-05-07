@@ -2,6 +2,73 @@ import { Ingreso, Gasto, Descuento, Vehicle, KPIData, VehicleRentability } from 
 import { ingresoMontoPEN } from './moneda';
 import { gastosOperativosSolamente } from './cajaNegocio';
 
+/** KPIs por `tipo_gasto` financiero (no sustituye `calculateKPIs` legacy). */
+export interface FinancialKPIData {
+  gastos_operativos: number;
+  gastos_financieros: number;
+  gastos_administrativos: number;
+  utilidad_operativa: number;
+  utilidad_neta_simple: number;
+}
+
+/** Normaliza tipo_gasto legacy + Excel migración final (solo KPI financieros). */
+function canonicalTipoGastoFinanciero(g: Gasto): string {
+  const raw = (g.tipo_gasto ?? '').trim();
+  if (!raw) {
+    if (g.vehicleId != null) return 'operativo_vehiculo';
+    return '';
+  }
+  const map: Record<string, string> = {
+    financiero: 'financiero_prestamo',
+    inversion: 'inversion_compra',
+    personal_socios: 'personal_socios_familiares',
+    operativo_flota_global: 'gastos_globales',
+  };
+  return map[raw] ?? raw;
+}
+
+/**
+ * Agrega montos por clasificación financiera y dos utilidades de referencia.
+ * Solo suma gastos cuyo `tipo_gasto` coincide; los sin clasificar no entran en los buckets.
+ */
+export function calculateFinancialKPIs(ingresos: Ingreso[], gastos: Gasto[]): FinancialKPIData {
+  const totalIngresos = ingresos.reduce((sum, i) => sum + ingresoMontoPEN(i), 0);
+
+  let gastos_operativos = 0;
+  let gastos_financieros = 0;
+  let gastos_administrativos = 0;
+  let gastos_inversion = 0;
+  let gastos_personal_socios = 0;
+  let gastos_globales = 0;
+
+  for (const g of gastos) {
+    const t = canonicalTipoGastoFinanciero(g);
+    const m = g.monto;
+    if (t === 'operativo_vehiculo') gastos_operativos += m;
+    else if (t === 'financiero_prestamo') gastos_financieros += m;
+    else if (t === 'administrativo_empresa' || t === 'planilla_laboral') gastos_administrativos += m;
+    else if (t === 'inversion_compra') gastos_inversion += m;
+    else if (t === 'personal_socios_familiares') gastos_personal_socios += m;
+    else if (t === 'gastos_globales') gastos_globales += m;
+  }
+
+  const gastosClasificadosTotales =
+    gastos_operativos +
+    gastos_financieros +
+    gastos_administrativos +
+    gastos_inversion +
+    gastos_personal_socios +
+    gastos_globales;
+
+  return {
+    gastos_operativos,
+    gastos_financieros,
+    gastos_administrativos,
+    utilidad_operativa: totalIngresos - gastos_operativos,
+    utilidad_neta_simple: totalIngresos - gastosClasificadosTotales,
+  };
+}
+
 export const calculateKPIs = (
   ingresos: Ingreso[],
   gastos: Gasto[],

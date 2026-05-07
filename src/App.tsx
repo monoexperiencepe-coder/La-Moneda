@@ -17,6 +17,7 @@ import Descuentos from './pages/Finanzas/Descuentos';
 import Prestamos from './pages/Finanzas/Prestamos';
 import ReportesHub from './pages/Reportes/ReportesHub';
 import Resumen from './pages/Finanzas/Resumen';
+import RevisionClasificacion from './pages/Finanzas/RevisionClasificacion';
 import VehiculosHub from './pages/Vehiculos/VehiculosHub';
 import Inventario from './pages/Vehiculos/Inventario';
 import VehiculoDetalle from './pages/Vehiculos/VehiculoDetalle';
@@ -51,6 +52,7 @@ const AppContent: React.FC = () => {
             <Route path="/finanzas/prestamos" element={<Prestamos />} />
             <Route path="/finanzas/reportes" element={<ReportesHub />} />
             <Route path="/finanzas/resumen" element={<Resumen />} />
+            <Route path="/finanzas/revision-clasificacion" element={<RevisionClasificacion />} />
 
             {/* Vehículos */}
             <Route path="/vehiculos" element={<VehiculosHub />} />
