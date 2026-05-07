@@ -66,6 +66,30 @@ function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omi
   return { ...ingreso, moneda, tipoCambio, montoPENReferencia };
 }
 
+/** Mismo criterio que fetchIngresos: fecha desc, luego id desc. Evita recargar toda la app tras un alta. */
+function mergeIngresoSorted(prev: Ingreso[], row: Ingreso): Ingreso[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return String(b.id).localeCompare(String(a.id));
+  });
+  return next;
+}
+
+/** Mismo criterio que fetchGastos: fecha desc, luego id desc. */
+function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
 export const useRegistros = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
@@ -91,6 +115,7 @@ export const useRegistros = () => {
   const [inversionesVehiculo, setInversionesVehiculo] = useState<InversionVehiculo[]>([]);
   const [gastosCaja, setGastosCaja] = useState<GastoCaja[]>([]);
   const [cajaNegocioVehiculo, setCajaNegocioVehiculo] = useState<CajaNegocioVehiculo[]>([]);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const loadControlFechasHistory = useCallback(async (filters: ControlFechasHistoryFilters, page: number) => {
     historyQueryRef.current = { filters, page };
@@ -114,36 +139,53 @@ export const useRegistros = () => {
   }, [historyPageSize]);
 
   const refreshFromSupabase = useCallback(async () => {
-    const [v, u, c, i, g, latest, km, pen, rt, inv, gc, cn] = await Promise.all([
-      fetchVehiculos(),
-      fetchUnidades(),
-      fetchConductores(),
-      fetchIngresos(),
-      fetchGastos(),
-      fetchLatestControlFechasByVehicle(),
-      fetchKilometrajes(),
-      fetchPendientes(),
-      fetchRegistrosTiempo(),
-      fetchInversionesVehiculo(),
-      fetchGastosCaja(),
-      fetchCajaNegocioVehiculo(),
-    ]);
-    setVehicles(v);
-    setUnidades(u);
-    setConductores(c);
-    setIngresos(i);
-    setGastos(g);
-    setControlFechas(latest);
-    setKilometrajes(km);
-    setPendientes(pen);
-    setRegistrosTiempo(rt);
-    setInversionesVehiculo(inv);
-    setGastosCaja(gc);
-    setCajaNegocioVehiculo(cn);
+    if (refreshInFlightRef.current) {
+      await refreshInFlightRef.current;
+      return;
+    }
+    const runner = (async () => {
+      const [v, u, c, i, g, latest, km, pen, rt, inv, cn] = await Promise.all([
+        fetchVehiculos(),
+        fetchUnidades(),
+        fetchConductores(),
+        fetchIngresos(),
+        fetchGastos(),
+        fetchLatestControlFechasByVehicle(),
+        fetchKilometrajes(),
+        fetchPendientes(),
+        fetchRegistrosTiempo(),
+        fetchInversionesVehiculo(),
+        fetchCajaNegocioVehiculo(),
+      ]);
+      setVehicles(v);
+      setUnidades(u);
+      setConductores(c);
+      setIngresos(i);
+      setGastos(g);
+      setControlFechas(latest);
+      setKilometrajes(km);
+      setPendientes(pen);
+      setRegistrosTiempo(rt);
+      setInversionesVehiculo(inv);
+      setCajaNegocioVehiculo(cn);
 
-    const q = historyQueryRef.current;
-    if (q) {
-      await loadControlFechasHistory(q.filters, q.page);
+      // `gastos_caja` es histórico y no bloquea la percepción inicial en home.
+      void fetchGastosCaja()
+        .then((gc) => setGastosCaja(gc))
+        .catch((e) => {
+          console.error('[useRegistros refreshFromSupabase fetchGastosCaja]', e);
+        });
+
+      const q = historyQueryRef.current;
+      if (q) {
+        await loadControlFechasHistory(q.filters, q.page);
+      }
+    })();
+    refreshInFlightRef.current = runner;
+    try {
+      await runner;
+    } finally {
+      refreshInFlightRef.current = null;
     }
   }, [loadControlFechasHistory]);
 
@@ -166,10 +208,10 @@ export const useRegistros = () => {
       });
       const created = await insertIngreso(norm);
       if (!created) throw new Error('No se pudo guardar el ingreso en Supabase.');
-      await refreshFromSupabase();
+      setIngresos((prev) => mergeIngresoSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase, vehicles],
+    [vehicles],
   );
 
   const addGasto = useCallback(
@@ -189,10 +231,10 @@ export const useRegistros = () => {
       };
       const created = await insertGasto(row);
       if (!created) throw new Error('No se pudo guardar el gasto en Supabase.');
-      await refreshFromSupabase();
+      setGastos((prev) => mergeGastoSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase, vehicles],
+    [vehicles],
   );
 
   const addMantenimiento = useCallback((mant: Omit<Mantenimiento, 'id' | 'createdAt'>) => {
@@ -363,14 +405,18 @@ export const useRegistros = () => {
     return newAb;
   }, []);
 
-  const deleteIngreso = useCallback(
-    async (id: number) => {
-      const ok = await removeIngreso(id);
-      if (!ok) throw new Error('No se pudo eliminar el ingreso.');
-      await refreshFromSupabase();
-    },
-    [refreshFromSupabase],
-  );
+  const deleteIngreso = useCallback(async (id: string) => {
+    let prevSnapshot: Ingreso[] = [];
+    setIngresos((prev) => {
+      prevSnapshot = prev;
+      return prev.filter((i) => i.id !== id);
+    });
+    const res = await removeIngreso(id);
+    if (!res.ok) {
+      setIngresos(prevSnapshot);
+      throw new Error(res.message);
+    }
+  }, []);
 
   const deleteGasto = useCallback(
     async (id: number) => {

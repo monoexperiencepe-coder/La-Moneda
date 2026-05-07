@@ -120,7 +120,7 @@ const QuickIncomeDrawer: React.FC = () => {
       if (!saved) return;
       setLastVehicleId(resolvedVehicleId);
       setQuickText('');
-      quickInputRef.current?.focus();
+      close();
     } finally {
       setLoading(false);
     }

@@ -178,8 +178,14 @@ const Preloader: React.FC<PreloaderProps> = ({ onComplete }) => {
           Gestión Financiera
         </p>
         <p style={{
-          fontSize: 10, letterSpacing: '0.16em',
-          textTransform: 'uppercase', color: '#334155', margin: '0 0 36px',
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: 'rgba(248, 250, 252, 0.96)',
+          margin: '0 0 36px',
+          textShadow:
+            '0 0 18px rgba(255,255,255,0.35), 0 0 10px rgba(196,181,253,0.5)',
         }}>
           Flota · Taxis · InDrive
         </p>
@@ -207,9 +213,18 @@ const Preloader: React.FC<PreloaderProps> = ({ onComplete }) => {
           height: 20, marginBottom: 20,
         }}>
           <p style={{
-            fontSize: 11, color: '#475569', textAlign: 'left',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: '75%', margin: 0, flex: '1 1 auto',
+            fontSize: 11,
+            fontWeight: 500,
+            color: 'rgba(248, 250, 252, 0.96)',
+            textAlign: 'left',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '75%',
+            margin: 0,
+            flex: '1 1 auto',
+            textShadow:
+              '0 0 14px rgba(255,255,255,0.32), 0 0 8px rgba(196,181,253,0.48)',
           }}>
             {STEPS[labelIdx]?.label}
           </p>

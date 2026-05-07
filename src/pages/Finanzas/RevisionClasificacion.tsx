@@ -13,6 +13,7 @@ import {
 } from '../../utils/clasificacionGasto';
 import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
+import { useAuth } from '../../context/AuthContext';
 
 const TIPO_OPCIONES = [
   { value: 'operativo_vehiculo', label: 'Operativo vehículo' },
@@ -67,6 +68,7 @@ const RevisionClasificacion: React.FC = () => {
   const navigate = useNavigate();
   const { gastosPendientesRevision, vehicles, toast, refreshFromSupabase } =
     useRegistrosContext();
+  const { canEditFinances } = useAuth();
 
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [pending, setPending] = useState<{ id: number; kind: 'approve' | 'tipo' } | null>(null);
@@ -111,6 +113,8 @@ const RevisionClasificacion: React.FC = () => {
           requiere_revision: false,
           revisado_at,
           revisado_por: REVISION_USER_LABEL,
+        }, {
+          reason: 'Aprobación de clasificación manual',
         });
         if (!updated) {
           toast.error('No se pudo aprobar', 'Revisa conexión o permisos en Supabase.');
@@ -139,6 +143,8 @@ const RevisionClasificacion: React.FC = () => {
           requiere_revision: false,
           revisado_at,
           revisado_por: REVISION_USER_LABEL,
+        }, {
+          reason: 'Corrección manual tipo/subtipo',
         });
         if (!updated) {
           toast.error('No se guardaron los cambios', 'Revisa conexión o permisos en Supabase.');
@@ -241,7 +247,7 @@ const RevisionClasificacion: React.FC = () => {
                           <Select
                             options={[...TIPO_OPCIONES]}
                             value={draft.tipo}
-                            disabled={busy}
+                            disabled={busy || !canEditFinances}
                             className="!py-1.5 text-xs min-h-0"
                             onChange={(value) =>
                               setDrafts((prev) => ({
@@ -259,7 +265,7 @@ const RevisionClasificacion: React.FC = () => {
                           <Select
                             options={[...SUBTIPO_OPCIONES]}
                             value={draft.subtipo}
-                            disabled={busy}
+                            disabled={busy || !canEditFinances}
                             className="!py-1.5 text-xs min-h-0"
                             onChange={(value) =>
                               setDrafts((prev) => ({
@@ -304,7 +310,7 @@ const RevisionClasificacion: React.FC = () => {
                             variant="secondary"
                             size="sm"
                             className="!py-1 !px-2 h-auto"
-                            disabled={busy}
+                            disabled={busy || !canEditFinances}
                             loading={rowApproving}
                             onClick={() => void handleApprove(g.id)}
                           >
@@ -314,7 +320,7 @@ const RevisionClasificacion: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             className="!py-1 !px-2 h-auto text-primary-600"
-                            disabled={busy || !dirty}
+                            disabled={busy || !dirty || !canEditFinances}
                             loading={rowSavingTipo}
                             onClick={() => void handleSaveTipoSubtipo(g.id)}
                           >

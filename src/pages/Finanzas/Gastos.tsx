@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -8,11 +8,13 @@ import Select from '../../components/Common/Select';
 import Modal from '../../components/Common/Modal';
 import Button from '../../components/Common/Button';
 import type { Gasto } from '../../data/types';
-import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
+import { useAuth } from '../../context/AuthContext';
+
+const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
 
 /** Tabs por tipo_gasto (Excel migración final + legacy); sin pestaña «Todos». */
 const GASTO_TABS: {
@@ -56,6 +58,7 @@ function gastoEnTab(g: Gasto, tabTipo: string): boolean {
 const Gastos: React.FC = () => {
   const navigate = useNavigate();
   const { gastos, vehicles, deleteGasto, refreshFromSupabase, toast } = useRegistrosContext();
+  const { canEditFinances } = useAuth();
   const { open } = useDrawer();
 
   const [tabIndex, setTabIndex] = useState<number | null>(null);
@@ -299,6 +302,8 @@ const Gastos: React.FC = () => {
         revisado_por: REVISION_USER_LABEL,
         origen_clasificacion: 'correccion_manual_ui',
         excel_extra: excelExtraNext,
+      }, {
+        reason: moveMotivo.trim() || 'Mover gasto de categoría desde UI',
       });
       if (!updated) {
         toast.error('No se pudo mover la categoría', 'No se logró actualizar el gasto en Supabase.');
@@ -415,23 +420,9 @@ const Gastos: React.FC = () => {
           )}
         </div>
         <div className="h-44">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 0, right: 5, left: -15, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`}
-              />
-              <Tooltip
-                formatter={(v) => [formatCurrency(Number(v)), 'Gastos']}
-                contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }}
-              />
-              <Bar dataKey="total" fill="#EF4444" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<div className="h-full w-full rounded-xl bg-gray-50 animate-pulse" />}>
+            <GastosMesChart chartData={chartData} />
+          </Suspense>
         </div>
       </div>
 
@@ -463,7 +454,7 @@ const Gastos: React.FC = () => {
           vehicles={vehicles}
           onDeleteGasto={deleteGasto}
           showClasificacionFinanciera
-          onMoveCategoriaGasto={openMoveModal}
+          onMoveCategoriaGasto={canEditFinances ? openMoveModal : undefined}
         />
       </div>
         </>

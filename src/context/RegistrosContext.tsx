@@ -23,6 +23,8 @@ import {
 } from '../data/types';
 import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
+import { useAuth } from './AuthContext';
+import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 
 interface RegistrosContextValue {
   vehicles: Vehicle[];
@@ -77,7 +79,7 @@ interface RegistrosContextValue {
   deleteRegistroTiempo: (id: number) => Promise<boolean>;
   addMantenimiento: (data: Omit<Mantenimiento, 'id' | 'createdAt'>) => Mantenimiento;
   addDocumentacion: (data: Omit<Documentacion, 'id' | 'createdAt'>) => Documentacion;
-  deleteIngreso: (id: number) => Promise<boolean>;
+  deleteIngreso: (id: string) => Promise<boolean>;
   deleteGasto: (id: number) => Promise<boolean>;
   deleteDescuento: (id: number) => void;
   deletePrestamo: (id: number) => void;
@@ -103,8 +105,13 @@ const RegistrosContext = createContext<RegistrosContextValue | null>(null);
 export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const registros = useRegistros();
   const toastHook = useToast();
+  const { role } = useAuth();
 
   const handleAddIngreso = async (data: Omit<Ingreso, 'id' | 'createdAt'>) => {
+    if (!canCreateIngresos(role)) {
+      toastHook.error('Sin permiso', 'No tienes permiso para registrar ingresos.');
+      return null;
+    }
     try {
       const result = await registros.addIngreso(data);
       const ref = ingresoMontoPEN(result);
@@ -216,9 +223,14 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const handleDeleteIngreso = async (id: number): Promise<boolean> => {
+  const handleDeleteIngreso = async (id: string): Promise<boolean> => {
+    if (!canMutateIngresos(role)) {
+      toastHook.error('No tienes permiso para eliminar ingresos');
+      return false;
+    }
     try {
       await registros.deleteIngreso(id);
+      toastHook.success('Ingreso eliminado correctamente');
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar el ingreso', e instanceof Error ? e.message : '');

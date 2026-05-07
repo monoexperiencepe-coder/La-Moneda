@@ -156,4 +156,4 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
   );
 };
 
-export default VehicleCard;
+export default React.memo(VehicleCard);

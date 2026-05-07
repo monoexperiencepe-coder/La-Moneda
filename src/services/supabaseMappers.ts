@@ -1,4 +1,5 @@
 import { toDateOnlyString } from '../utils/formatting';
+import { ingresoPrimaryKeyFromRow } from '../utils/ingresoRecordId';
 import type {
   Vehicle,
   UnidadRegistro,
@@ -157,7 +158,7 @@ export function mapConductorRow(r: Record<string, unknown>): Conductor {
 export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
   const moneda = (strOrNull(r.moneda) as Moneda | null) ?? 'PEN';
   return {
-    id: num(r.id),
+    id: ingresoPrimaryKeyFromRow(r.id),
     fecha: toDateOnlyString(r.fecha),
     fechaRegistro: toDateOnlyString(r.fecha_registro ?? r.fecha),
     vehicleId: num(r.vehicle_id),

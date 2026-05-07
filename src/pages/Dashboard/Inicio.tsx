@@ -7,6 +7,7 @@ import { ingresoMontoPEN } from '../../utils/moneda';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { computeTodayReview, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
+import SmartClock from '../../components/Common/SmartClock';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
 const MODULE_ITEMS = [
@@ -220,11 +221,6 @@ const Inicio: React.FC = () => {
     navigate(path);
   };
 
-  const hoyLabel = useMemo(
-    () => new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' }),
-    [],
-  );
-
   /* Datos para vista alertas */
   const cobrosLines = useMemo(
     () => cobrosPendientes.slice(0, 3).map((i) =>
@@ -307,33 +303,22 @@ const Inicio: React.FC = () => {
   return (
     <div className="animate-fade-in max-w-lg mx-auto pb-12 space-y-4">
 
-      {/* ── STATUS BAR ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pt-1">
-        {/* Fecha */}
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">
-            Hoy
-          </p>
-          <p className="text-sm font-semibold text-gray-700 capitalize leading-tight mt-0.5">
-            {hoyLabel}
-          </p>
+      {/* ── RELOJ ──────────────────────────────────────────────────────── */}
+      <div className="pt-1">
+        <SmartClock variant="hero" className="w-full" />
+      </div>
+
+      {/* ── RESUMEN DEL DÍA (montos) ───────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Hoy · Ing.</span>
+          <span className="text-xs font-bold text-emerald-900 tabular-nums">{formatCurrency(todayIngresos)}</span>
         </div>
-        {/* Pills hoy */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Ing.</span>
-            <span className="text-xs font-bold text-emerald-900 tabular-nums">
-              {formatCurrency(todayIngresos)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-            <span className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Gas.</span>
-            <span className="text-xs font-bold text-rose-900 tabular-nums">
-              {formatCurrency(todayGastos)}
-            </span>
-          </div>
+        <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Hoy · Gas.</span>
+          <span className="text-xs font-bold text-rose-900 tabular-nums">{formatCurrency(todayGastos)}</span>
         </div>
       </div>
 

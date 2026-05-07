@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, User, Building2, Bell, Shield, HelpCircle, ChevronRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const settingGroups = [
   {
@@ -27,6 +28,7 @@ const settingGroups = [
 
 const Configuracion: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -47,9 +49,9 @@ const Configuracion: React.FC = () => {
             🧑‍💼
           </div>
           <div>
-            <h2 className="text-xl font-bold">Administrador</h2>
+            <h2 className="text-xl font-bold">{user.name}</h2>
             <p className="text-indigo-200 text-sm">La Moneda · Trujillo, Perú</p>
-            <p className="text-indigo-200 text-xs mt-1">admin@lamoneda.com</p>
+            <p className="text-indigo-200 text-xs mt-1">Rol: {user.role}</p>
           </div>
         </div>
       </div>
@@ -98,6 +100,28 @@ const Configuracion: React.FC = () => {
           <ChevronRight size={16} className="text-gray-300" />
         </button>
       </div>
+
+      {isAdmin && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-50">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Administración</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/historial-sistema')}
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-indigo-600 bg-indigo-100">
+              🧾
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Historial del sistema</p>
+              <p className="text-xs text-gray-400">Auditoría financiera de cambios y correcciones.</p>
+            </div>
+            <ChevronRight size={16} className="text-gray-300" />
+          </button>
+        </div>
+      )}
 
       {/* Version */}
       <p className="text-center text-xs text-gray-300">La Moneda v2.0 · Sistema de Gestión Financiera</p>

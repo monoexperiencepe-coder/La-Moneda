@@ -7,7 +7,7 @@ interface IngresosViewProps {
   vehicles: Vehicle[];
   ingresos: Ingreso[];
   onAdd: (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string) => void;
 }
 
 const IngresosView: React.FC<IngresosViewProps> = ({ vehicles, ingresos, onAdd, onDelete }) => {

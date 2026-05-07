@@ -3,6 +3,8 @@ import { EMPRESA_ID } from '../config/app';
 import { gastoToInsert, mapGastoRow } from './supabaseMappers';
 import type { Gasto } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
+import { insertFinancialAuditLog } from './financialAuditService';
+import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 
 /** Campos de clasificación / revisión (Supabase snake_case vía mapeo). */
 export type ClasificacionGastoPatch = Partial<{
@@ -27,6 +29,10 @@ export type GastoCategoriaManualPatch = Partial<{
   origen_clasificacion: string | null;
   excel_extra: Record<string, unknown> | null;
 }>;
+
+export interface GastoAuditMeta {
+  reason?: string | null;
+}
 
 function clasificacionPatchToRow(patch: ClasificacionGastoPatch): Record<string, unknown> {
   const row: Record<string, unknown> = {};
@@ -55,14 +61,28 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
   return row;
 }
 
+async function fetchGastoRawById(id: number): Promise<Record<string, unknown> | null> {
+  if (!EMPRESA_ID) return null;
+  const { data, error } = await supabase
+    .from('gastos')
+    .select('*')
+    .eq('id', id)
+    .eq('empresa_id', EMPRESA_ID)
+    .single();
+  if (error) return null;
+  return (data as Record<string, unknown>) ?? null;
+}
+
 /**
  * Actualiza solo la capa de clasificación financiera / auditoría.
  */
 export async function updateClasificacionGasto(
   id: number,
   patch: ClasificacionGastoPatch,
+  meta: GastoAuditMeta = {},
 ): Promise<Gasto | null> {
   if (!EMPRESA_ID) return null;
+  const before = await fetchGastoRawById(id);
   const row = clasificacionPatchToRow(patch);
   if (Object.keys(row).length === 0) return null;
   const { data, error } = await supabase
@@ -76,6 +96,20 @@ export async function updateClasificacionGasto(
     console.error('[gastos updateClasificacionGasto]', error.message);
     return null;
   }
+  if (before && data) {
+    const auditUserId = await getAuthenticatedUserIdForAudit();
+    if (auditUserId) {
+      await insertFinancialAuditLog({
+        user_id: auditUserId,
+        action_type: 'fix_classification',
+        entity_type: 'gasto',
+        entity_id: String(id),
+        old_data: before,
+        new_data: data as Record<string, unknown>,
+        reason: meta.reason ?? 'Corrección de clasificación financiera',
+      });
+    }
+  }
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
 
@@ -86,8 +120,10 @@ export async function updateClasificacionGasto(
 export async function updateGastoCategoriaManual(
   id: number,
   patch: GastoCategoriaManualPatch,
+  meta: GastoAuditMeta = {},
 ): Promise<Gasto | null> {
   if (!EMPRESA_ID) return null;
+  const before = await fetchGastoRawById(id);
   const row = categoriaManualPatchToRow(patch);
   if (Object.keys(row).length === 0) return null;
   const { data, error } = await supabase
@@ -100,6 +136,58 @@ export async function updateGastoCategoriaManual(
   if (error) {
     console.error('[gastos updateGastoCategoriaManual]', error.message);
     return null;
+  }
+  if (before && data) {
+    const auditUserId = await getAuthenticatedUserIdForAudit();
+    if (auditUserId) {
+      const beforeVeh = before.vehicle_id == null ? null : Number(before.vehicle_id);
+      const afterVeh = (data as Record<string, unknown>).vehicle_id == null
+        ? null
+        : Number((data as Record<string, unknown>).vehicle_id);
+      const beforeMonto = Number(before.monto ?? 0);
+      const afterMonto = Number((data as Record<string, unknown>).monto ?? 0);
+      const afterRow = data as Record<string, unknown>;
+      await insertFinancialAuditLog({
+        user_id: auditUserId,
+        action_type: 'move_category',
+        entity_type: 'gasto',
+        entity_id: String(id),
+        old_data: before,
+        new_data: afterRow,
+        reason: meta.reason ?? 'Mover gasto de categoría',
+      });
+      if (beforeVeh !== afterVeh) {
+        await insertFinancialAuditLog({
+          user_id: auditUserId,
+          action_type: 'change_vehicle_id',
+          entity_type: 'gasto',
+          entity_id: String(id),
+          old_data: { vehicle_id: beforeVeh },
+          new_data: { vehicle_id: afterVeh },
+          reason: meta.reason ?? 'Cambio de vehículo en gasto',
+        });
+      }
+      if (beforeMonto !== afterMonto) {
+        await insertFinancialAuditLog({
+          user_id: auditUserId,
+          action_type: 'change_amount',
+          entity_type: 'gasto',
+          entity_id: String(id),
+          old_data: { monto: beforeMonto },
+          new_data: { monto: afterMonto },
+          reason: meta.reason ?? 'Cambio de monto en gasto',
+        });
+      }
+      await insertFinancialAuditLog({
+        user_id: auditUserId,
+        action_type: 'edit_expense',
+        entity_type: 'gasto',
+        entity_id: String(id),
+        old_data: before,
+        new_data: afterRow,
+        reason: meta.reason ?? 'Edición manual de gasto',
+      });
+    }
   }
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
@@ -130,11 +218,27 @@ export async function insertGasto(row: Omit<Gasto, 'id' | 'createdAt'>): Promise
     console.error('[gastos insert]', error.message);
     return null;
   }
+  if (data) {
+    const raw = data as Record<string, unknown>;
+    const uid = await getAuthenticatedUserIdForAudit();
+    if (uid) {
+      await insertFinancialAuditLog({
+        user_id: uid,
+        action_type: 'create_expense',
+        entity_type: 'gasto',
+        entity_id: String(raw.id ?? ''),
+        old_data: null,
+        new_data: raw,
+        reason: 'Registro de gasto creado desde UI',
+      });
+    }
+  }
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
 
 export async function removeGasto(id: number): Promise<boolean> {
   if (!EMPRESA_ID) return false;
+  const before = await fetchGastoRawById(id);
   const { error } = await supabase
     .from('gastos')
     .delete()
@@ -143,6 +247,20 @@ export async function removeGasto(id: number): Promise<boolean> {
   if (error) {
     console.error('[gastos delete]', error.message);
     return false;
+  }
+  if (before) {
+    const deleteUserId = await getAuthenticatedUserIdForAudit();
+    if (deleteUserId) {
+      await insertFinancialAuditLog({
+        user_id: deleteUserId,
+        action_type: 'delete_expense',
+        entity_type: 'gasto',
+        entity_id: String(id),
+        old_data: before,
+        new_data: null,
+        reason: 'Eliminación de gasto',
+      });
+    }
   }
   return true;
 }

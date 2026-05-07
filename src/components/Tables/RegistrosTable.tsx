@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
+  Loader2,
 } from 'lucide-react';
 import Badge from '../Common/Badge';
 import Button from '../Common/Button';
@@ -14,6 +15,8 @@ import {
   confianzaTier,
   confianzaBadgeVariant,
 } from '../../utils/clasificacionGasto';
+import { useAuth } from '../../context/AuthContext';
+import { canMutateIngresos } from '../../utils/roles';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -22,7 +25,7 @@ interface RegistrosTableProps {
   ingresos?: Ingreso[];
   gastos?: Gasto[];
   vehicles: Vehicle[];
-  onDeleteIngreso?: (id: number) => void;
+  onDeleteIngreso?: (id: string) => Promise<boolean | void> | boolean | void;
   onDeleteGasto?: (id: number) => void;
   /** Desde URL (ej. Inicio → cobros pendientes): preselecciona filtro estado de pago en ingresos. */
   initialEstadoPago?: string;
@@ -105,6 +108,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   showClasificacionFinanciera = false,
   onMoveCategoriaGasto,
 }) => {
+  const { role } = useAuth();
+  const showDeleteIngreso = mode !== 'ingresos' || canMutateIngresos(role);
   const colCount = mode === 'gastos' ? 6 : 5;
   const [query, setQuery] = useState('');
   const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
@@ -116,7 +121,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showFullHistory, setShowFullHistory] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deletePending, setDeletePending] = useState<
+    null | { kind: 'ingreso'; row: Ingreso } | { kind: 'gasto'; id: number }
+  >(null);
+  const [deletingIngresoId, setDeletingIngresoId] = useState<string | null>(null);
   const [viewItem, setViewItem] = useState<Ingreso | Gasto | null>(null);
 
   const getVehicleLabel = (vehicleId: number | null) => {
@@ -206,11 +214,22 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     </span>
   );
 
-  const confirmDelete = () => {
-    if (deleteId === null) return;
-    if (mode === 'ingresos') onDeleteIngreso?.(deleteId);
-    else onDeleteGasto?.(deleteId);
-    setDeleteId(null);
+  const confirmDelete = async () => {
+    if (!deletePending) return;
+    if (deletePending.kind === 'ingreso') {
+      const ing = deletePending.row;
+      setDeletePending(null);
+      setDeletingIngresoId(ing.id);
+      try {
+        await onDeleteIngreso?.(ing.id);
+      } finally {
+        setDeletingIngresoId((cur) => (cur === ing.id ? null : cur));
+      }
+      return;
+    }
+    const gid = deletePending.id;
+    setDeletePending(null);
+    onDeleteGasto?.(gid);
   };
 
   return (
@@ -274,7 +293,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         ) : (
           paginated.map((item) => (
             <button
-              key={item.id}
+              key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
               type="button"
               onClick={() => setViewItem(item)}
               className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-transform"
@@ -368,14 +387,32 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   >
                     <Eye size={14} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteId(item.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {mode === 'ingresos' ? (
+                    showDeleteIngreso && (
+                      <button
+                        type="button"
+                        disabled={deletingIngresoId === (item as Ingreso).id}
+                        onClick={() => setDeletePending({ kind: 'ingreso', row: item as Ingreso })}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                        title="Eliminar"
+                      >
+                        {deletingIngresoId === (item as Ingreso).id ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             </button>
@@ -428,7 +465,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             ) : (
               paginated.map(item => (
                 <tr
-                  key={item.id}
+                  key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
                   className="hover:bg-gray-50 transition-colors cursor-pointer"
                   title="Clic en la fila para ver detalles"
                   onClick={() => setViewItem(item)}
@@ -518,14 +555,32 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       >
                         <Eye size={15} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteId(item.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {mode === 'ingresos' ? (
+                        showDeleteIngreso && (
+                          <button
+                            type="button"
+                            disabled={deletingIngresoId === (item as Ingreso).id}
+                            onClick={() => setDeletePending({ kind: 'ingreso', row: item as Ingreso })}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                            title="Eliminar"
+                          >
+                            {deletingIngresoId === (item as Ingreso).id ? (
+                              <Loader2 size={15} className="animate-spin text-red-500" />
+                            ) : (
+                              <Trash2 size={15} />
+                            )}
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -581,13 +636,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
       {/* ── Modal: confirmar eliminación ── */}
       <Modal
-        isOpen={deleteId !== null}
-        onClose={() => setDeleteId(null)}
+        isOpen={deletePending !== null}
+        onClose={() => setDeletePending(null)}
         title="Confirmar eliminación"
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setDeletePending(null)}>Cancelar</Button>
             <Button variant="danger" onClick={confirmDelete}>Eliminar</Button>
           </>
         }

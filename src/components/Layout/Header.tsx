@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target } from 'lucide-react';
+import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Admin',
+  socio: 'Socio',
+  contador: 'Contador',
+  operador: 'Operador',
+};
 
 interface NavItem {
   label: string;
@@ -22,6 +30,7 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -95,15 +104,30 @@ const Header: React.FC = () => {
             >
               <Settings size={18} />
             </button>
-            <div className="hidden items-center gap-2 border-l border-gray-200 pl-2 sm:flex">
+            <button
+              type="button"
+              onClick={() => navigate('/configuracion')}
+              className="hidden items-center gap-2 border-l border-gray-200 pl-2 sm:flex rounded-lg py-1 pr-1 -my-1 text-left transition-colors hover:bg-gray-50 active:bg-gray-100"
+              aria-label="Ir a configuración y perfil"
+              title="Configuración / perfil"
+            >
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 text-sm">
                 🧑‍💼
               </div>
               <div className="hidden min-w-0 md:block">
-                <p className="text-xs font-bold leading-none text-gray-900">Admin</p>
-                <p className="mt-0.5 text-[10px] leading-none text-gray-400">La Moneda</p>
+                <p className="text-xs font-bold leading-none text-gray-900 truncate max-w-[110px]">{user.name}</p>
+                <p className="mt-0.5 text-[10px] leading-none text-gray-400">{ROLE_LABEL[user.role] ?? user.role}</p>
               </div>
-            </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+            >
+              <LogOut size={17} />
+            </button>
             <button
               type="button"
               onClick={() => setMobileOpen(!mobileOpen)}

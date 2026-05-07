@@ -23,6 +23,10 @@ const toastConfig = {
     iconClass: 'text-emerald-500',
     titleClass: 'text-emerald-800',
     msgClass: 'text-emerald-600',
+    iconSize: 24 as const,
+    cardClass: 'min-w-[min(22rem,calc(100vw-3rem))] max-w-md p-5 gap-3.5',
+    titleSize: 'text-base',
+    msgSize: 'text-sm',
   },
   error: {
     icon: XCircle,
@@ -30,6 +34,10 @@ const toastConfig = {
     iconClass: 'text-red-500',
     titleClass: 'text-red-800',
     msgClass: 'text-red-600',
+    iconSize: 20 as const,
+    cardClass: 'min-w-72 max-w-sm p-4 gap-3',
+    titleSize: 'text-sm',
+    msgSize: 'text-xs',
   },
   warning: {
     icon: AlertCircle,
@@ -37,6 +45,10 @@ const toastConfig = {
     iconClass: 'text-amber-500',
     titleClass: 'text-amber-800',
     msgClass: 'text-amber-600',
+    iconSize: 20 as const,
+    cardClass: 'min-w-72 max-w-sm p-4 gap-3',
+    titleSize: 'text-sm',
+    msgSize: 'text-xs',
   },
   info: {
     icon: Info,
@@ -44,6 +56,10 @@ const toastConfig = {
     iconClass: 'text-blue-500',
     titleClass: 'text-blue-800',
     msgClass: 'text-blue-600',
+    iconSize: 20 as const,
+    cardClass: 'min-w-72 max-w-sm p-4 gap-3',
+    titleSize: 'text-sm',
+    msgSize: 'text-xs',
   },
 };
 
@@ -61,27 +77,35 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
     return () => clearTimeout(timer);
   }, [toast.id, toast.duration, onRemove]);
 
+  const sz = config.iconSize;
+  const cardExtra = config.cardClass;
+  const titleSz = config.titleSize;
+  const msgSz = config.msgSize;
+
   return (
     <div
       className={`
-        flex items-start gap-3 p-4 rounded-xl border shadow-soft-md min-w-72 max-w-sm
+        flex items-start rounded-xl border shadow-soft-md
         transition-all duration-300 ease-in-out
+        ${cardExtra}
         ${config.bgClass}
         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
       `}
     >
-      <Icon size={20} className={`flex-shrink-0 mt-0.5 ${config.iconClass}`} />
+      <Icon size={sz} className={`flex-shrink-0 mt-0.5 ${config.iconClass}`} />
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-semibold ${config.titleClass}`}>{toast.title}</p>
+        <p className={`${titleSz} font-semibold ${config.titleClass}`}>{toast.title}</p>
         {toast.message && (
-          <p className={`text-xs mt-0.5 ${config.msgClass}`}>{toast.message}</p>
+          <p className={`${msgSz} mt-1 ${config.msgClass}`}>{toast.message}</p>
         )}
       </div>
       <button
+        type="button"
         onClick={() => onRemove(toast.id)}
         className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+        aria-label="Cerrar"
       >
-        <X size={14} />
+        <X size={sz >= 22 ? 16 : 14} />
       </button>
     </div>
   );

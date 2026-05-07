@@ -8,6 +8,14 @@ export interface Vehicle {
   activo: boolean;
 }
 
+export type AppRole = 'admin' | 'socio' | 'contador' | 'operador';
+
+export interface AppUserProfile {
+  id: string;
+  name: string;
+  role: AppRole;
+}
+
 /** Moneda de registro (préstamos, ingresos multimoneda). */
 export type Moneda = 'PEN' | 'USD';
 
@@ -17,7 +25,8 @@ export type Moneda = 'PEN' | 'USD';
  * - fechaRegistro = Fecha Registro (cuándo se cargó en el sistema)
  */
 export interface Ingreso {
-  id: number;
+  /** PK Supabase (`bigint` o `uuid`), siempre como string en cliente. */
+  id: string;
   fecha: string;
   fechaRegistro: string;
   vehicleId: number;
@@ -169,6 +178,18 @@ export interface GastoCaja {
   categoria: string;
   comentarios: string;
   excelExtra?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface FinancialAuditLog {
+  id: number;
+  userId: string;
+  actionType: string;
+  entityType: string;
+  entityId: string;
+  oldData: Record<string, unknown> | null;
+  newData: Record<string, unknown> | null;
+  reason: string | null;
   createdAt: string;
 }
 

@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/formatting';
+import SmartClock from '../../components/Common/SmartClock';
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
   const { ingresos, gastos, cajaNegocioVehiculo } = useRegistrosContext();
@@ -47,6 +48,10 @@ const FinanzasHub: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">💰 Finanzas</h1>
           <p className="text-sm text-gray-500">Gestión financiera completa</p>
         </div>
+      </div>
+
+      <div className="max-w-xs mx-auto w-full">
+        <SmartClock variant="hub" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
