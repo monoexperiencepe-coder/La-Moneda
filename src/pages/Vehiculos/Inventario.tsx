@@ -36,7 +36,7 @@ const Inventario: React.FC = () => {
       </div>
 
       {/* Vehicle grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {filteredVehicles.map(vehicle => (
           <VehicleCard
             key={vehicle.id}

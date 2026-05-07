@@ -72,17 +72,17 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
         </div>
       )}
 
-      <div className="p-5">
+      <div className="p-3.5">
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-xl shadow-soft flex items-center justify-center text-2xl">
+        <div className="flex items-start justify-between mb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-white rounded-lg shadow-soft flex items-center justify-center text-xl">
               🚙
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium">CARRO #{vehicle.id}</p>
-              <h3 className="text-base font-bold text-gray-900">{vehicle.marca} {vehicle.modelo}</h3>
-              <p className="text-xs text-gray-500 font-mono">{vehicle.placa}</p>
+              <p className="text-[10px] text-gray-400 font-medium">CARRO #{vehicle.id}</p>
+              <h3 className="text-sm font-bold text-gray-900 leading-tight">{vehicle.marca} {vehicle.modelo}</h3>
+              <p className="text-[11px] text-gray-500 font-mono">{vehicle.placa}</p>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -91,34 +91,34 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
                 <span key={i} className={`text-xs ${i < stars ? 'text-yellow-400' : 'text-gray-200'}`}>★</span>
               ))}
             </div>
-            <span className="text-[10px] text-gray-400">{rentability.toFixed(0)}% rent.</span>
+            <span className="text-[9px] text-gray-400">{rentability.toFixed(0)}% rent.</span>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-2 mb-2.5">
           {inversionTotalUsd != null && (
-            <div className="bg-amber-50/90 rounded-xl p-3 backdrop-blur-sm border border-amber-100 col-span-2">
-              <p className="text-[10px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión adquisición (hist.)</p>
-              <p className="text-sm font-bold text-amber-950 tabular-nums">{formatUSD(inversionTotalUsd)}</p>
+            <div className="bg-amber-50/90 rounded-lg p-2 backdrop-blur-sm border border-amber-100 col-span-2">
+              <p className="text-[9px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión adquisición (hist.)</p>
+              <p className="text-xs font-bold text-amber-950 tabular-nums">{formatUSD(inversionTotalUsd)}</p>
               <p className="text-[9px] text-amber-800/90 mt-0.5">No es gasto operativo mensual</p>
             </div>
           )}
-          <div className="bg-white/70 rounded-xl p-3 backdrop-blur-sm">
+          <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📊 HOY</p>
-            <p className="text-sm font-bold text-gray-900">{formatCurrency(todayIngresos)}</p>
+            <p className="text-xs font-bold text-gray-900">{formatCurrency(todayIngresos)}</p>
           </div>
-          <div className="bg-white/70 rounded-xl p-3 backdrop-blur-sm">
+          <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">💰 MES</p>
-            <p className="text-sm font-bold text-gray-900">{formatCurrency(monthIngresos)}</p>
+            <p className="text-xs font-bold text-gray-900">{formatCurrency(monthIngresos)}</p>
           </div>
-          <div className="bg-white/70 rounded-xl p-3 backdrop-blur-sm col-span-2">
+          <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm col-span-2">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📈 MARGEN</p>
             <div className="flex items-center justify-between">
-              <p className={`text-sm font-bold ${margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              <p className={`text-xs font-bold ${margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {formatCurrency(margen)}
               </p>
-              <div className="flex-1 ml-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="flex-1 ml-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${margen >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
                   style={{ width: `${Math.min(100, Math.abs(rentability))}%` }}
@@ -129,7 +129,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
         </div>
 
         {/* Doc status */}
-        <div className={`rounded-xl px-3 py-2 mb-4 text-xs font-semibold
+        <div className={`rounded-lg px-2.5 py-1.5 mb-2.5 text-[11px] font-semibold
           ${docStatus === 'ok' ? 'bg-emerald-50 text-emerald-700'
             : docStatus === 'warning' ? 'bg-amber-50 text-amber-700'
             : 'bg-red-50 text-red-700'}`}>
@@ -140,15 +140,15 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
         <div className="flex gap-2">
           <button
             onClick={() => navigate(`/vehiculos/${vehicle.id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary-50 text-primary-600 text-sm font-semibold hover:bg-primary-100 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition-colors"
           >
-            <Eye size={14} /> Ver
+            <Eye size={13} /> Ver
           </button>
           <button
             onClick={() => navigate(`/vehiculos/${vehicle.id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold hover:bg-gray-200 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-colors"
           >
-            <Edit size={14} /> Editar
+            <Edit size={13} /> Editar
           </button>
         </div>
       </div>

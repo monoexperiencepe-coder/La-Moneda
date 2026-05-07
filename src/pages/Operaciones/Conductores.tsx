@@ -360,20 +360,19 @@ const Conductores: React.FC = () => {
       </div>
 
       {/* ── TABLE ──────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto px-2 sm:px-6 py-3">
-        <table className="w-full min-w-[800px] text-sm border-separate border-spacing-0">
+      <div className="flex-1 overflow-auto px-2 sm:px-4 py-2">
+        <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0">
           <thead>
             <tr>
-              <th className="sticky top-0 bg-gray-50 py-3 px-3 border-b border-gray-200 w-8 rounded-tl-xl" />
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 w-7 rounded-tl-xl" />
               <SortTh col="apellidos" current={sortKey} dir={sortDir} onSort={handleSort}>Conductor</SortTh>
-              <th className="sticky top-0 bg-gray-50 py-3 px-3 border-b border-gray-200 text-[11px] font-semibold text-gray-400 uppercase tracking-widest text-left">Documento</th>
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">Documento</th>
               <SortTh col="vehicleId" current={sortKey} dir={sortDir} onSort={handleSort}>Carro</SortTh>
               <SortTh col="celular"   current={sortKey} dir={sortDir} onSort={handleSort}>Contacto</SortTh>
               <SortTh col="cochera"   current={sortKey} dir={sortDir} onSort={handleSort}>Cochera</SortTh>
-              <th className="sticky top-0 bg-gray-50 py-3 px-3 border-b border-gray-200 text-[11px] font-semibold text-gray-400 uppercase tracking-widest text-left">Status Excel</th>
-              <th className="sticky top-0 bg-gray-50 py-3 px-3 border-b border-gray-200 text-[11px] font-semibold text-gray-400 uppercase tracking-widest text-left">Registro</th>
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">Registro</th>
               <SortTh col="estado"    current={sortKey} dir={sortDir} onSort={handleSort} className="rounded-tr-xl">Estado</SortTh>
-              <th className="sticky top-0 bg-gray-50 py-3 px-2 border-b border-gray-200 w-8 rounded-tr-xl" />
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 w-7 rounded-tr-xl" />
             </tr>
           </thead>
           <tbody>
@@ -390,12 +389,12 @@ const Conductores: React.FC = () => {
                     className={`group cursor-pointer transition-colors ${isExpanded ? 'bg-primary-50/60' : 'hover:bg-white'}`}
                   >
                     {/* index */}
-                    <td className={`py-3 px-3 text-[11px] text-gray-400 tabular-nums border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
+                    <td className={`py-2 px-2 text-[10px] text-gray-400 tabular-nums border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
                       {idx + 1}
                     </td>
 
                     {/* avatar + name */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
                       <div className="flex items-center gap-2.5">
                         <div className={`shrink-0 w-8 h-8 rounded-full ${avatarBg(c.id)} flex items-center justify-center text-white text-[11px] font-bold`}>
                           {conductorDisplayInitials(c)}
@@ -410,7 +409,7 @@ const Conductores: React.FC = () => {
                     </td>
 
                     {/* documento */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       <span className="text-[10px] font-semibold bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 mr-1">
                         {c.tipoDocumento}
                       </span>
@@ -418,7 +417,7 @@ const Conductores: React.FC = () => {
                     </td>
 
                     {/* carro */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       {v ? (
                         <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
                           <span className="text-[11px] font-bold text-slate-700">#{v.id}</span>
@@ -429,7 +428,7 @@ const Conductores: React.FC = () => {
                     </td>
 
                     {/* contacto: phone + whatsapp */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       <div className="flex items-center gap-2">
                         <a href={`tel:${c.celular}`} onClick={(e) => e.stopPropagation()}
                           className="flex items-center gap-1 text-[11px] font-mono text-sky-600 hover:text-sky-800 hover:underline">
@@ -445,7 +444,7 @@ const Conductores: React.FC = () => {
                     </td>
 
                     {/* cochera */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
                       {c.cochera
                         ? <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
                             c.cochera.toLowerCase().includes('abierta')
@@ -454,15 +453,12 @@ const Conductores: React.FC = () => {
                           }`}>{c.cochera}</span>
                         : <span className="text-gray-300 text-xs">—</span>}
                     </td>
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-xs text-gray-600`}>
-                      {c.statusOriginal || '—'}
-                    </td>
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-xs text-gray-600`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-[11px] text-gray-600`}>
                       {formatDate(c.createdAt.slice(0, 10))}
                     </td>
 
                     {/* estado */}
-                    <td className={`py-3 px-3 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${
                         isVigente ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>
@@ -472,7 +468,7 @@ const Conductores: React.FC = () => {
                     </td>
 
                     {/* expand chevron */}
-                    <td className={`py-3 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} text-right`}>
+                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} text-right`}>
                       <span className={`text-gray-400 transition-transform duration-200 inline-block ${isExpanded ? 'rotate-90' : ''}`}>
                         <ChevronRight size={14} />
                       </span>
@@ -483,7 +479,7 @@ const Conductores: React.FC = () => {
                   {isExpanded && draft && (
                     <tr className="bg-primary-50/40" onClick={(e) => e.stopPropagation()}>
                       <td />
-                      <td colSpan={9} className="px-4 pb-4 pt-3 border-b border-primary-100">
+                      <td colSpan={8} className="px-4 pb-4 pt-3 border-b border-primary-100">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 mb-3 flex items-center gap-2">
                           <FileCheck size={12} /> Editar datos de contacto, status y contrato
                         </p>

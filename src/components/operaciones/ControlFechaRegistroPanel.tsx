@@ -8,7 +8,7 @@ import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
 import type { TipoControlFecha } from '../../data/types';
-import { Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 const emptyHistFilters = (): ControlFechasHistoryFilters => ({});
 
@@ -47,6 +47,8 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
   const [histTipo, setHistTipo] = useState('');
   const [histDesde, setHistDesde] = useState('');
   const [histHasta, setHistHasta] = useState('');
+  const [openRegistroCard, setOpenRegistroCard] = useState(false);
+  const [openHistFilters, setOpenHistFilters] = useState(false);
 
   useEffect(() => {
     void loadControlFechasHistory(emptyHistFilters(), 0);
@@ -106,68 +108,94 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
   const histTipoOpts = [{ value: '', label: 'Todos los tipos' }, ...TIPOS_CONTROL_FECHA_OPTIONS];
 
   return (
-    <Card
-      title="Registrar vencimiento"
-      subtitle="Resumen en la grilla usa solo el vencimiento más lejano por tipo y vehículo (RPC en Supabase). El historial aquí abajo carga filas reales con filtros en servidor."
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Select label="Vehículo" options={vehicleOpts} value={vehicleId} onChange={setVehicleId} />
-        <Select label="Tipo" options={TIPOS_CONTROL_FECHA_OPTIONS} value={tipo} onChange={(v) => setTipo(v as TipoControlFecha)} />
-        <Input label="Fecha de vencimiento" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
-        <Input label="Comentario (opcional)" value={comentarios} onChange={(e) => setComentarios(e.target.value)} />
-      </div>
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          disabled={!vehicleId}
-          onClick={guardar}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold"
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setOpenRegistroCard((v) => !v)}
+        className="w-full sm:w-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100 transition-colors"
+      >
+        {openRegistroCard ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        Registrar vencimiento
+      </button>
+
+      {openRegistroCard && (
+        <Card
+          title="Registrar vencimiento"
+          subtitle="Resumen en la grilla usa solo el vencimiento más lejano por tipo y vehículo (RPC en Supabase)."
         >
-          Guardar en Supabase
-        </button>
-      </div>
-
-      <div className="mt-6 border-t border-gray-100 pt-4 space-y-3">
-        <p className="text-xs font-semibold text-gray-700">Historial (Supabase, paginado)</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
-          <Select
-            label="Filtrar vehículo"
-            options={[{ value: '', label: 'Todos' }, ...active.map((v) => ({ value: String(v.id), label: v.placa }))]}
-            value={histVehicleId}
-            onChange={setHistVehicleId}
-          />
-          <Select label="Filtrar tipo" options={histTipoOpts} value={histTipo} onChange={setHistTipo} />
-          <Input label="Vence desde" type="date" value={histDesde} onChange={(e) => setHistDesde(e.target.value)} />
-          <Input label="Vence hasta" type="date" value={histHasta} onChange={(e) => setHistHasta(e.target.value)} />
-          <button
-            type="button"
-            onClick={aplicarFiltrosHistorial}
-            className="h-10 px-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            Aplicar filtros
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-          <div className="w-full sm:w-64 shrink-0">
-            <Input
-              label="Filtrar solo en esta página"
-              value={busquedaPagina}
-              onChange={(e) => setBusquedaPagina(e.target.value)}
-              placeholder="id, placa, tipo, comentario…"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Select label="Vehículo" options={vehicleOpts} value={vehicleId} onChange={setVehicleId} />
+            <Select label="Tipo" options={TIPOS_CONTROL_FECHA_OPTIONS} value={tipo} onChange={(v) => setTipo(v as TipoControlFecha)} />
+            <Input label="Fecha de vencimiento" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} />
+            <Input label="Comentario (opcional)" value={comentarios} onChange={(e) => setComentarios(e.target.value)} />
           </div>
-          <p className="text-[11px] text-gray-500 sm:text-right">
-            Página {controlFechasHistoryPage + 1} de {totalPages}
-            {controlFechasHistoryTotal != null && (
-              <>
-                {' '}
-                · {controlFechasHistoryTotal} fila{controlFechasHistoryTotal !== 1 ? 's' : ''} en total
-              </>
-            )}
-            {controlFechasHistoryLoading ? ' · cargando…' : ''}
-          </p>
-        </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              disabled={!vehicleId}
+              onClick={guardar}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold"
+            >
+              Guardar en Supabase
+            </button>
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-gray-700">Historial (Supabase, paginado)</p>
+            <button
+              type="button"
+              onClick={() => setOpenHistFilters((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+            >
+              {openHistFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {openHistFilters ? 'Ocultar filtros' : 'Usar filtros'}
+            </button>
+          </div>
+          {openHistFilters && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
+              <Select
+                label="Filtrar vehículo"
+                options={[{ value: '', label: 'Todos' }, ...active.map((v) => ({ value: String(v.id), label: v.placa }))]}
+                value={histVehicleId}
+                onChange={setHistVehicleId}
+              />
+              <Select label="Filtrar tipo" options={histTipoOpts} value={histTipo} onChange={setHistTipo} />
+              <Input label="Vence desde" type="date" value={histDesde} onChange={(e) => setHistDesde(e.target.value)} />
+              <Input label="Vence hasta" type="date" value={histHasta} onChange={(e) => setHistHasta(e.target.value)} />
+              <button
+                type="button"
+                onClick={aplicarFiltrosHistorial}
+                className="h-10 px-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Aplicar filtros
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+            <div className="w-full sm:w-64 shrink-0">
+              <Input
+                label="Filtrar solo en esta página"
+                value={busquedaPagina}
+                onChange={(e) => setBusquedaPagina(e.target.value)}
+                placeholder="id, placa, tipo, comentario…"
+              />
+            </div>
+            <p className="text-[11px] text-gray-500 sm:text-right">
+              Página {controlFechasHistoryPage + 1} de {totalPages}
+              {controlFechasHistoryTotal != null && (
+                <>
+                  {' '}
+                  · {controlFechasHistoryTotal} fila{controlFechasHistoryTotal !== 1 ? 's' : ''} en total
+                </>
+              )}
+              {controlFechasHistoryLoading ? ' · cargando…' : ''}
+            </p>
+          </div>
 
         <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-50">
           {controlFechasHistoryLoading && controlFechasHistory.length === 0 ? (
@@ -248,8 +276,9 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
             Siguiente →
           </button>
         </div>
-      </div>
-    </Card>
+        </div>
+      </Card>
+    </div>
   );
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye,
+  Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
 } from 'lucide-react';
 import Badge from '../Common/Badge';
 import Button from '../Common/Button';
@@ -28,6 +28,8 @@ interface RegistrosTableProps {
   initialEstadoPago?: string;
   /** Muestra columna de capa financiera (tipo_gasto, confianza, etc.) en modo gastos. */
   showClasificacionFinanciera?: boolean;
+  /** Acción opcional para mover un gasto de categoría desde UI. */
+  onMoveCategoriaGasto?: (gasto: Gasto) => void;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -84,6 +86,14 @@ const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number
   );
 };
 
+function cleanGastoComentario(text: string | null | undefined): string {
+  if (!text) return '';
+  return text
+    .replace(/\[\s*migraci[oó]n\s+gastos_caja\s+final\s*\]\s*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const RegistrosTable: React.FC<RegistrosTableProps> = ({
   mode,
   ingresos = [],
@@ -93,8 +103,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   onDeleteGasto,
   initialEstadoPago = '',
   showClasificacionFinanciera = false,
+  onMoveCategoriaGasto,
 }) => {
-  const colCount = mode === 'gastos' && showClasificacionFinanciera ? 9 : 8;
+  const colCount = mode === 'gastos' ? 6 : 5;
   const [query, setQuery] = useState('');
   const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
   useEffect(() => {
@@ -104,6 +115,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [showFullHistory, setShowFullHistory] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<Ingreso | Gasto | null>(null);
 
@@ -178,8 +190,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     });
   }, [filtered, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = showFullHistory ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated = showFullHistory ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -227,6 +239,20 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             </div>
           )}
           <span className="text-xs text-gray-400">{filtered.length} registros</span>
+          <button
+            type="button"
+            onClick={() => {
+              setShowFullHistory((v) => !v);
+              setPage(1);
+            }}
+            className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-colors ${
+              showFullHistory
+                ? 'border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200'
+                : 'border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+            }`}
+          >
+            {showFullHistory ? 'Volver a paginado' : 'Ver historial completo'}
+          </button>
           <div className="w-full sm:w-40">
             <Select
               options={PAGE_SIZE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
@@ -281,7 +307,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 {mode === 'ingresos' ? (
                   <Badge variant="success" size="sm">{(item as Ingreso).tipo}</Badge>
                 ) : (
-                  <Badge variant="warning" size="sm">{CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}</Badge>
+                  <p className="text-xs font-semibold text-gray-700">
+                    {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
+                  </p>
                 )}
                 <p className="text-xs text-gray-500 truncate">
                   {mode === 'ingresos'
@@ -319,9 +347,19 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <p className="text-[11px] text-gray-500 truncate">
                   {mode === 'ingresos'
                     ? ((item as Ingreso).comentarios || (item as Ingreso).detalleOperativo || 'Sin comentario')
-                    : ((item as Gasto).pagadoA || (item as Gasto).comentarios || 'Sin observación')}
+                    : ((item as Gasto).metodoPago || 'Sin método')}
                 </p>
                 <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {mode === 'gastos' && onMoveCategoriaGasto && (
+                    <button
+                      type="button"
+                      onClick={() => onMoveCategoriaGasto(item as Gasto)}
+                      className="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors"
+                      title="Mover categoría"
+                    >
+                      <ArrowRightLeft size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setViewItem(item)}
@@ -347,46 +385,33 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
       {/* ── Desktop: tabla completa ── */}
       <div className="hidden md:block overflow-x-auto">
-        <table className={`w-full ${mode === 'gastos' && showClasificacionFinanciera ? 'min-w-[1040px]' : 'min-w-[920px]'}`}>
+        <table className="w-full min-w-[720px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               <th
-                className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
+                className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
                 onClick={() => handleSort('fecha')}
               >
                 Fecha <SortIcon col="fecha" />
               </th>
-              <th
-                className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3 cursor-pointer hover:text-gray-700"
-                onClick={() => handleSort('vehiculo')}
-              >
-                Vehículo <SortIcon col="vehiculo" />
-              </th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3">
                 {mode === 'ingresos' ? 'Tipo / Sub tipo' : 'Categoría / Motivo'}
               </th>
-              {/* Columna nueva: contexto operativo */}
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
-                {mode === 'ingresos' ? 'Operación / Estado' : 'Cat. real / Contexto'}
-              </th>
-              {mode === 'gastos' && showClasificacionFinanciera && (
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3 max-w-[200px]">
-                  Capa inteligente
-                </th>
-              )}
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
                 Método de pago
               </th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
-                {mode === 'ingresos' ? 'Comentarios' : 'Pagado a / obs.'}
-              </th>
+              {mode === 'gastos' && (
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3">
+                  Observación
+                </th>
+              )}
               <th
-                className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
+                className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
                 onClick={() => handleSort('monto')}
               >
                 Monto <SortIcon col="monto" />
               </th>
-              <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
+              <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3">
                 Acciones
               </th>
             </tr>
@@ -409,17 +434,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   onClick={() => setViewItem(item)}
                 >
                   {/* Fecha */}
-                  <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">
+                  <td className="px-2 py-3 text-sm text-gray-600 whitespace-nowrap">
                     {formatDate(item.fecha)}
                   </td>
 
-                  {/* Vehículo */}
-                  <td className="px-3 py-3 text-sm text-gray-700">
-                    {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
-                  </td>
-
                   {/* Tipo / Categoría */}
-                  <td className="px-3 py-3">
+                  <td className="px-2 py-3">
                     {mode === 'ingresos' ? (
                       <div>
                         <Badge variant="success">{(item as Ingreso).tipo}</Badge>
@@ -429,128 +449,29 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       </div>
                     ) : (
                       <div>
-                        <Badge variant="warning" size="sm">
-                          {CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
-                        </Badge>
-                        <p className="text-xs text-gray-500 mt-0.5">{(item as Gasto).motivo}</p>
+                        <p className="text-xs font-semibold text-gray-800">
+                          {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {(item as Gasto).subcategoria || (item as Gasto).subTipo || '—'}
+                        </p>
                       </div>
                     )}
                   </td>
 
-                  {/* Contexto operativo */}
-                  <td className="px-3 py-3 text-xs max-w-[200px]">
-                    {mode === 'ingresos' ? (
-                      <div className="space-y-1">
-                        {(item as Ingreso).tipoOperacion && (
-                          <p className="text-gray-600 font-medium truncate" title={(item as Ingreso).tipoOperacion ?? undefined}>
-                            {(item as Ingreso).tipoOperacion}
-                          </p>
-                        )}
-                        <EstadoPagoBadge estado={(item as Ingreso).estadoPago} />
-                        {(item as Ingreso).detalleOperativo && (
-                          <TruncatedText
-                            text={(item as Ingreso).detalleOperativo}
-                            className="text-gray-400 mt-0.5"
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        {(item as Gasto).categoriaReal && (
-                          <p className="text-gray-600 font-medium truncate" title={(item as Gasto).categoriaReal ?? undefined}>
-                            {(item as Gasto).categoriaReal}
-                          </p>
-                        )}
-                        {(item as Gasto).detalleOperativo && (
-                          <TruncatedText
-                            text={(item as Gasto).detalleOperativo}
-                            className="text-gray-400"
-                          />
-                        )}
-                      </div>
-                    )}
+                  {/* Método de pago */}
+                  <td className="px-2 py-3 text-xs text-gray-700 max-w-[120px]">
+                    <p className="font-medium text-gray-800">{item.metodoPago}</p>
                   </td>
 
-                  {mode === 'gastos' && showClasificacionFinanciera && (
-                    <td className="px-3 py-3 text-xs max-w-[200px] align-top">
-                      {(() => {
-                        const g = item as Gasto;
-                        const tier = confianzaTier(g.clasificacion_confianza);
-                        const cv = confianzaBadgeVariant(tier);
-                        return (
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap gap-1">
-                              {g.tipo_gasto ? (
-                                <Badge variant="secondary" size="sm" className="max-w-[140px] truncate">
-                                  {g.tipo_gasto}
-                                </Badge>
-                              ) : (
-                                <span className="text-gray-400">—</span>
-                              )}
-                            </div>
-                            {g.subtipo_gasto ? (
-                              <p className="text-[10px] text-gray-500 truncate" title={g.subtipo_gasto}>
-                                {g.subtipo_gasto}
-                              </p>
-                            ) : null}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Badge variant={cv} size="sm" dot>
-                                {g.clasificacion_confianza != null
-                                  ? `${(g.clasificacion_confianza * 100).toFixed(0)}%`
-                                  : '—'}
-                              </Badge>
-                              {g.clasificacion_manual ? (
-                                <span className="text-[10px] font-semibold text-violet-600 uppercase">Manual</span>
-                              ) : null}
-                              {g.requiere_revision ? (
-                                <span className="text-[10px] font-semibold text-amber-700 uppercase">Revisar</span>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })()}
+                  {mode === 'gastos' && (
+                    <td className="px-2 py-3 text-xs text-gray-600 max-w-[220px]">
+                      <TruncatedText text={cleanGastoComentario((item as Gasto).comentarios)} maxLen={90} />
                     </td>
                   )}
 
-                  {/* Método de pago */}
-                  <td className="px-3 py-3 text-xs text-gray-700 max-w-[160px]">
-                    <p className="font-medium text-gray-800">{item.metodoPago}</p>
-                    {item.metodoPagoDetalle && (
-                      <p className="text-gray-500 truncate" title={item.metodoPagoDetalle}>
-                        {item.metodoPagoDetalle}
-                      </p>
-                    )}
-                    {item.celularMetodo && (
-                      <p className="text-gray-400 mt-0.5">{item.celularMetodo}</p>
-                    )}
-                  </td>
-
-                  {/* Comentarios / Pagado a */}
-                  <td className="px-3 py-3 text-xs text-gray-500 max-w-[160px]">
-                    {mode === 'ingresos' ? (
-                      <span className="truncate block" title={item.comentarios || undefined}>
-                        {item.comentarios || '—'}
-                      </span>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {(item as Gasto).pagadoA?.trim() ? (
-                          <p className="text-gray-800 font-medium truncate" title={(item as Gasto).pagadoA}>
-                            → {(item as Gasto).pagadoA}
-                          </p>
-                        ) : null}
-                        {(item as Gasto).comentarios?.trim() ? (
-                          <p className="text-gray-500 truncate" title={(item as Gasto).comentarios}>
-                            {(item as Gasto).comentarios}
-                          </p>
-                        ) : !(item as Gasto).pagadoA?.trim() ? (
-                          <span className="text-gray-400">—</span>
-                        ) : null}
-                      </div>
-                    )}
-                  </td>
-
                   {/* Monto */}
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-2 py-3 text-right">
                     {mode === 'ingresos' ? (
                       <div className="text-sm font-bold text-emerald-600">
                         {(item as Ingreso).moneda === 'USD' ? (
@@ -577,8 +498,18 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   </td>
 
                   {/* Acciones */}
-                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1.5">
+                      {mode === 'gastos' && onMoveCategoriaGasto && (
+                        <button
+                          type="button"
+                          onClick={() => onMoveCategoriaGasto(item as Gasto)}
+                          className="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors"
+                          title="Mover categoría"
+                        >
+                          <ArrowRightLeft size={15} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setViewItem(item)}
@@ -605,46 +536,48 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       </div>
 
       {/* ── Paginación ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-gray-100">
-        <p className="text-xs text-gray-500">
-          Mostrando {sorted.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} de {sorted.length}
-        </p>
-        <div className="flex items-center gap-1 ml-auto">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum = i + 1;
-            if (totalPages > 5) {
-              if (page <= 3) pageNum = i + 1;
-              else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
-              else pageNum = page - 2 + i;
-            }
-            return (
-              <button
-                key={pageNum}
-                onClick={() => setPage(pageNum)}
-                className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${
-                  page === pageNum ? 'bg-primary-500 text-white' : 'hover:bg-gray-100 text-gray-600'
-                }`}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight size={16} />
-          </button>
+      {!showFullHistory && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500">
+            Mostrando {sorted.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} de {sorted.length}
+          </p>
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum = i + 1;
+              if (totalPages > 5) {
+                if (page <= 3) pageNum = i + 1;
+                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = page - 2 + i;
+              }
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${
+                    page === pageNum ? 'bg-primary-500 text-white' : 'hover:bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Modal: confirmar eliminación ── */}
       <Modal
@@ -678,10 +611,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <div className="flex justify-between">
               <dt className="text-xs text-gray-500 font-medium">Fecha movimiento</dt>
               <dd className="text-sm text-gray-900">{formatDate(viewItem.fecha)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-xs text-gray-500 font-medium">Vehículo</dt>
-              <dd className="text-sm text-gray-900">{getVehicleLabel('vehicleId' in viewItem ? viewItem.vehicleId : null)}</dd>
             </div>
 
             {mode === 'ingresos' ? (
@@ -783,62 +712,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   <dd className="text-sm text-gray-900">{(viewItem as Gasto).motivo}</dd>
                 </div>
 
-                {mode === 'gastos' && showClasificacionFinanciera && (
-                  <div className="rounded-lg border border-violet-100 bg-violet-50/50 p-3 space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">Capa financiera</p>
-                    <div className="flex justify-between gap-2 text-xs">
-                      <span className="text-gray-500">tipo_gasto</span>
-                      <span className="text-gray-900 text-right">{(viewItem as Gasto).tipo_gasto ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2 text-xs">
-                      <span className="text-gray-500">subtipo_gasto</span>
-                      <span className="text-gray-900 text-right">{(viewItem as Gasto).subtipo_gasto ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2 text-xs items-center">
-                      <span className="text-gray-500">Confianza</span>
-                      <Badge
-                        variant={confianzaBadgeVariant(confianzaTier((viewItem as Gasto).clasificacion_confianza))}
-                        size="sm"
-                        dot
-                      >
-                        {(viewItem as Gasto).clasificacion_confianza != null
-                          ? `${((viewItem as Gasto).clasificacion_confianza! * 100).toFixed(1)}%`
-                          : '—'}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between gap-2 text-xs">
-                      <span className="text-gray-500">Origen</span>
-                      <span className="text-gray-900 text-right">{(viewItem as Gasto).origen_clasificacion ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2 text-xs">
-                      <span className="text-gray-500">Requiere revisión</span>
-                      <span className="text-gray-900">{(viewItem as Gasto).requiere_revision ? 'Sí' : 'No'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2 text-xs">
-                      <span className="text-gray-500">Manual / revisado</span>
-                      <span className="text-gray-900 text-right">
-                        {(viewItem as Gasto).clasificacion_manual ? 'Sí' : 'No'}
-                        {(viewItem as Gasto).revisado_at
-                          ? ` · ${formatDate(String((viewItem as Gasto).revisado_at).slice(0, 10))}`
-                          : ''}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
                 {/* ─ Contexto operativo (gastos) ─ */}
-                {(viewItem as Gasto).categoriaReal && (
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-xs text-gray-500 font-medium shrink-0">Cat. real (Excel)</dt>
-                    <dd className="text-sm text-gray-900 text-right">{(viewItem as Gasto).categoriaReal}</dd>
-                  </div>
-                )}
-                {(viewItem as Gasto).subcategoria && (
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-xs text-gray-500 font-medium shrink-0">Subcategoría</dt>
-                    <dd className="text-sm text-gray-900 text-right">{(viewItem as Gasto).subcategoria}</dd>
-                  </div>
-                )}
                 {(viewItem as Gasto).detalleOperativo && (
                   <div>
                     <dt className="text-xs text-gray-500 font-medium mb-1">Detalle operativo</dt>
@@ -867,10 +741,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <div className="flex justify-between gap-4">
                   <dt className="text-xs text-gray-500 font-medium shrink-0">Método de pago</dt>
                   <dd className="text-sm text-gray-900 text-right">{(viewItem as Gasto).metodoPago}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-xs text-gray-500 font-medium shrink-0">Detalle pago</dt>
-                  <dd className="text-sm text-gray-900 text-right">{(viewItem as Gasto).metodoPagoDetalle || '—'}</dd>
                 </div>
                 {(viewItem as Gasto).celularMetodo && (
                   <div className="flex justify-between gap-4">
@@ -925,7 +795,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   {mode === 'gastos' ? 'Observaciones' : 'Comentarios'}
                 </dt>
                 <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
-                  {viewItem.comentarios}
+                  {mode === 'gastos'
+                    ? cleanGastoComentario((viewItem as Gasto).comentarios)
+                    : viewItem.comentarios}
                 </dd>
               </div>
             )}

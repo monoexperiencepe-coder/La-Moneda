@@ -1,14 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useDrawer } from '../../context/DrawerContext';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import Select from '../../components/Common/Select';
+import Modal from '../../components/Common/Modal';
+import Button from '../../components/Common/Button';
 import type { Gasto } from '../../data/types';
 import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
+import { REVISION_USER_LABEL } from '../../config/app';
+import { updateGastoCategoriaManual } from '../../services/gastosService';
 
 /** Tabs por tipo_gasto (Excel migración final + legacy); sin pestaña «Todos». */
 const GASTO_TABS: {
@@ -51,7 +55,7 @@ function gastoEnTab(g: Gasto, tabTipo: string): boolean {
 
 const Gastos: React.FC = () => {
   const navigate = useNavigate();
-  const { gastos, vehicles, deleteGasto } = useRegistrosContext();
+  const { gastos, vehicles, deleteGasto, refreshFromSupabase, toast } = useRegistrosContext();
   const { open } = useDrawer();
 
   const [tabIndex, setTabIndex] = useState<number | null>(null);
@@ -78,6 +82,8 @@ const Gastos: React.FC = () => {
 
   const [chartYear, setChartYear] = useState<string>('');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
+  const [animatedTotal, setAnimatedTotal] = useState(0);
+  const prevTotalRef = useRef(0);
 
   useEffect(() => {
     if (availableYears.length === 0) {
@@ -114,6 +120,31 @@ const Gastos: React.FC = () => {
 
   const totalAnioGrafico = gastosDelAnioGrafico.reduce((s, g) => s + g.monto, 0);
 
+  useEffect(() => {
+    const from = prevTotalRef.current;
+    const to = totalAnioGrafico;
+    if (Math.abs(to - from) < 0.01) {
+      setAnimatedTotal(to);
+      return;
+    }
+    const duration = 420;
+    const start = performance.now();
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      // easeOutCubic para que termine suave
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = from + (to - from) * eased;
+      setAnimatedTotal(v);
+      if (p < 1) rafId = requestAnimationFrame(tick);
+      else prevTotalRef.current = to;
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [totalAnioGrafico]);
+
   const chartData = useMemo(() => {
     return MESES.map((mes) => {
       const month = String(mes.value).padStart(2, '0');
@@ -141,7 +172,12 @@ const Gastos: React.FC = () => {
   }, [gastosTab, historyYear]);
 
   const [filterSubtipoGasto, setFilterSubtipoGasto] = useState('');
-  const [filterReqRevision, setFilterReqRevision] = useState('');
+  const [moveTarget, setMoveTarget] = useState<Gasto | null>(null);
+  const [moveTipo, setMoveTipo] = useState('');
+  const [moveSubtipo, setMoveSubtipo] = useState('');
+  const [moveVehicleId, setMoveVehicleId] = useState<string>('');
+  const [moveMotivo, setMoveMotivo] = useState('');
+  const [moveSaving, setMoveSaving] = useState(false);
 
   const subtipoGastoOptions = useMemo(() => {
     const s = new Set<string>();
@@ -152,19 +188,11 @@ const Gastos: React.FC = () => {
     return [{ value: '', label: 'Todos subtipo' }, ...[...s].sort().map((v) => ({ value: v, label: v }))];
   }, [gastosHistorialFiltrados]);
 
-  const reqRevisionOptions = [
-    { value: '', label: 'Todas (revisión)' },
-    { value: 'si', label: 'Requiere revisión' },
-    { value: 'no', label: 'Sin marca de revisión' },
-  ];
-
   const gastosParaTabla = useMemo(() => {
     let d = gastosHistorialFiltrados;
     if (filterSubtipoGasto) d = d.filter((g) => (g.subtipo_gasto ?? '') === filterSubtipoGasto);
-    if (filterReqRevision === 'si') d = d.filter((g) => g.requiere_revision === true);
-    if (filterReqRevision === 'no') d = d.filter((g) => g.requiere_revision !== true);
     return d;
-  }, [gastosHistorialFiltrados, filterSubtipoGasto, filterReqRevision]);
+  }, [gastosHistorialFiltrados, filterSubtipoGasto]);
 
   const totalFlota = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
   const resumenPorCategoria = useMemo(
@@ -177,6 +205,114 @@ const Gastos: React.FC = () => {
       ),
     [gastos],
   );
+
+  const categoriaOptions = useMemo(
+    () => GASTO_TABS.map((t) => ({ value: t.tipo_gasto, label: `${t.emoji} ${t.label}` })),
+    [],
+  );
+
+  const subtipoOptionsForMove = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of gastos) {
+      const sameTipo = tipoGastoEffective(g) === moveTipo;
+      if (!sameTipo) continue;
+      const s = g.subtipo_gasto?.trim();
+      if (s) set.add(s);
+    }
+    if (moveTarget?.subtipo_gasto?.trim()) set.add(moveTarget.subtipo_gasto.trim());
+    return [{ value: '', label: 'Sin subtipo' }, ...[...set].sort().map((s) => ({ value: s, label: s }))];
+  }, [gastos, moveTipo, moveTarget]);
+
+  const vehicleOptions = useMemo(
+    () => [
+      { value: '', label: 'Seleccionar vehículo' },
+      ...vehicles.map((v) => ({ value: String(v.id), label: `${v.marca} ${v.modelo} (${v.placa})` })),
+    ],
+    [vehicles],
+  );
+
+  const openMoveModal = (g: Gasto) => {
+    setMoveTarget(g);
+    setMoveTipo(tipoGastoEffective(g) ?? 'gastos_globales');
+    setMoveSubtipo(g.subtipo_gasto?.trim() ?? '');
+    setMoveVehicleId(g.vehicleId != null ? String(g.vehicleId) : '');
+    setMoveMotivo('');
+  };
+
+  const closeMoveModal = () => {
+    if (moveSaving) return;
+    setMoveTarget(null);
+    setMoveMotivo('');
+  };
+
+  const isOperativoTarget = moveTipo === 'operativo_vehiculo';
+  const currentEffectiveTipo = moveTarget ? (tipoGastoEffective(moveTarget) ?? 'gastos_globales') : '';
+  const currentSubtipo = moveTarget?.subtipo_gasto?.trim() ?? '';
+  const currentVehicle = moveTarget?.vehicleId != null ? String(moveTarget.vehicleId) : '';
+  const hasAnyChange = moveTarget != null
+    && (
+      moveTipo !== currentEffectiveTipo
+      || moveSubtipo !== currentSubtipo
+      || (isOperativoTarget ? moveVehicleId : '') !== (currentEffectiveTipo === 'operativo_vehiculo' ? currentVehicle : '')
+    );
+  const moveDisabled = !moveTarget
+    || moveSaving
+    || !hasAnyChange
+    || (isOperativoTarget && !moveVehicleId);
+
+  const handleConfirmMoveCategoria = async () => {
+    if (!moveTarget) return;
+    if (moveDisabled) return;
+    const toVehicleId = isOperativoTarget ? Number(moveVehicleId) : null;
+    if (isOperativoTarget && !Number.isFinite(toVehicleId)) return;
+    const changedAt = new Date().toISOString();
+    const prevExtra = (moveTarget.excelExtra && typeof moveTarget.excelExtra === 'object')
+      ? moveTarget.excelExtra
+      : {};
+    const prevHistRaw = (prevExtra as Record<string, unknown>).correcciones_categoria;
+    const prevHist = Array.isArray(prevHistRaw) ? prevHistRaw : [];
+    const correction = {
+      from_tipo_gasto: moveTarget.tipo_gasto ?? null,
+      to_tipo_gasto: moveTipo,
+      from_subtipo_gasto: moveTarget.subtipo_gasto ?? null,
+      to_subtipo_gasto: moveSubtipo || null,
+      from_vehicle_id: moveTarget.vehicleId ?? null,
+      to_vehicle_id: isOperativoTarget ? toVehicleId : null,
+      motivo: moveMotivo.trim() || null,
+      changed_at: changedAt,
+    };
+    const excelExtraNext: Record<string, unknown> = {
+      ...(prevExtra as Record<string, unknown>),
+      correcciones_categoria: [...prevHist, correction],
+    };
+
+    setMoveSaving(true);
+    try {
+      const updated = await updateGastoCategoriaManual(moveTarget.id, {
+        tipo_gasto: moveTipo,
+        subtipo_gasto: moveSubtipo || null,
+        vehicle_id: isOperativoTarget ? toVehicleId : null,
+        es_global_flota: !isOperativoTarget,
+        clasificacion_manual: true,
+        requiere_revision: false,
+        revisado_at: changedAt,
+        revisado_por: REVISION_USER_LABEL,
+        origen_clasificacion: 'correccion_manual_ui',
+        excel_extra: excelExtraNext,
+      });
+      if (!updated) {
+        toast.error('No se pudo mover la categoría', 'No se logró actualizar el gasto en Supabase.');
+        return;
+      }
+      toast.success('Categoría actualizada', 'El gasto se movió correctamente.');
+      await refreshFromSupabase();
+      closeMoveModal();
+    } catch (e) {
+      toast.error('Error al mover categoría', e instanceof Error ? e.message : 'Error inesperado.');
+    } finally {
+      setMoveSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -242,22 +378,28 @@ const Gastos: React.FC = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
-          <p className="text-xs text-red-600 font-medium mb-1">Total HOY ({tab.label})</p>
-          <p className="text-2xl font-bold text-red-700">{formatCurrency(todayTotal)}</p>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+        <div className="mb-3 border-b border-gray-100 pb-3">
+          <div className="flex items-center justify-center">
+            <span
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-base font-extrabold text-slate-800 shadow-sm tracking-tight"
+            >
+              <span>{chartYear ? `Total ${chartYear}` : 'Total año'}:</span>
+              <span className="font-mono tabular-nums text-emerald-900 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-0.5 shadow-inner">
+                {formatCurrency(animatedTotal)}
+              </span>
+            </span>
+          </div>
+          {tab.tipo_gasto !== 'planilla_laboral' && (
+            <div className="mt-2 flex items-center justify-center">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 border border-red-100">
+                Hoy: {formatCurrency(todayTotal)}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-soft">
-          <p className="text-xs text-gray-500 font-medium mb-1">
-            {chartYear ? `Total ${chartYear}` : 'Total año'} ({tab.label})
-          </p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalAnioGrafico)}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Mismo año que el gráfico inferior · pestaña actual</p>
-        </div>
-      </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
           <div>
             <h3 className="text-sm font-bold text-gray-700">Gastos por Mes</h3>
             <p className="text-xs text-gray-500 mt-1">
@@ -272,7 +414,7 @@ const Gastos: React.FC = () => {
             <p className="text-xs text-gray-400">Sin fechas para graficar en esta pestaña</p>
           )}
         </div>
-        <div className="h-48">
+        <div className="h-44">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 0, right: 5, left: -15, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
@@ -294,33 +436,25 @@ const Gastos: React.FC = () => {
       </div>
 
       <div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-2">
           <h2 className="text-base font-bold text-gray-800">Historial · {tab.label}</h2>
-          <div className="w-full sm:w-44">
-            <Select
-              label="Año historial"
-              options={historyYearOptions}
-              value={historyYear}
-              onChange={setHistoryYear}
-            />
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap mb-3">
-          <div className="w-full sm:w-52">
-            <Select
-              label="subtipo_gasto"
-              options={subtipoGastoOptions}
-              value={filterSubtipoGasto}
-              onChange={setFilterSubtipoGasto}
-            />
-          </div>
-          <div className="w-full sm:w-56">
-            <Select
-              label="Revisión"
-              options={reqRevisionOptions}
-              value={filterReqRevision}
-              onChange={setFilterReqRevision}
-            />
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2 sm:items-end">
+            <div className="w-full sm:w-40">
+              <Select
+                label="Año"
+                options={historyYearOptions}
+                value={historyYear}
+                onChange={setHistoryYear}
+              />
+            </div>
+            <div className="w-full sm:w-56">
+              <Select
+                label="Subtipo"
+                options={subtipoGastoOptions}
+                value={filterSubtipoGasto}
+                onChange={setFilterSubtipoGasto}
+              />
+            </div>
           </div>
         </div>
         <RegistrosTable
@@ -329,10 +463,89 @@ const Gastos: React.FC = () => {
           vehicles={vehicles}
           onDeleteGasto={deleteGasto}
           showClasificacionFinanciera
+          onMoveCategoriaGasto={openMoveModal}
         />
       </div>
         </>
       )}
+
+      <Modal
+        isOpen={moveTarget != null}
+        onClose={closeMoveModal}
+        title="Mover gasto de categoría"
+        size="md"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={closeMoveModal} disabled={moveSaving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmMoveCategoria}
+              loading={moveSaving}
+              disabled={moveDisabled}
+            >
+              Confirmar movimiento
+            </Button>
+          </>
+        )}
+      >
+        {!moveTarget ? null : (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-1.5">
+              <p className="text-sm text-gray-800">
+                <span className="font-semibold">Descripción:</span> {moveTarget.motivo || moveTarget.comentarios || 'Sin descripción'}
+              </p>
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Monto:</span> {formatCurrency(moveTarget.monto)}
+              </p>
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Categoría actual:</span> {currentEffectiveTipo}
+              </p>
+            </div>
+
+            <Select
+              label="Nueva categoría"
+              options={categoriaOptions}
+              value={moveTipo}
+              onChange={setMoveTipo}
+            />
+
+            <Select
+              label="Subtipo (opcional)"
+              options={subtipoOptionsForMove}
+              value={moveSubtipo}
+              onChange={setMoveSubtipo}
+            />
+
+            {isOperativoTarget && (
+              <Select
+                label="Vehículo (obligatorio para operativo)"
+                options={vehicleOptions}
+                value={moveVehicleId}
+                onChange={setMoveVehicleId}
+              />
+            )}
+
+            <div>
+              <label htmlFor="motivo-cambio-categoria" className="label">Motivo del cambio (opcional)</label>
+              <textarea
+                id="motivo-cambio-categoria"
+                value={moveMotivo}
+                onChange={(e) => setMoveMotivo(e.target.value)}
+                className="input-field min-h-20"
+                placeholder="Ej: Revisión manual por validación contable."
+              />
+            </div>
+
+            {isOperativoTarget && !moveVehicleId && (
+              <p className="text-xs text-amber-700">Debes seleccionar un vehículo para categoría operativo_vehiculo.</p>
+            )}
+            {!hasAnyChange && (
+              <p className="text-xs text-gray-500">No hay cambios para guardar.</p>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

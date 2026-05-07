@@ -1,32 +1,23 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Download } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import Card from '../../components/Common/Card';
-import Select from '../../components/Common/Select';
-import Input from '../../components/Common/Input';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatUSD, todayStr, toDateOnlyString } from '../../utils/formatting';
+import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
-import type {
-  Vehicle,
-  Ingreso,
-  Gasto,
-  KilometrajeRegistro,
-  ControlFecha,
-  InversionVehiculo,
-  CajaNegocioVehiculo,
-} from '../../data/types';
-import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
-import {
-  calculateFinancialKPIsInPeriod,
-  legacyTotalGastosOperativosEnPeriodo,
-  rollupsInteligenteFlota,
-  vehiculosMasRentables,
-  vehiculosMayorGastoMotor,
-  vehiculosMayorGastoFinanciero,
-  computeFinancialFleetAlerts,
-} from '../../utils/financialFleetAnalytics';
+import { calculateKPIs, calculateFinancialKPIs } from '../../utils/calculations';
+
+type ResumenPreset = 'mes_actual' | 'mes_anterior' | 'anio_actual' | 'todo' | 'personalizado';
+
+const CATEGORIA_MAP = [
+  { key: 'operativo_vehiculo', label: 'Operativos' },
+  { key: 'administrativo_empresa', label: 'Administrativos' },
+  { key: 'financiero_prestamo', label: 'Financieros' },
+  { key: 'planilla_laboral', label: 'Planilla' },
+  { key: 'inversion_compra', label: 'Inversiones' },
+  { key: 'personal_socios_familiares', label: 'Personales' },
+  { key: 'gastos_globales', label: 'Globales' },
+] as const;
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -36,845 +27,328 @@ function monthRange(year: number, month: number): { desde: string; hasta: string
   return { desde, hasta };
 }
 
-function diffDaysToday(dateStr: string): number {
-  const today = new Date(todayStr() + 'T00:00:00').getTime();
-  const target = new Date(dateStr + 'T00:00:00').getTime();
-  return Math.round((target - today) / (1000 * 60 * 60 * 24));
+function monthLabel(month: number): string {
+  const names = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  return names[Math.max(1, Math.min(12, month)) - 1];
 }
 
-export interface ResumenVehiculoFila {
-  vehicle: Vehicle;
-  totalIngresos: number;
-  totalGastos: number;
-  /** Ingresos − gastos operativos (sin caja negocio). */
-  utilidad: number;
-  totalCajaNegocio: number;
-  nIngresos: number;
-  nGastos: number;
-  nCajaNegocio: number;
-  ultimoKm: number | null;
-  vencidos: number;
-  proximos30: number;
-  /** Costo histórico de adquisición (inversión); no depende del periodo de ingresos/gastos. */
-  inversionTotalUsd: number | null;
-}
-
-/** Cruza filas con `vehicle_id` bigint / number / string sin mismatch por tipo en runtime. */
-function vehicleIdMatch(rowVid: number | null | undefined, vehId: number): boolean {
-  if (rowVid == null) return false;
-  return Number(rowVid) === Number(vehId);
-}
-
-function inversionUsdForVehicle(inversiones: InversionVehiculo[], vehId: number): number | null {
-  const list = inversiones.filter((inv) => vehicleIdMatch(inv.vehicleId, vehId));
-  if (!list.length) return null;
-  return list.reduce((s, inv) => s + (inv.totalInversionUsd ?? 0), 0);
-}
-
-function buildRows(
-  vehicles: Vehicle[],
-  ingresos: Ingreso[],
-  gastos: Gasto[],
-  cajaNegocio: CajaNegocioVehiculo[],
-  kilometrajes: KilometrajeRegistro[],
-  controlFechas: ControlFecha[],
-  inversiones: InversionVehiculo[],
-  desde: string,
-  hasta: string,
-): ResumenVehiculoFila[] {
-  const inPeriod = (fecha: string) => {
-    const d = toDateOnlyString(fecha);
-    return d !== '' && d >= desde && d <= hasta;
-  };
-
-  const gastosOp = gastosOperativosSolamente(gastos);
-
-  return vehicles.map((v) => {
-    const ingFiltrados = ingresos.filter((i) => vehicleIdMatch(i.vehicleId, v.id) && inPeriod(i.fecha));
-    const gasFiltrados = gastosOp.filter((g) => vehicleIdMatch(g.vehicleId, v.id) && inPeriod(g.fecha));
-    const cajaFiltrados = cajaNegocio.filter((c) => vehicleIdMatch(c.vehicleId, v.id) && inPeriod(c.fecha));
-
-    const totalIngresos = ingFiltrados.reduce((s, i) => s + ingresoMontoPEN(i), 0);
-    const totalGastos = gasFiltrados.reduce((s, g) => s + g.monto, 0);
-    const totalCajaNegocio = cajaFiltrados.reduce((s, c) => s + c.monto, 0);
-
-    const kmRows = kilometrajes
-      .filter((k) => vehicleIdMatch(k.vehicleId, v.id) && toDateOnlyString(k.fecha) <= hasta)
-      .sort((a, b) => {
-        const fd = b.fecha.localeCompare(a.fecha);
-        if (fd !== 0) return fd;
-        return b.id - a.id;
-      });
-    const ultimoKm = kmRows[0]?.kilometraje ?? null;
-
-    const fechasV = controlFechas.filter((c) => vehicleIdMatch(c.vehicleId, v.id));
-    let vencidos = 0;
-    let proximos30 = 0;
-    for (const c of fechasV) {
-      if (esControlFechaSinAlertaVencimiento(c.tipo)) continue;
-      const d = diffDaysToday(c.fechaVencimiento);
-      if (d < 0) vencidos++;
-      else if (d <= 30) proximos30++;
+function getRangeByPreset(
+  preset: ResumenPreset,
+  customYear: number,
+  customMonth: number | 'all',
+): { desde: string | null; hasta: string | null; label: string } {
+  const t = todayStr();
+  const yy = Number(t.slice(0, 4));
+  const mm = Number(t.slice(5, 7));
+  if (preset === 'mes_actual') {
+    const r = monthRange(yy, mm);
+    return { ...r, label: 'Mes actual' };
+  }
+  if (preset === 'mes_anterior') {
+    const pm = mm === 1 ? 12 : mm - 1;
+    const py = mm === 1 ? yy - 1 : yy;
+    const r = monthRange(py, pm);
+    return { ...r, label: 'Mes anterior' };
+  }
+  if (preset === 'anio_actual') {
+    return { desde: `${yy}-01-01`, hasta: `${yy}-12-31`, label: 'Año actual' };
+  }
+  if (preset === 'personalizado') {
+    if (customMonth === 'all') {
+      return {
+        desde: `${customYear}-01-01`,
+        hasta: `${customYear}-12-31`,
+        label: `Personalizado: ${customYear} (todo el año)`,
+      };
     }
-
-    return {
-      vehicle: v,
-      totalIngresos,
-      totalGastos,
-      utilidad: totalIngresos - totalGastos,
-      totalCajaNegocio,
-      nIngresos: ingFiltrados.length,
-      nGastos: gasFiltrados.length,
-      nCajaNegocio: cajaFiltrados.length,
-      ultimoKm,
-      vencidos,
-      proximos30,
-      inversionTotalUsd: inversionUsdForVehicle(inversiones, v.id),
-    };
-  });
+    const r = monthRange(customYear, customMonth);
+    return { ...r, label: `Personalizado: ${monthLabel(customMonth)} ${customYear}` };
+  }
+  return { desde: null, hasta: null, label: 'Todo' };
 }
 
-const PERIODO_TIPO = [
-  { value: 'mes', label: 'Mes calendario' },
-  { value: 'rango', label: 'Rango de fechas' },
-] as const;
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
+function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: boolean): string {
+  const t = (raw ?? '').trim();
+  if (!t) return hasVehicle ? 'operativo_vehiculo' : 'gastos_globales';
+  const legacyMap: Record<string, string> = {
+    financiero: 'financiero_prestamo',
+    inversion: 'inversion_compra',
+    personal_socios: 'personal_socios_familiares',
+    operativo_flota_global: 'gastos_globales',
+  };
+  return legacyMap[t] ?? t;
 }
-
-/** Suma días a una fecha YYYY-MM-DD en calendario local. */
-function addDaysLocal(iso: string, deltaDays: number): string {
-  const [yy, mm, dd] = iso.split('-').map(Number);
-  const d = new Date(yy, (mm ?? 1) - 1, dd ?? 1);
-  d.setDate(d.getDate() + deltaDays);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-const MESES = [
-  { value: '1', label: 'Enero' },
-  { value: '2', label: 'Febrero' },
-  { value: '3', label: 'Marzo' },
-  { value: '4', label: 'Abril' },
-  { value: '5', label: 'Mayo' },
-  { value: '6', label: 'Junio' },
-  { value: '7', label: 'Julio' },
-  { value: '8', label: 'Agosto' },
-  { value: '9', label: 'Septiembre' },
-  { value: '10', label: 'Octubre' },
-  { value: '11', label: 'Noviembre' },
-  { value: '12', label: 'Diciembre' },
-];
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, cajaNegocioVehiculo, kilometrajes, controlFechas, inversionesVehiculo } =
-    useRegistrosContext();
-
-  const now = new Date();
-  const [periodMode, setPeriodMode] = useState<'mes' | 'rango'>('mes');
-  const [year, setYear] = useState(String(now.getFullYear()));
-  const [month, setMonth] = useState(String(now.getMonth() + 1));
-  const [filterVehicleId, setFilterVehicleId] = useState('');
-
-  const [rangeDesde, setRangeDesde] = useState(() => monthRange(now.getFullYear(), now.getMonth() + 1).desde);
-  const [rangeHasta, setRangeHasta] = useState(() => monthRange(now.getFullYear(), now.getMonth() + 1).hasta);
-
-  const y = Number(year) || now.getFullYear();
-  const m = Math.min(12, Math.max(1, Number(month) || 1));
-
-  const { desde, hasta } = useMemo(() => {
-    if (periodMode === 'mes') return monthRange(y, m);
-    let d = rangeDesde.trim();
-    let h = rangeHasta.trim();
-    if (!d) d = todayStr();
-    if (!h) h = todayStr();
-    if (d > h) [d, h] = [h, d];
-    return { desde: d, hasta: h };
-  }, [periodMode, y, m, rangeDesde, rangeHasta]);
-
-  /** Toda la flota: el Excel RESUMEN suele incluir unidades aunque estén inactivas si tienen movimiento. */
-  const baseVehicles = useMemo(
-    () => [...vehicles].sort((a, b) => a.id - b.id),
-    [vehicles],
+  const { ingresos, gastos, vehicles } = useRegistrosContext();
+  const [preset, setPreset] = useState<ResumenPreset>('mes_actual');
+  const current = todayStr();
+  const currentYear = Number(current.slice(0, 4));
+  const currentMonth = Number(current.slice(5, 7));
+  const [customYear, setCustomYear] = useState<number>(currentYear);
+  const [customMonth, setCustomMonth] = useState<number | 'all'>(currentMonth);
+  const range = useMemo(
+    () => getRangeByPreset(preset, customYear, customMonth),
+    [preset, customYear, customMonth],
   );
 
-  const vehiclesForTable = useMemo(() => {
-    if (!filterVehicleId) return baseVehicles;
-    const id = Number(filterVehicleId);
-    return baseVehicles.filter((v) => v.id === id);
-  }, [baseVehicles, filterVehicleId]);
-
-  const rows = useMemo(
-    () =>
-      buildRows(
-        vehiclesForTable,
-        ingresos,
-        gastos,
-        cajaNegocioVehiculo,
-        kilometrajes,
-        controlFechas,
-        inversionesVehiculo,
-        desde,
-        hasta,
-      ),
-    [vehiclesForTable, ingresos, gastos, cajaNegocioVehiculo, kilometrajes, controlFechas, inversionesVehiculo, desde, hasta],
-  );
-
-  const ingresosScope = useMemo(() => {
-    if (!filterVehicleId) return ingresos;
-    const id = Number(filterVehicleId);
-    return ingresos.filter((i) => Number(i.vehicleId) === id);
-  }, [ingresos, filterVehicleId]);
-
-  const gastosScope = useMemo(() => {
-    if (!filterVehicleId) return gastos;
-    const id = Number(filterVehicleId);
-    return gastos.filter((g) => Number(g.vehicleId) === id);
-  }, [gastos, filterVehicleId]);
-
-  const intelKpiPeriodo = useMemo(
-    () => calculateFinancialKPIsInPeriod(ingresosScope, gastosScope, desde, hasta),
-    [ingresosScope, gastosScope, desde, hasta],
-  );
-
-  const legacyGastosOpPeriodo = useMemo(
-    () => legacyTotalGastosOperativosEnPeriodo(gastosScope, desde, hasta),
-    [gastosScope, desde, hasta],
-  );
-
-  const totalIngresosPeriodoScope =
-    intelKpiPeriodo.utilidad_operativa + intelKpiPeriodo.gastos_operativos;
-
-  const rollupsIntel = useMemo(
-    () => rollupsInteligenteFlota(vehiclesForTable, ingresos, gastos, desde, hasta),
-    [vehiclesForTable, ingresos, gastos, desde, hasta],
-  );
-
-  const rollupsConMovimiento = useMemo(
-    () =>
-      rollupsIntel.filter(
-        (r) =>
-          r.totalIngresos > 0 ||
-          r.kpi.gastos_operativos > 0 ||
-          r.gastoMotor > 0 ||
-          r.kpi.gastos_financieros > 0 ||
-          r.kpi.gastos_administrativos > 0,
-      ),
-    [rollupsIntel],
-  );
-
-  const topRentables = useMemo(() => vehiculosMasRentables(rollupsConMovimiento, 5), [rollupsConMovimiento]);
-  const topMotor = useMemo(() => vehiculosMayorGastoMotor(rollupsConMovimiento, 5), [rollupsConMovimiento]);
-  const topFin = useMemo(() => vehiculosMayorGastoFinanciero(rollupsConMovimiento, 5), [rollupsConMovimiento]);
-  const alertasFlota = useMemo(() => computeFinancialFleetAlerts(rollupsIntel), [rollupsIntel]);
-
-  const totales = useMemo(() => {
-    return rows.reduce(
-      (acc, r) => ({
-        totalIngresos: acc.totalIngresos + r.totalIngresos,
-        totalGastos: acc.totalGastos + r.totalGastos,
-        utilidad: acc.utilidad + r.utilidad,
-        totalCajaNegocio: acc.totalCajaNegocio + r.totalCajaNegocio,
-        nIngresos: acc.nIngresos + r.nIngresos,
-        nGastos: acc.nGastos + r.nGastos,
-        nCajaNegocio: acc.nCajaNegocio + r.nCajaNegocio,
-        vencidos: acc.vencidos + r.vencidos,
-        proximos30: acc.proximos30 + r.proximos30,
-        inversionUsdSum: acc.inversionUsdSum + (r.inversionTotalUsd ?? 0),
-      }),
-      {
-        totalIngresos: 0,
-        totalGastos: 0,
-        utilidad: 0,
-        totalCajaNegocio: 0,
-        nIngresos: 0,
-        nGastos: 0,
-        nCajaNegocio: 0,
-        vencidos: 0,
-        proximos30: 0,
-        inversionUsdSum: 0,
-      },
-    );
-  }, [rows]);
-
-  const yearsOptions = useMemo(() => {
-    const cur = now.getFullYear();
-    let minY = cur - 15;
-    let maxY = cur + 1;
-    const bump = (s: string) => {
-      const d = toDateOnlyString(s);
-      if (d.length >= 4) {
-        const y = Number(d.slice(0, 4));
-        if (Number.isFinite(y)) {
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-      }
-    };
-    ingresos.forEach((i) => bump(i.fecha));
-    gastos.forEach((g) => bump(g.fecha));
-    cajaNegocioVehiculo.forEach((c) => bump(c.fecha));
-    const list: { value: string; label: string }[] = [];
-    for (let yy = maxY; yy >= minY; yy--) list.push({ value: String(yy), label: String(yy) });
-    return list;
-  }, [now, ingresos, gastos, cajaNegocioVehiculo]);
-
-  const vehicleFilterOptions = [
-    { value: '', label: 'Todos los vehículos' },
-    ...baseVehicles.map((v) => ({
-      value: String(v.id),
-      label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
-    })),
-  ];
-
-  const exportCsv = useCallback(() => {
-    const header = [
-      'ID',
-      'Placa',
-      'Marca',
-      'Modelo',
-      'Ingresos_S/',
-      'Gastos_S/',
-      'Utilidad_operativa_S/',
-      'Caja_negocio_S/',
-      'Inversion_USD_hist',
-      'N_ingresos',
-      'N_gastos',
-      'N_caja_negocio',
-      'Ultimo_km',
-      'Vencidos',
-      'Proximos_30d',
-    ];
-    const lines = [header.join(';')];
-    for (const r of rows) {
-      lines.push(
-        [
-          r.vehicle.id,
-          r.vehicle.placa,
-          r.vehicle.marca,
-          r.vehicle.modelo,
-          r.totalIngresos.toFixed(2),
-          r.totalGastos.toFixed(2),
-          r.utilidad.toFixed(2),
-          r.totalCajaNegocio.toFixed(2),
-          r.inversionTotalUsd != null ? r.inversionTotalUsd.toFixed(2) : '',
-          r.nIngresos,
-          r.nGastos,
-          r.nCajaNegocio,
-          r.ultimoKm ?? '',
-          r.vencidos,
-          r.proximos30,
-        ].join(';'),
-      );
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const i of ingresos) {
+      const y = Number(toDateOnlyString(i.fecha)?.slice(0, 4));
+      if (Number.isFinite(y)) years.add(y);
     }
-    lines.push(
-      [
-        'TOTAL',
-        '',
-        '',
-        '',
-        totales.totalIngresos.toFixed(2),
-        totales.totalGastos.toFixed(2),
-        totales.utilidad.toFixed(2),
-        totales.totalCajaNegocio.toFixed(2),
-        totales.inversionUsdSum.toFixed(2),
-        totales.nIngresos,
-        totales.nGastos,
-        totales.nCajaNegocio,
-        '',
-        totales.vencidos,
-        totales.proximos30,
-      ].join(';'),
-    );
-    const bom = '\ufeff';
-    const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `resumen_${desde}_${hasta}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }, [rows, totales, desde, hasta]);
+    for (const g of gastos) {
+      const y = Number(toDateOnlyString(g.fecha)?.slice(0, 4));
+      if (Number.isFinite(y)) years.add(y);
+    }
+    years.add(currentYear);
+    return [...years].sort((a, b) => b - a);
+  }, [ingresos, gastos, currentYear]);
 
-  const periodoLabel =
-    periodMode === 'mes'
-      ? `${MESES.find((x) => x.value === String(m))?.label ?? m} ${y}`
-      : `${desde} → ${hasta}`;
-
-  const applyPresetRango = (preset: 'este_mes' | 'mes_anterior' | 'ultimos_30' | 'anio_calendario') => {
-    const t = todayStr();
-    const ty = Number(t.slice(0, 4));
-    const tm = Number(t.slice(5, 7));
-    if (preset === 'este_mes') {
-      const mr = monthRange(ty, tm);
-      setRangeDesde(mr.desde);
-      setRangeHasta(mr.hasta);
-      return;
-    }
-    if (preset === 'mes_anterior') {
-      let pm = tm - 1;
-      let py = ty;
-      if (pm < 1) {
-        pm = 12;
-        py -= 1;
-      }
-      const mr = monthRange(py, pm);
-      setRangeDesde(mr.desde);
-      setRangeHasta(mr.hasta);
-      return;
-    }
-    if (preset === 'ultimos_30') {
-      setRangeHasta(t);
-      setRangeDesde(addDaysLocal(t, -29));
-      return;
-    }
-    /* Año natural según la fecha "desde" (si eliges otro año, ajústalo en el date picker antes). */
-    const yRef = Number((rangeDesde || t).slice(0, 4));
-    setRangeDesde(`${yRef}-01-01`);
-    setRangeHasta(`${yRef}-12-31`);
+  const inPeriod = (fecha: string) => {
+    const d = toDateOnlyString(fecha);
+    if (!d) return false;
+    if (!range.desde || !range.hasta) return true;
+    return d >= range.desde && d <= range.hasta;
   };
+
+  const ingresosP = useMemo(() => ingresos.filter((i) => inPeriod(i.fecha)), [ingresos, range]);
+  const gastosP = useMemo(() => gastos.filter((g) => inPeriod(g.fecha)), [gastos, range]);
+
+  const totalIngresos = useMemo(() => ingresosP.reduce((s, i) => s + ingresoMontoPEN(i), 0), [ingresosP]);
+  const totalGastos = useMemo(() => gastosP.reduce((s, g) => s + g.monto, 0), [gastosP]);
+  const resultadoNeto = totalIngresos - totalGastos;
+  const margenPct = totalIngresos > 0 ? (resultadoNeto / totalIngresos) * 100 : null;
+
+  const hasData = ingresosP.length > 0 || gastosP.length > 0;
+
+  const distribucion = useMemo(() => {
+    const total = totalGastos;
+    const acc: Record<string, number> = Object.fromEntries(CATEGORIA_MAP.map((c) => [c.key, 0]));
+    for (const g of gastosP) {
+      const k = normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null);
+      if (acc[k] != null) acc[k] += g.monto;
+    }
+    return CATEGORIA_MAP.map((c) => {
+      const monto = acc[c.key] ?? 0;
+      const pct = total > 0 ? (monto / total) * 100 : 0;
+      return { key: c.key, label: c.label, monto, pct };
+    }).sort((a, b) => b.monto - a.monto);
+  }, [gastosP, totalGastos]);
+
+  const byKey = Object.fromEntries(distribucion.map((d) => [d.key, d.monto]));
+  const alertas = useMemo(() => {
+    const out: { tone: 'danger' | 'warning' | 'success'; text: string }[] = [];
+    if (resultadoNeto < 0) out.push({ tone: 'danger', text: 'Resultado negativo' });
+    if (totalIngresos > 0 && (byKey.financiero_prestamo ?? 0) > totalIngresos * 0.3) {
+      out.push({ tone: 'danger', text: 'Gasto financiero alto' });
+    }
+    if (totalIngresos > 0 && (byKey.planilla_laboral ?? 0) > totalIngresos * 0.25) {
+      out.push({ tone: 'warning', text: 'Planilla elevada' });
+    }
+    if (totalGastos > 0 && (byKey.gastos_globales ?? 0) > totalGastos * 0.1) {
+      out.push({ tone: 'warning', text: 'Hay gastos globales por revisar' });
+    }
+    if (!out.length) out.push({ tone: 'success', text: 'Sin alertas críticas' });
+    return out;
+  }, [resultadoNeto, totalIngresos, totalGastos, byKey]);
+
+  const topOperativosVehiculo = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const g of gastosP) {
+      const k = normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null);
+      if (k !== 'operativo_vehiculo') continue;
+      if (g.vehicleId == null) continue;
+      map.set(g.vehicleId, (map.get(g.vehicleId) ?? 0) + g.monto);
+    }
+    return [...map.entries()]
+      .map(([vehicleId, monto]) => {
+        const v = vehicles.find((x) => x.id === vehicleId);
+        const name = v ? `${v.marca} ${v.modelo} (${v.placa})` : `Unidad #${vehicleId}`;
+        return { vehicleId, name, monto };
+      })
+      .sort((a, b) => b.monto - a.monto)
+      .slice(0, 5);
+  }, [gastosP, vehicles]);
+
+  const legacy = useMemo(() => calculateKPIs(ingresosP, gastosP, []), [ingresosP, gastosP]);
+  const intel = useMemo(() => calculateFinancialKPIs(ingresosP, gastosP), [ingresosP, gastosP]);
+
+  const cardValue = (v: number | null) =>
+    hasData ? (v == null ? 'Sin datos del periodo' : formatCurrency(v)) : 'Sin datos del periodo';
+  const cardPct = (v: number | null) =>
+    hasData && v != null ? `${v.toFixed(1)}%` : 'Sin datos del periodo';
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/finanzas')}
-            className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 shrink-0"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">📋 Resumen</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Por periodo y vehículo — ingresos, <strong>gastos operativos</strong> (sin «caja negocio»), utilidad operativa
-              (ingresos − esos gastos), y <strong>caja negocio</strong> aparte. La columna <strong>Inversión USD</strong> es
-              costo histórico de adquisición (no es gasto del periodo).
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={exportCsv}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold shadow-sm"
+          onClick={() => navigate('/finanzas')}
+          className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 shrink-0"
         >
-          <Download size={16} />
-          Exportar CSV
+          <ChevronLeft size={20} />
         </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">📋 Resumen Ejecutivo</h1>
+          <p className="text-sm text-gray-500">Vista para decisión rápida del dueño de flota.</p>
+        </div>
       </div>
 
-      <Card title="Filtros" subtitle={`Periodo activo: ${desde} → ${hasta}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Select
-            label="Tipo de periodo"
-            options={[...PERIODO_TIPO]}
-            value={periodMode}
-            onChange={(v) => {
-              const mode = v as 'mes' | 'rango';
-              setPeriodMode(mode);
-              if (mode === 'rango') {
-                const mr = monthRange(y, m);
-                setRangeDesde(mr.desde);
-                setRangeHasta(mr.hasta);
-              }
-            }}
-          />
-          {periodMode === 'mes' ? (
-            <>
-              <Select label="Año" options={yearsOptions} value={year} onChange={setYear} />
-              <Select label="Mes" options={MESES} value={month} onChange={setMonth} />
-            </>
-          ) : (
-            <>
-              <Input
-                label="Desde"
-                type="date"
-                value={rangeDesde}
-                onChange={(e) => setRangeDesde(e.target.value)}
-              />
-              <Input
-                label="Hasta"
-                type="date"
-                value={rangeHasta}
-                onChange={(e) => setRangeHasta(e.target.value)}
-              />
-            </>
-          )}
-          <Select
-            label="Vehículo"
-            options={vehicleFilterOptions}
-            value={filterVehicleId}
-            onChange={setFilterVehicleId}
-          />
+      <Card title="Periodo" subtitle={`Vista: ${range.label}${range.desde && range.hasta ? ` · ${range.desde} → ${range.hasta}` : ''}`}>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'mes_actual', label: 'Mes actual' },
+            { id: 'mes_anterior', label: 'Mes anterior' },
+            { id: 'anio_actual', label: 'Año actual' },
+            { id: 'todo', label: 'Todo' },
+            { id: 'personalizado', label: 'Personalizado' },
+          ].map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPreset(p.id as ResumenPreset)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${
+                preset === p.id
+                  ? 'bg-primary-50 border-primary-300 text-primary-700'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
-
-        {periodMode === 'rango' && (
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <span className="text-xs font-medium text-gray-500 mr-1">Atajos:</span>
-            <button
-              type="button"
-              onClick={() => applyPresetRango('este_mes')}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-violet-50 hover:border-violet-200 font-medium text-gray-700"
+        {preset === 'personalizado' && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select
+              className="input-field"
+              value={customYear}
+              onChange={(e) => setCustomYear(Number(e.target.value))}
             >
-              Este mes
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPresetRango('mes_anterior')}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-violet-50 hover:border-violet-200 font-medium text-gray-700"
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  Año {y}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input-field"
+              value={customMonth}
+              onChange={(e) => setCustomMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
             >
-              Mes anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPresetRango('ultimos_30')}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-violet-50 hover:border-violet-200 font-medium text-gray-700"
-            >
-              Últimos 30 días
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPresetRango('anio_calendario')}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-violet-50 hover:border-violet-200 font-medium text-gray-700"
-              title="Usa el año de la fecha «Desde» (cámbiala para otro año)"
-            >
-              Año completo ({Number((rangeDesde || todayStr()).slice(0, 4))})
-            </button>
+              <option value="all">Todo el año</option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m)}
+                </option>
+              ))}
+            </select>
           </div>
         )}
-
-        <p className="text-xs text-gray-400 mt-3">
-          Ingresos y gastos operativos usan <strong>fecha de movimiento</strong> dentro del periodo; caja negocio igual pero no entra en gastos ni utilidad operativa. En <strong>rango</strong> puedes cruzar meses o trimestres.
-          Si ves ceros, revisa fechas o el año donde cargaste datos. Último km: último KMS con fecha ≤ fin del periodo. Vencimientos: estado actual (no dependen del periodo).{' '}
-          <strong>Inversión USD</strong>: total desde <code className="text-[10px] bg-gray-100 px-1 rounded">inversiones_vehiculo</code> por unidad (referencia de compra, no operativo).
-        </p>
       </Card>
 
-      <Card
-        title="KPIs financieros (clasificación)"
-        subtitle={`Misma ventana de fechas · ${desde} → ${hasta}${filterVehicleId ? ' · vehículo filtrado' : ''}. Usa tipo_gasto en gastos; no reemplaza el resumen legacy.`}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[
-            { label: 'Gastos operativos', value: intelKpiPeriodo.gastos_operativos, tone: 'red' as const },
-            { label: 'Gastos financieros', value: intelKpiPeriodo.gastos_financieros, tone: 'amber' as const },
-            { label: 'Gastos administrativos', value: intelKpiPeriodo.gastos_administrativos, tone: 'slate' as const },
-            { label: 'Utilidad operativa', value: intelKpiPeriodo.utilidad_operativa, tone: 'emerald' as const },
-            { label: 'Utilidad neta simple', value: intelKpiPeriodo.utilidad_neta_simple, tone: 'violet' as const },
-          ].map((c) => {
-            const neg = c.value < 0;
-            const color =
-              c.tone === 'red'
-                ? 'border-red-100 bg-red-50/80 text-red-900'
-                : c.tone === 'amber'
-                  ? 'border-amber-100 bg-amber-50/80 text-amber-950'
-                  : c.tone === 'slate'
-                    ? 'border-slate-200 bg-slate-50/90 text-slate-900'
-                    : c.tone === 'emerald'
-                      ? neg
-                        ? 'border-red-100 bg-red-50/80 text-red-900'
-                        : 'border-emerald-100 bg-emerald-50/80 text-emerald-900'
-                      : neg
-                        ? 'border-red-100 bg-red-50/80 text-red-900'
-                        : 'border-violet-100 bg-violet-50/80 text-violet-900';
-            return (
-              <div key={c.label} className={`rounded-xl border p-3 ${color}`}>
-                <p className="text-[11px] font-medium opacity-90">{c.label}</p>
-                <p className="text-lg font-bold tabular-nums mt-0.5">{formatCurrency(c.value)}</p>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card
-        title="Comparativa financiera"
-        subtitle="Legacy = heurística «caja negocio» excluida · Inteligente = sumas por tipo_gasto en el mismo periodo y alcance (filtro vehículo)."
-      >
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="text-left text-xs uppercase text-gray-500 bg-gray-50 border-b border-gray-100">
-                <th className="py-2.5 px-3 font-semibold">Métrica</th>
-                <th className="py-2.5 px-3 font-semibold text-right">Legacy</th>
-                <th className="py-2.5 px-3 font-semibold text-right">Inteligente</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              <tr>
-                <td className="py-2.5 px-3 text-gray-800">Ingresos (periodo)</td>
-                <td className="py-2.5 px-3 text-right tabular-nums font-medium text-emerald-800" colSpan={2}>
-                  {formatCurrency(totalIngresosPeriodoScope)}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 text-gray-800">Gastos operativos</td>
-                <td className="py-2.5 px-3 text-right tabular-nums text-red-700 font-medium">
-                  {formatCurrency(legacyGastosOpPeriodo)}
-                </td>
-                <td className="py-2.5 px-3 text-right tabular-nums text-red-800 font-medium">
-                  {formatCurrency(intelKpiPeriodo.gastos_operativos)}
-                </td>
-              </tr>
-              <tr className="bg-gray-50/80">
-                <td className="py-2.5 px-3 text-gray-700">Δ legacy − operativo intel.</td>
-                <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-slate-800" colSpan={2}>
-                  {formatCurrency(legacyGastosOpPeriodo - intelKpiPeriodo.gastos_operativos)}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 text-gray-800">Gastos financieros + administrativos</td>
-                <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">—</td>
-                <td className="py-2.5 px-3 text-right tabular-nums font-medium text-amber-900">
-                  {formatCurrency(intelKpiPeriodo.gastos_financieros + intelKpiPeriodo.gastos_administrativos)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card
-        title="Resumen analítico"
-        subtitle="Top 5 por utilidad operativa (inteligente), mayor gasto motor (subtipo) y mayor gasto financiero (tipo_gasto)."
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Más rentables (utilidad op.)</p>
-            <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 text-left">
-                  <tr>
-                    <th className="py-2 px-2">Unidad</th>
-                    <th className="py-2 px-2 text-right">Util. op.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {topRentables.map((r) => (
-                    <tr key={r.vehicle.id}>
-                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]" title={r.vehicle.placa}>
-                        {r.vehicle.placa}
-                      </td>
-                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-emerald-800">
-                        {formatCurrency(r.kpi.utilidad_operativa)}
-                      </td>
-                    </tr>
-                  ))}
-                  {topRentables.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
-                        Sin datos
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Mayor gasto motor</p>
-            <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 text-left">
-                  <tr>
-                    <th className="py-2 px-2">Unidad</th>
-                    <th className="py-2 px-2 text-right">Motor</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {topMotor.map((r) => (
-                    <tr key={r.vehicle.id}>
-                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]">{r.vehicle.placa}</td>
-                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-red-800">
-                        {formatCurrency(r.gastoMotor)}
-                      </td>
-                    </tr>
-                  ))}
-                  {topMotor.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
-                        Sin datos
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Mayor gasto financiero</p>
-            <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 text-left">
-                  <tr>
-                    <th className="py-2 px-2">Unidad</th>
-                    <th className="py-2 px-2 text-right">Financ.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {topFin.map((r) => (
-                    <tr key={r.vehicle.id}>
-                      <td className="py-1.5 px-2 text-gray-800 truncate max-w-[140px]">{r.vehicle.placa}</td>
-                      <td className="py-1.5 px-2 text-right tabular-nums font-medium text-amber-900">
-                        {formatCurrency(r.kpi.gastos_financieros)}
-                      </td>
-                    </tr>
-                  ))}
-                  {topFin.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-4 px-2 text-center text-gray-400">
-                        Sin datos
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {alertasFlota.length > 0 && (
-        <Card title="Alertas (reglas fijas)" subtitle="Solo lectura en cliente; umbrales porcentuales o montos absolutos si no hay ingresos.">
-          <ul className="space-y-2">
-            {alertasFlota.map((a) => (
-              <li
-                key={a.id}
-                className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
-                  a.severity === 'danger'
-                    ? 'border-red-200 bg-red-50/90 text-red-900'
-                    : 'border-amber-200 bg-amber-50/90 text-amber-950'
-                }`}
-              >
-                <span className="font-semibold shrink-0">{a.severity === 'danger' ? '●' : '◆'}</span>
-                <span>
-                  {a.message}
-                  <span className="text-gray-500 text-xs ml-1">· id {a.vehicleId}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="!p-4">
+          <p className="text-xs text-gray-500">Ingresos del periodo</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{cardValue(totalIngresos)}</p>
         </Card>
-      )}
+        <Card className="!p-4">
+          <p className="text-xs text-gray-500">Gastos del periodo</p>
+          <p className="text-xl font-bold text-red-700 mt-1">{cardValue(totalGastos)}</p>
+        </Card>
+        <Card className="!p-4">
+          <p className="text-xs text-gray-500">Resultado neto</p>
+          <p className={`text-xl font-bold mt-1 ${resultadoNeto >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+            {cardValue(resultadoNeto)}
+          </p>
+        </Card>
+        <Card className="!p-4">
+          <p className="text-xs text-gray-500">Margen neto %</p>
+          <p className={`text-xl font-bold mt-1 ${margenPct == null || margenPct >= 0 ? 'text-slate-800' : 'text-red-700'}`}>
+            {cardPct(margenPct)}
+          </p>
+        </Card>
+      </div>
 
-      <Card title={`Resumen — ${periodoLabel}`} padding={false}>
-        <div className="overflow-x-auto rounded-b-2xl">
-          <table className="w-full text-sm min-w-[960px]">
-            <thead>
-              <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100 bg-gray-50/90">
-                <th className="py-3 px-4 font-semibold">Vehículo</th>
-                <th className="py-3 px-4 font-semibold text-right">Ingresos</th>
-                <th className="py-3 px-4 font-semibold text-right">Gastos op.</th>
-                <th className="py-3 px-4 font-semibold text-right" title="Ingresos − gastos operativos">
-                  Utilidad op.
-                </th>
-                <th
-                  className="py-3 px-4 font-semibold text-right text-teal-800"
-                  title="Utilidad/caja por unidad; no es ingreso de arriendo ni gasto operativo"
-                >
-                  Caja negocio
-                </th>
-                <th className="py-3 px-4 font-semibold text-right" title="Costo histórico de adquisición (USD)">
-                  Inversión USD
-                </th>
-                <th className="py-3 px-4 font-semibold text-center">N° ing.</th>
-                <th className="py-3 px-4 font-semibold text-center">N° gas.</th>
-                <th className="py-3 px-4 font-semibold text-right">Último km</th>
-                <th className="py-3 px-4 font-semibold text-center">Venc.</th>
-                <th className="py-3 px-4 font-semibold text-center">≤30 d</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="py-12 text-center text-gray-400">
-                    No hay vehículos en la flota para este filtro.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => (
-                  <tr key={r.vehicle.id} className="border-b border-gray-50 hover:bg-gray-50/60">
-                    <td className="py-3 px-4">
-                      <span className="font-medium text-gray-900">
-                        #{r.vehicle.id} {r.vehicle.marca} {r.vehicle.modelo}
-                      </span>
-                      <span className="block text-xs text-gray-500">{r.vehicle.placa}</span>
-                    </td>
-                    <td className="py-3 px-4 text-right tabular-nums text-emerald-700 font-medium">
-                      {formatCurrency(r.totalIngresos)}
-                    </td>
-                    <td className="py-3 px-4 text-right tabular-nums text-red-600 font-medium">
-                      {formatCurrency(r.totalGastos)}
-                    </td>
-                    <td
-                      className={`py-3 px-4 text-right tabular-nums font-bold ${
-                        r.utilidad >= 0 ? 'text-emerald-800' : 'text-red-700'
-                      }`}
-                    >
-                      {formatCurrency(r.utilidad)}
-                    </td>
-                    <td className="py-3 px-4 text-right tabular-nums font-medium text-teal-800">
-                      {r.totalCajaNegocio !== 0 ? formatCurrency(r.totalCajaNegocio) : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-right tabular-nums text-slate-700 font-medium">
-                      {r.inversionTotalUsd != null ? formatUSD(r.inversionTotalUsd) : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-center tabular-nums text-gray-700">{r.nIngresos}</td>
-                    <td className="py-3 px-4 text-center tabular-nums text-gray-700">{r.nGastos}</td>
-                    <td className="py-3 px-4 text-right tabular-nums text-gray-800">
-                      {r.ultimoKm != null ? r.ultimoKm.toLocaleString('es-PE') : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {r.vencidos > 0 ? (
-                        <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">
-                          {r.vencidos}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">0</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {r.proximos30 > 0 ? (
-                        <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
-                          {r.proximos30}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">0</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-              {rows.length > 0 && (
-                <tr className="bg-slate-100/90 font-bold border-t-2 border-slate-200">
-                  <td className="py-3 px-4 text-slate-900">Totales</td>
-                  <td className="py-3 px-4 text-right tabular-nums text-emerald-800">
-                    {formatCurrency(totales.totalIngresos)}
-                  </td>
-                  <td className="py-3 px-4 text-right tabular-nums text-red-700">
-                    {formatCurrency(totales.totalGastos)}
-                  </td>
-                  <td
-                    className={`py-3 px-4 text-right tabular-nums ${
-                      totales.utilidad >= 0 ? 'text-emerald-900' : 'text-red-800'
-                    }`}
-                  >
-                    {formatCurrency(totales.utilidad)}
-                  </td>
-                  <td className="py-3 px-4 text-right tabular-nums text-teal-900">{formatCurrency(totales.totalCajaNegocio)}</td>
-                  <td className="py-3 px-4 text-right tabular-nums text-slate-800">{formatUSD(totales.inversionUsdSum)}</td>
-                  <td className="py-3 px-4 text-center tabular-nums">{totales.nIngresos}</td>
-                  <td className="py-3 px-4 text-center tabular-nums">{totales.nGastos}</td>
-                  <td className="py-3 px-4 text-right text-slate-400">—</td>
-                  <td className="py-3 px-4 text-center tabular-nums text-red-800">{totales.vencidos}</td>
-                  <td className="py-3 px-4 text-center tabular-nums text-amber-900">{totales.proximos30}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Card title="¿Dónde se fue el dinero?" subtitle="Distribución de gastos por categoría (tipo_gasto).">
+        {totalGastos <= 0 ? (
+          <p className="text-sm text-gray-500">Sin datos del periodo.</p>
+        ) : (
+          <div className="space-y-3">
+            {distribucion.map((d) => (
+              <div key={d.key}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-800">{d.label}</span>
+                  <span className="text-gray-600 tabular-nums">
+                    {formatCurrency(d.monto)} · {d.pct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-primary-500 rounded-full" style={{ width: `${Math.max(0, Math.min(100, d.pct))}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
+
+      <Card title="Alertas accionables">
+        <ul className="space-y-2">
+          {alertas.map((a, i) => (
+            <li
+              key={`${a.text}-${i}`}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                a.tone === 'danger'
+                  ? 'border-red-200 bg-red-50 text-red-800'
+                  : a.tone === 'warning'
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              }`}
+            >
+              {a.text}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card title="Top gastos operativos por vehículo">
+        {topOperativosVehiculo.length === 0 ? (
+          <p className="text-sm text-gray-500">Sin gastos operativos registrados en este periodo.</p>
+        ) : (
+          <div className="space-y-2">
+            {topOperativosVehiculo.map((x, idx) => (
+              <div key={x.vehicleId} className="flex items-center justify-between text-sm">
+                <span className="text-gray-800">
+                  {idx + 1}. {x.name}
+                </span>
+                <span className="font-semibold text-red-700 tabular-nums">{formatCurrency(x.monto)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <details className="bg-white rounded-xl border border-gray-100 shadow-soft p-4">
+        <summary className="cursor-pointer text-sm font-bold text-gray-800">Detalle técnico</summary>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg border border-gray-100 p-3">
+            <p className="text-xs text-gray-500">Legacy</p>
+            <p className="text-gray-700">Total ingresos: {formatCurrency(legacy.totalIngresos)}</p>
+            <p className="text-gray-700">Total gastos: {formatCurrency(legacy.totalGastos)}</p>
+            <p className="text-gray-700">Margen neto: {formatCurrency(legacy.margenNeto)}</p>
+          </div>
+          <div className="rounded-lg border border-gray-100 p-3">
+            <p className="text-xs text-gray-500">Inteligente</p>
+            <p className="text-gray-700">Gastos operativos: {formatCurrency(intel.gastos_operativos)}</p>
+            <p className="text-gray-700">Gastos financieros: {formatCurrency(intel.gastos_financieros)}</p>
+            <p className="text-gray-700">Gastos administrativos: {formatCurrency(intel.gastos_administrativos)}</p>
+            <p className="text-gray-700">Utilidad operativa: {formatCurrency(intel.utilidad_operativa)}</p>
+            <p className="text-gray-700">Utilidad neta simple: {formatCurrency(intel.utilidad_neta_simple)}</p>
+          </div>
+        </div>
+      </details>
     </div>
   );
 };

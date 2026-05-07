@@ -545,6 +545,7 @@ const VehiculoDetalle: React.FC = () => {
 
         {tab === 'documentacion' && (
           <div className="space-y-4">
+            <ControlFechaRegistroPanel prefilledVehicleId={vehicle.id} />
             <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
@@ -575,7 +576,6 @@ const VehiculoDetalle: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <ControlFechaRegistroPanel prefilledVehicleId={vehicle.id} />
           </div>
         )}
 
