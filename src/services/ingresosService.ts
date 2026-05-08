@@ -30,6 +30,7 @@ async function fetchIngresoAuditSnapshot(id: string): Promise<Record<string, unk
   return (data as Record<string, unknown>) ?? null;
 }
 
+/** Lista paginada; `select('*')` incluye `created_at` para UI «Registrado en sistema». */
 export async function fetchIngresos(): Promise<Ingreso[]> {
   if (!EMPRESA_ID) return [];
   const data = await fetchAllSupabasePages(async (from, to) => {

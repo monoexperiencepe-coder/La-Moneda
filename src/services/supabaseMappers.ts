@@ -179,7 +179,11 @@ export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
     tipoOperacion: strOrNull(r.tipo_operacion),
     estadoPago: strOrNull(r.estado_pago),
     excelExtra: jsonRecordOrNull(r.excel_extra),
-    createdAt: isoCreated(r.created_at),
+    /** Solo si viene `created_at` desde BD; vacío en registros antiguos sin columna o valor. */
+    createdAt:
+      r.created_at != null && String(r.created_at).trim() !== ''
+        ? String(r.created_at)
+        : '',
   };
 }
 

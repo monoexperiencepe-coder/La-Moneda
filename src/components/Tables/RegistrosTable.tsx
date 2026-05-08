@@ -8,7 +8,7 @@ import Button from '../Common/Button';
 import Select from '../Common/Select';
 import Modal from '../Common/Modal';
 import { Ingreso, Gasto, Vehicle } from '../../data/types';
-import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
 import {
@@ -97,6 +97,14 @@ function cleanGastoComentario(text: string | null | undefined): string {
     .trim();
 }
 
+/** Texto para línea «Cubre» en listados de ingresos; null si no hay rango. */
+function ingresoCubreLabel(i: Ingreso): string | null {
+  const d = i.fechaDesde?.trim();
+  const h = i.fechaHasta?.trim();
+  if (!d && !h) return null;
+  return `${d ? formatDate(d) : '—'} → ${h ? formatDate(h) : '—'}`;
+}
+
 const RegistrosTable: React.FC<RegistrosTableProps> = ({
   mode,
   ingresos = [],
@@ -110,7 +118,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 }) => {
   const { role } = useAuth();
   const showDeleteIngreso = mode !== 'ingresos' || canMutateIngresos(role);
-  const colCount = mode === 'gastos' ? 6 : 5;
+  const colCount = 5;
   const [query, setQuery] = useState('');
   const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
   useEffect(() => {
@@ -131,6 +139,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     if (!vehicleId) return 'General';
     const v = vehicles.find(v => v.id === vehicleId);
     return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${vehicleId}`;
+  };
+
+  const getVehicleIdPlaca = (vehicleId: number | null) => {
+    if (!vehicleId) return 'General';
+    const v = vehicles.find((x) => x.id === vehicleId);
+    if (!v) return `#${vehicleId}`;
+    return `#${v.id} · ${v.placa}`;
   };
 
   const rawData = mode === 'ingresos' ? ingresos : gastos;
@@ -291,7 +306,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               : 'Sin registros disponibles'}
           </div>
         ) : (
-          paginated.map((item) => (
+          paginated.map((item) => {
+            const cubreIngresoMobile =
+              mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+            return (
             <button
               key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
               type="button"
@@ -300,7 +318,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] text-gray-400 font-medium">{formatDate(item.fecha)}</p>
+                  <p className="text-xs font-semibold text-gray-900">{formatDate(item.fecha)}</p>
+                  {mode === 'ingresos' && (
+                    <>
+                      {cubreIngresoMobile ? (
+                        <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
+                          Cubre: {cubreIngresoMobile}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                   <p className="text-xs text-gray-600 mt-0.5 truncate">
                     {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
                   </p>
@@ -322,7 +349,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               </div>
 
-              <div className="mt-2.5 flex items-start gap-2">
+              <div className="mt-2 flex items-start gap-2">
                 {mode === 'ingresos' ? (
                   <Badge variant="success" size="sm">{(item as Ingreso).tipo}</Badge>
                 ) : (
@@ -330,12 +357,19 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
                   </p>
                 )}
-                <p className="text-xs text-gray-500 truncate">
-                  {mode === 'ingresos'
-                    ? ((item as Ingreso).subTipo || (item as Ingreso).tipoOperacion || '—')
-                    : ((item as Gasto).motivo || (item as Gasto).categoriaReal || '—')}
-                </p>
+                {mode === 'ingresos' ? (
+                  (item as Ingreso).tipoOperacion?.trim() ? (
+                    <p className="text-xs text-gray-500 truncate">{(item as Ingreso).tipoOperacion}</p>
+                  ) : null
+                ) : (
+                  <p className="text-xs text-gray-500 truncate">
+                    {(item as Gasto).motivo || (item as Gasto).categoriaReal || '—'}
+                  </p>
+                )}
               </div>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Vehículo: {getVehicleIdPlaca('vehicleId' in item ? item.vehicleId : null)}
+              </p>
 
               {mode === 'gastos' && showClasificacionFinanciera && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -416,7 +450,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               </div>
             </button>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -429,7 +464,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
                 onClick={() => handleSort('fecha')}
               >
-                Fecha <SortIcon col="fecha" />
+                {mode === 'ingresos' ? 'Fecha movimiento' : 'Fecha'} <SortIcon col="fecha" />
               </th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3">
                 {mode === 'ingresos' ? 'Tipo / Sub tipo' : 'Categoría / Motivo'}
@@ -437,11 +472,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-3">
                 Método de pago
               </th>
-              {mode === 'gastos' && (
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3">
-                  Observación
-                </th>
-              )}
               <th
                 className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-3 cursor-pointer hover:text-gray-700 whitespace-nowrap"
                 onClick={() => handleSort('monto')}
@@ -463,7 +493,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </td>
               </tr>
             ) : (
-              paginated.map(item => (
+              paginated.map((item) => {
+                const cubreIngresoRow =
+                  mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+                return (
                 <tr
                   key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
                   className="hover:bg-gray-50 transition-colors cursor-pointer"
@@ -471,8 +504,19 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   onClick={() => setViewItem(item)}
                 >
                   {/* Fecha */}
-                  <td className="px-2 py-3 text-sm text-gray-600 whitespace-nowrap">
-                    {formatDate(item.fecha)}
+                  <td className="px-2 py-3 text-sm text-gray-600 align-top whitespace-nowrap max-w-[140px]">
+                    {mode === 'ingresos' ? (
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-gray-900">{formatDate((item as Ingreso).fecha)}</p>
+                        {cubreIngresoRow ? (
+                          <p className="text-[10px] text-emerald-800 font-medium leading-snug">
+                            Cubre: {cubreIngresoRow}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      formatDate(item.fecha)
+                    )}
                   </td>
 
                   {/* Tipo / Categoría */}
@@ -480,9 +524,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     {mode === 'ingresos' ? (
                       <div>
                         <Badge variant="success">{(item as Ingreso).tipo}</Badge>
-                        {(item as Ingreso).subTipo && (
-                          <p className="text-xs text-gray-500 mt-0.5">{(item as Ingreso).subTipo}</p>
-                        )}
+                        <p className="mt-0.5 inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 text-[11px] font-semibold">
+                          Vehículo: {getVehicleIdPlaca((item as Ingreso).vehicleId)}
+                        </p>
                       </div>
                     ) : (
                       <div>
@@ -492,6 +536,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                         <p className="text-xs text-gray-500 mt-0.5">
                           {(item as Gasto).subcategoria || (item as Gasto).subTipo || '—'}
                         </p>
+                        <p className="mt-1 inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 text-[11px] font-semibold">
+                          Vehículo: {getVehicleIdPlaca((item as Gasto).vehicleId)}
+                        </p>
                       </div>
                     )}
                   </td>
@@ -500,12 +547,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   <td className="px-2 py-3 text-xs text-gray-700 max-w-[120px]">
                     <p className="font-medium text-gray-800">{item.metodoPago}</p>
                   </td>
-
-                  {mode === 'gastos' && (
-                    <td className="px-2 py-3 text-xs text-gray-600 max-w-[220px]">
-                      <TruncatedText text={cleanGastoComentario((item as Gasto).comentarios)} maxLen={90} />
-                    </td>
-                  )}
 
                   {/* Monto */}
                   <td className="px-2 py-3 text-right">
@@ -584,7 +625,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -662,14 +704,45 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           footer={<Button onClick={() => setViewItem(null)}>Cerrar</Button>}
         >
           <dl className="space-y-3">
-            {/* ─ Campos comunes ─ */}
-            <div className="flex justify-between">
-              <dt className="text-xs text-gray-500 font-medium">Fecha movimiento</dt>
-              <dd className="text-sm text-gray-900">{formatDate(viewItem.fecha)}</dd>
+            {mode === 'gastos' && (
+              <div className="flex justify-between">
+                <dt className="text-xs text-gray-500 font-medium">Fecha movimiento</dt>
+                <dd className="text-sm text-gray-900">{formatDate(viewItem.fecha)}</dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-4">
+              <dt className="text-xs text-gray-500 font-medium shrink-0">Vehículo</dt>
+              <dd className="text-sm text-gray-900 text-right">
+                {getVehicleIdPlaca('vehicleId' in viewItem ? viewItem.vehicleId : null)}
+              </dd>
             </div>
 
             {mode === 'ingresos' ? (
               <>
+                <div className="rounded-xl border border-gray-100 bg-slate-50 px-3 py-3 space-y-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Fechas</p>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-xs text-gray-600 shrink-0">Fecha de movimiento / pago</dt>
+                    <dd className="text-sm text-gray-900 text-right font-medium">
+                      {formatDate((viewItem as Ingreso).fecha)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-xs text-gray-600 shrink-0">Registrado en sistema</dt>
+                    <dd className="text-sm text-gray-900 text-right tabular-nums">
+                      {formatDateTimePe((viewItem as Ingreso).createdAt)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-xs text-gray-600 shrink-0">Período cubierto</dt>
+                    <dd className="text-sm text-gray-900 text-right">
+                      {(viewItem as Ingreso).fechaDesde?.trim() || (viewItem as Ingreso).fechaHasta?.trim()
+                        ? `${(viewItem as Ingreso).fechaDesde?.trim() ? formatDate((viewItem as Ingreso).fechaDesde!) : '—'} → ${(viewItem as Ingreso).fechaHasta?.trim() ? formatDate((viewItem as Ingreso).fechaHasta!) : '—'}`
+                        : '—'}
+                    </dd>
+                  </div>
+                </div>
+
                 {/* ─ Tipo / subTipo ─ */}
                 <div className="flex justify-between gap-4">
                   <dt className="text-xs text-gray-500 font-medium shrink-0">Tipo</dt>
@@ -709,10 +782,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   <dt className="text-xs text-gray-500 font-medium shrink-0">Método de pago</dt>
                   <dd className="text-sm text-gray-900 text-right">{(viewItem as Ingreso).metodoPago}</dd>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-xs text-gray-500 font-medium shrink-0">Detalle pago</dt>
-                  <dd className="text-sm text-gray-900 text-right">{(viewItem as Ingreso).metodoPagoDetalle || '—'}</dd>
-                </div>
                 {(viewItem as Ingreso).celularMetodo && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-xs text-gray-500 font-medium shrink-0">Celular / cuenta</dt>
@@ -741,8 +810,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 )}
 
                 <div className="flex justify-between gap-4">
-                  <dt className="text-xs text-gray-500 font-medium shrink-0">Fecha registro</dt>
-                  <dd className="text-sm text-gray-900">{formatDate((viewItem as Ingreso).fechaRegistro)}</dd>
+                  <dt className="text-xs text-gray-500 font-medium shrink-0">Fecha registro (Fact)</dt>
+                  <dd className="text-sm text-gray-900 text-right">{formatDate((viewItem as Ingreso).fechaRegistro)}</dd>
                 </div>
               </>
             ) : (

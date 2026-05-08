@@ -64,7 +64,7 @@ const PeriodoPagoModal: React.FC<PeriodoPagoModalProps> = ({
       </p>
       <div className="space-y-3">
         <div>
-          <label className="label">Desde</label>
+          <label className="label">Cubre desde</label>
           <input
             type="date"
             value={desde}
@@ -73,7 +73,7 @@ const PeriodoPagoModal: React.FC<PeriodoPagoModalProps> = ({
           />
         </div>
         <div>
-          <label className="label">Hasta</label>
+          <label className="label">Cubre hasta</label>
           <input
             type="date"
             value={hasta}

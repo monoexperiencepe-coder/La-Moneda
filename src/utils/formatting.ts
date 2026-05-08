@@ -22,6 +22,21 @@ export const formatDate = (dateStr: string): string => {
   });
 };
 
+/** Fecha y hora en español (Perú); útil para `created_at`. Vacío o inválido → em dash. */
+export function formatDateTimePe(isoOrTimestamp: string | null | undefined): string {
+  if (isoOrTimestamp == null || String(isoOrTimestamp).trim() === '') return '—';
+  const d = new Date(String(isoOrTimestamp).trim());
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 export const formatDateLong = (dateStr: string): string => {
   if (!dateStr) return '-';
   const date = new Date(dateStr + 'T00:00:00');

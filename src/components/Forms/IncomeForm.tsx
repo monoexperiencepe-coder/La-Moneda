@@ -67,7 +67,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubm
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.fecha) newErrors.fecha = 'La fecha de movimiento es requerida';
+    if (!form.fecha) newErrors.fecha = 'La fecha de movimiento / pago es requerida';
     if (!form.vehicleId) newErrors.vehicleId = 'Selecciona un vehículo';
     if (!form.tipo) newErrors.tipo = 'Selecciona un tipo de ingreso';
     if (subtipos.length > 0 && !form.subTipo) newErrors.subTipo = 'Selecciona sub tipo';
@@ -138,11 +138,11 @@ const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubm
         : null;
 
   return (
-    <Card title="Registrar Ingreso" subtitle="Fecha de movimiento, pago por cuenta/celular, período opcional">
+    <Card title="Registrar Ingreso" subtitle="Fecha de movimiento/pago, pago por cuenta/celular, período cubierto opcional">
       <form onSubmit={handleSubmit} className="space-y-4 mt-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label="Fecha de movimiento"
+            label="Fecha de movimiento / pago"
             type="date"
             value={form.fecha}
             onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))}
@@ -150,9 +150,10 @@ const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubm
             required
           />
           <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
-            <p className="text-xs font-medium text-gray-600">Fecha de registro</p>
+            <p className="text-xs font-medium text-gray-600">Fecha registro (Fact)</p>
             <p className="text-sm text-gray-800 mt-0.5">
-              Automática al guardar: <strong>{todayStr()}</strong> (fecha del sistema)
+              Se guarda como columna <strong>fecha_registro</strong> al enviar (por defecto{' '}
+              <strong>{todayStr()}</strong>). Distinta de la hora de creación en base de datos.
             </p>
           </div>
         </div>

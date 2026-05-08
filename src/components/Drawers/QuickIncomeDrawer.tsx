@@ -105,8 +105,8 @@ const QuickIncomeDrawer: React.FC = () => {
         vehicleId: resolvedVehicleId,
         tipo: resolvedTipo,
         subTipo: resolvedSubTipo,
-        fechaDesde: null,
-        fechaHasta: null,
+        fechaDesde: fechaDesde.trim() || null,
+        fechaHasta: fechaHasta.trim() || null,
         metodoPago: resolvedMetodo,
         metodoPagoDetalle: resolvedDetalle,
         celularMetodo: firstDetail?.celular?.trim() || null,
@@ -193,7 +193,11 @@ const QuickIncomeDrawer: React.FC = () => {
       isOpen={isOpen}
       onClose={close}
       title="Registrar Ingreso"
-      subtitle={quickMode ? 'Modo rápido — escribe y presiona Enter' : 'Movimiento, período y cuenta'}
+      subtitle={
+        quickMode
+          ? 'Modo rápido — escribe y presiona Enter (período opcional abajo)'
+          : 'Movimiento, período y cuenta'
+      }
       icon="💰"
       accentColor="from-emerald-500 to-teal-600"
       footer={
@@ -269,7 +273,7 @@ const QuickIncomeDrawer: React.FC = () => {
 
       {/* ── Fecha siempre visible ── */}
       <div>
-        <label className="label">Fecha de movimiento</label>
+        <label className="label">Fecha de movimiento / pago</label>
         <input type="date" value={fechaMov} onChange={e => setFechaMov(e.target.value)} className="input-field" />
       </div>
 
@@ -348,11 +352,22 @@ const QuickIncomeDrawer: React.FC = () => {
               ))}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setPeriodoOpen(true)}
+            className="flex items-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+          >
+            <CalendarRange size={18} className="text-emerald-600 shrink-0" />
+            <span className="truncate text-left">
+              {periodoLabel ? `Período del pago: ${periodoLabel}` : 'Período del pago (opcional)'}
+            </span>
+          </button>
         </form>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-[11px] text-gray-500 -mt-2">
-          Fecha de registro: <strong>automática</strong> al guardar ({todayStr()})
+          Fecha registro (Fact): <strong>{todayStr()}</strong> al guardar. La hora exacta en servidor aparece en el historial como «Registrado».
         </p>
 
         <button
@@ -365,17 +380,6 @@ const QuickIncomeDrawer: React.FC = () => {
             {periodoLabel ? `Período del pago: ${periodoLabel}` : 'Período del pago (opcional)'}
           </span>
         </button>
-
-        <PeriodoPagoModal
-          isOpen={periodoOpen}
-          onClose={() => setPeriodoOpen(false)}
-          fechaDesde={fechaDesde}
-          fechaHasta={fechaHasta}
-          onGuardar={(desde, hasta) => {
-            setFechaDesde(desde);
-            setFechaHasta(hasta);
-          }}
-        />
 
         <div>
           <label className="label">Vehículo</label>
@@ -496,6 +500,17 @@ const QuickIncomeDrawer: React.FC = () => {
         </div>
         </form>
       )}
+
+      <PeriodoPagoModal
+        isOpen={periodoOpen}
+        onClose={() => setPeriodoOpen(false)}
+        fechaDesde={fechaDesde}
+        fechaHasta={fechaHasta}
+        onGuardar={(desde, hasta) => {
+          setFechaDesde(desde);
+          setFechaHasta(hasta);
+        }}
+      />
     </DrawerBase>
   );
 };

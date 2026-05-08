@@ -22,7 +22,8 @@ export type Moneda = 'PEN' | 'USD';
 /**
  * Registro alineado a la hoja Fact (ingresos).
  * - fecha = Fecha Movimiento (fecha contable principal, usada en filtros y gráficos)
- * - fechaRegistro = Fecha Registro (cuándo se cargó en el sistema)
+ * - fechaRegistro = Fecha registro en Fact/hoja (columna negocio; puede diferir de `fecha`)
+ * - createdAt = created_at en BD (cuándo se creó la fila en Supabase); puede faltar en datos viejos
  */
 export interface Ingreso {
   /** PK Supabase (`bigint` o `uuid`), siempre como string en cliente. */
