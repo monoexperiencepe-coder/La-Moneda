@@ -17,6 +17,7 @@ import {
 } from '../../utils/clasificacionGasto';
 import { useAuth } from '../../context/AuthContext';
 import { canMutateIngresos } from '../../utils/roles';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -124,8 +125,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   useEffect(() => {
     if (mode === 'ingresos') setFilterEstadoPago(initialEstadoPago ?? '');
   }, [mode, initialEstadoPago]);
-  const [sortKey, setSortKey] = useState<string>('fecha');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = useState<string>('vehiculo');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showFullHistory, setShowFullHistory] = useState(false);
@@ -197,18 +198,36 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     });
   }, [rawData, query, mode, filterEstadoPago]);
 
+  const rowVehicleRank = (item: Ingreso | Gasto) =>
+    vehicleIdSortRank('vehicleId' in item ? item.vehicleId : null);
+
+  const tieBreakIdDesc = (a: Ingreso | Gasto, b: Ingreso | Gasto) =>
+    String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      let aVal: string | number = '';
-      let bVal: string | number = '';
-      if (sortKey === 'fecha') { aVal = a.fecha; bVal = b.fecha; }
-      else if (sortKey === 'monto') { aVal = a.monto; bVal = b.monto; }
-      else if (sortKey === 'vehiculo') {
-        aVal = getVehicleLabel('vehicleId' in a ? a.vehicleId : null);
-        bVal = getVehicleLabel('vehicleId' in b ? b.vehicleId : null);
+      if (sortKey === 'fecha') {
+        const fd = sortDir === 'desc' ? b.fecha.localeCompare(a.fecha) : a.fecha.localeCompare(b.fecha);
+        if (fd !== 0) return fd;
+        const vr = rowVehicleRank(a) - rowVehicleRank(b);
+        if (vr !== 0) return vr;
+        return tieBreakIdDesc(a, b);
       }
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      if (sortKey === 'monto') {
+        const m = sortDir === 'asc' ? a.monto - b.monto : b.monto - a.monto;
+        if (m !== 0) return m;
+        const vr = rowVehicleRank(a) - rowVehicleRank(b);
+        if (vr !== 0) return vr;
+        return b.fecha.localeCompare(a.fecha);
+      }
+      if (sortKey === 'vehiculo') {
+        const vr = rowVehicleRank(a) - rowVehicleRank(b);
+        const cmp = sortDir === 'asc' ? vr : -vr;
+        if (cmp !== 0) return cmp;
+        const fd = b.fecha.localeCompare(a.fecha);
+        if (fd !== 0) return fd;
+        return tieBreakIdDesc(a, b);
+      }
       return 0;
     });
   }, [filtered, sortKey, sortDir]);

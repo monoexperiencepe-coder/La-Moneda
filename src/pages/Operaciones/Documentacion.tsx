@@ -114,8 +114,8 @@ const Documentacion: React.FC = () => {
   };
 
   const [soloProblemas, setSoloProblemas] = useState(false);
-  type SortKey = 'placa' | 'vencimiento';
-  const [sortBy, setSortBy] = useState<SortKey>('vencimiento');
+  type SortKey = 'unidad' | 'placa' | 'vencimiento';
+  const [sortBy, setSortBy] = useState<SortKey>('unidad');
 
   const pivot = useMemo(() => buildControlFechasPivotMapByTipos(controlFechas, DOC_TIPOS), [controlFechas]);
 
@@ -135,8 +135,10 @@ const Documentacion: React.FC = () => {
     else if (docQuery === 'porvencer') rows = allRows.filter((r) => r.wt === 'soon');
     else if (docQuery === 'alertas') rows = allRows.filter((r) => r.wt === 'late' || r.wt === 'soon');
     else if (soloProblemas) rows = allRows.filter((r) => r.wt === 'late' || r.wt === 'soon');
-    if (sortBy === 'vencimiento') {
-      rows = [...rows].sort((a, b) => a.nearest.localeCompare(b.nearest) || a.v.placa.localeCompare(b.v.placa));
+    if (sortBy === 'unidad') {
+      rows = [...rows].sort((a, b) => a.v.id - b.v.id);
+    } else if (sortBy === 'vencimiento') {
+      rows = [...rows].sort((a, b) => a.nearest.localeCompare(b.nearest) || a.v.id - b.v.id);
     } else {
       rows = [...rows].sort((a, b) => a.v.placa.localeCompare(b.v.placa));
     }
@@ -247,8 +249,9 @@ const Documentacion: React.FC = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortKey)}
-              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 focus:outline-none cursor-pointer max-w-[min(100%,220px)]"
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 focus:outline-none cursor-pointer max-w-[min(100%,240px)]"
             >
+              <option value="unidad">Ordenar: unidad #1 → #N</option>
               <option value="vencimiento">Ordenar: vencimiento más cercano</option>
               <option value="placa">Ordenar: placa A→Z</option>
             </select>

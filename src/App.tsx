@@ -19,6 +19,7 @@ const GastosCaja = lazy(() => import('./pages/Finanzas/GastosCaja'));
 const CajaNegocio = lazy(() => import('./pages/Finanzas/CajaNegocio'));
 const Descuentos = lazy(() => import('./pages/Finanzas/Descuentos'));
 const Prestamos = lazy(() => import('./pages/Finanzas/Prestamos'));
+const Financiamiento = lazy(() => import('./pages/Finanzas/Financiamiento'));
 const ReportesHub = lazy(() => import('./pages/Reportes/ReportesHub'));
 const Resumen = lazy(() => import('./pages/Finanzas/Resumen'));
 const RevisionClasificacion = lazy(() => import('./pages/Finanzas/RevisionClasificacion'));
@@ -108,6 +109,7 @@ const AppContent: React.FC = () => {
                         <Route path="/finanzas/gastos-caja" element={<GastosCaja />} />
                         <Route path="/finanzas/caja-negocio" element={<CajaNegocio />} />
                         <Route path="/finanzas/descuentos" element={<Descuentos />} />
+                        <Route path="/finanzas/financiamiento" element={<Financiamiento />} />
                         <Route path="/finanzas/prestamos" element={<Prestamos />} />
                         <Route path="/finanzas/reportes" element={<ReportesHub />} />
                         <Route path="/finanzas/resumen" element={<Resumen />} />

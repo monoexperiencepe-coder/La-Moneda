@@ -3,6 +3,7 @@ import DocumentationForm from '../Forms/DocumentationForm';
 import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Documentacion, Vehicle } from '../../data/types';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { formatDate, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { FileText, Car, AlertTriangle } from 'lucide-react';
 
@@ -65,7 +66,13 @@ const DocumentacionView: React.FC<DocumentacionViewProps> = ({ vehicles, documen
           </div>
         ) : (
           <div className="space-y-4 mt-2">
-            {documentaciones.map(d => {
+            {[...documentaciones]
+              .sort((a, b) => {
+                const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+                if (vr !== 0) return vr;
+                return b.fecha.localeCompare(a.fecha);
+              })
+              .map(d => {
               const vehicle = getVehicle(d.vehicleId);
               return (
                 <div key={d.id} className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors">

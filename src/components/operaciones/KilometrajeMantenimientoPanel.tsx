@@ -5,6 +5,7 @@ import Select from '../Common/Select';
 import { formatCurrency, formatDate, todayStr } from '../../utils/formatting';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
 import type { KilometrajeRegistro, Vehicle } from '../../data/types';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { Trash2 } from 'lucide-react';
 
 interface Props {
@@ -25,7 +26,10 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
   getVehicleLabel,
   restrictVehicleId,
 }) => {
-  const active = vehicles.filter((v) => v.activo);
+  const active = useMemo(
+    () => [...vehicles.filter((v) => v.activo)].sort((a, b) => a.id - b.id),
+    [vehicles],
+  );
   const [km, setKm] = useState({
     vehicleId: '',
     fecha: todayStr(),
@@ -53,6 +57,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     const entries = Array.from(byVehicle.entries()).filter(([vid]) =>
       restrictVehicleId == null ? true : vid === restrictVehicleId,
     );
+    entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
     return entries.map(([vehicleId, rows]) => {
       const maxKmMant = rows.reduce<number | null>((acc, r) => {
         if (r.kmMantenimiento == null) return acc;
@@ -99,7 +104,15 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
 
   const ultimos = useMemo(() => {
     const base = restrictVehicleId != null ? kilometrajes.filter((r) => r.vehicleId === restrictVehicleId) : kilometrajes;
-    return [...base].sort((a, b) => b.id - a.id).slice(0, restrictVehicleId != null ? 40 : 60);
+    return [...base]
+      .sort((a, b) => {
+        const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+        if (vr !== 0) return vr;
+        const fd = b.fecha.localeCompare(a.fecha);
+        if (fd !== 0) return fd;
+        return b.id - a.id;
+      })
+      .slice(0, restrictVehicleId != null ? 40 : 60);
   }, [kilometrajes, restrictVehicleId]);
 
   return (

@@ -139,7 +139,7 @@ export function buildFleetPanelRows(
       const rank = { CRITICO: 0, ALERTA: 1, OK: 2 };
       const r = rank[a.estado] - rank[b.estado];
       if (r !== 0) return r;
-      return a.vehicle.placa.localeCompare(b.vehicle.placa);
+      return a.vehicle.id - b.vehicle.id;
     });
 }
 

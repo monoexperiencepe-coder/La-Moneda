@@ -30,7 +30,7 @@ export async function fetchLatestControlFechasByVehicle(): Promise<ControlFecha[
 }
 
 /**
- * Historial completo paginado (orden: más reciente primero por created_at, luego id).
+ * Historial completo paginado (orden: unidad vehicle_id 1→N, luego vencimiento más reciente, id).
  * Filtros opcionales en servidor.
  */
 export async function fetchControlFechasHistoryPage(
@@ -57,7 +57,8 @@ export async function fetchControlFechasHistoryPage(
   }
 
   const { data, error, count } = await q
-    .order('created_at', { ascending: false })
+    .order('vehicle_id', { ascending: true, nullsFirst: false })
+    .order('fecha_vencimiento', { ascending: false })
     .order('id', { ascending: false })
     .range(from, to);
 

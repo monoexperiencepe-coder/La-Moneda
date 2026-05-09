@@ -9,6 +9,7 @@ import { formatCurrency, formatDate, todayStr, toDateOnlyString } from '../../ut
 import type { CajaNegocioVehiculo } from '../../data/types';
 import MonthlyBarChartCard from '../../components/Charts/MonthlyBarChartCard';
 import { MESES } from '../../data/catalogs';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 
 function inRange(fecha: string, desde: string, hasta: string): boolean {
   const d = toDateOnlyString(fecha);
@@ -99,7 +100,7 @@ const CajaNegocio: React.FC = () => {
   const vehicleOptions = useMemo(
     () => [
       { value: '', label: 'Todos los vehículos' },
-      ...vehicles.map((v) => ({
+      ...[...vehicles].sort((a, b) => a.id - b.id).map((v) => ({
         value: String(v.id),
         label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
       })),
@@ -115,11 +116,18 @@ const CajaNegocio: React.FC = () => {
     if (d > h) [d, h] = [h, d];
     const vid = filterVehicleId ? Number(filterVehicleId) : null;
     const yearPrefix = filterYear !== 'ALL' ? `${filterYear}-` : null;
-    return cajaNegocioVehiculo.filter((row) => {
+    const rows = cajaNegocioVehiculo.filter((row) => {
       if (yearPrefix && !toDateOnlyString(row.fecha).startsWith(yearPrefix)) return false;
       if (!inRange(row.fecha, d, h)) return false;
       if (vid != null && Number.isFinite(vid) && row.vehicleId !== vid) return false;
       return true;
+    });
+    return [...rows].sort((a, b) => {
+      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+      if (vr !== 0) return vr;
+      const fd = b.fecha.localeCompare(a.fecha);
+      if (fd !== 0) return fd;
+      return b.id - a.id;
     });
   }, [cajaNegocioVehiculo, desde, hasta, filterVehicleId, filterYear]);
 

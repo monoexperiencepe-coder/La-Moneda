@@ -14,7 +14,8 @@
     "reimport:control-fechas": "node scripts/reimport_control_fechas.mjs",
     "import:gastos-reales": "node scripts/import_gastos_reales.mjs",
     "report:gastos-sin-vehiculo": "node scripts/import_gastos_reales.mjs --report-sin-vehiculo",
-    "audit:gastos-por-vehiculo": "node scripts/audit_gastos_por_vehiculo.mjs"
+    "audit:gastos-por-vehiculo": "node scripts/audit_gastos_por_vehiculo.mjs",
+    "import:financiamiento": "node scripts/import_financiamiento_from_xlsx.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

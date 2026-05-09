@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Filter } from 'lucide-react';
 import VehicleCard from '../../components/Cards/VehicleCard';
@@ -10,7 +10,10 @@ const Inventario: React.FC = () => {
   const { vehicles, ingresos, gastos, documentaciones, inversionesVehiculo } = useRegistrosContext();
   const [showAll, setShowAll] = useState(false);
 
-  const filteredVehicles = showAll ? vehicles : vehicles.filter(v => v.activo);
+  const filteredVehicles = useMemo(() => {
+    const list = showAll ? vehicles : vehicles.filter((v) => v.activo);
+    return [...list].sort((a, b) => a.id - b.id);
+  }, [vehicles, showAll]);
 
   return (
     <div className="space-y-6 animate-fade-in">

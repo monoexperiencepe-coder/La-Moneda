@@ -34,10 +34,10 @@ const sections: FabSection[] = [
       { kind: 'drawer', type: 'expense', icon: '💸', label: 'Gasto', gradient: 'from-red-400 to-orange-500' },
       {
         kind: 'nav',
-        path: '/finanzas/prestamos',
+        path: '/finanzas/financiamiento',
         icon: '📒',
-        label: 'Préstamos',
-        subtitle: 'Capital y abonos',
+        label: 'Financiamiento',
+        subtitle: 'Préstamos y aportes',
         gradient: 'from-sky-400 to-blue-600',
       },
       {

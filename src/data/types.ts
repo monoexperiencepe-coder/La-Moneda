@@ -98,6 +98,101 @@ export interface PrestamoAbono {
   createdAt: string;
 }
 
+/** Préstamo informativo en Supabase (`prestamos_financieros`); no crea gastos automáticamente. */
+export type PrestamoFinancieroEstado = 'activo' | 'cancelado';
+
+/** Modalidad de pago del préstamo (Excel v3). */
+export type ModalidadPagoPrestamo = 'tasa_anual' | 'cuota_fija';
+
+export interface PrestamoFinanciero {
+  id: number;
+  empresaId: string;
+  codigo: string;
+  prestamista: string;
+  /** Legacy: alineado con moneda_capital en BD. */
+  moneda: Moneda;
+  monedaCapital: Moneda;
+  monedaPago: Moneda;
+  modalidadPago: ModalidadPagoPrestamo;
+  titulo: string;
+  montoOriginal: number;
+  capitalActualEstimado: number;
+  /** Solo modalidad tasa_anual; null si cuota_fija. */
+  tasaAnual: number | null;
+  /** Solo modalidad cuota_fija; opcional si solo interes_mensual_actual. */
+  cuotaFijaMensual: number | null;
+  /** Cuota mensual en moneda_pago (registro Excel). */
+  interesMensualActual: number;
+  fechaInicio: string;
+  estado: PrestamoFinancieroEstado;
+  fechaCancelacion: string | null;
+  requiereTramos: boolean;
+  notas: string;
+  observaciones: string;
+  createdAt: string;
+}
+
+/** Tramo de interés/capital (`prestamos_tramos`). */
+export interface PrestamoFinancieroTramo {
+  id: number;
+  prestamoFinancieroId: number;
+  /** Legacy = moneda_capital en BD. */
+  moneda: Moneda;
+  monedaCapital: Moneda;
+  monedaPago: Moneda;
+  modalidadPago: ModalidadPagoPrestamo;
+  desde: string;
+  hasta: string | null;
+  capitalReferencial: number | null;
+  tasaAnual: number | null;
+  cuotaFijaMensual: number | null;
+  /** Cuota explícita en moneda_pago; si es null se deriva según modalidad. */
+  interesMensual: number | null;
+  evento: string;
+  nota: string;
+  orden: number;
+  createdAt: string;
+}
+
+/** Aporte de accionista (`aportes_accionistas`). */
+export interface AporteAccionista {
+  id: string;
+  empresaId: string;
+  accionista: string;
+  vehiculoReferencia: string | null;
+  monto: number;
+  moneda: Moneda;
+  fechaAporte: string;
+  generaInteres: boolean;
+  tipo: string;
+  observaciones: string;
+  createdAt: string;
+}
+
+export interface PrestamoFinancieroDetalle {
+  prestamo: PrestamoFinanciero;
+  tramos: PrestamoFinancieroTramo[];
+}
+
+/** Totales estimados solo para UI (no contabilidad). */
+export interface PrestamoFinancieroCalculoInfo {
+  fechaTopeCalculo: string;
+  mesesPagadosEstimados: number;
+  totalInteresPagadoEstimado: number;
+  capitalActualEstimado: number;
+  /** Cuota mensual derivada (modalidad tasa_anual o cuota_fija); montos en moneda de pago del préstamo. */
+  interesMensualEstimado: number;
+  porTramo: {
+    tramoId: number;
+    orden: number;
+    meses: number;
+    interesMensualEfectivo: number;
+    subtotalInteres: number;
+    desdeEfectivo: string;
+    hastaEfectivo: string;
+  }[];
+}
+
 /**
  * Registro alineado a la hoja Fact (gastos).
  */

@@ -7,6 +7,7 @@ import { formatDate, todayStr } from '../../utils/formatting';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import type { TipoControlFecha } from '../../data/types';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
@@ -31,7 +32,10 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
     loadControlFechasHistory,
   } = useRegistrosContext();
 
-  const active = vehicles.filter((v) => v.activo);
+  const active = useMemo(
+    () => [...vehicles.filter((v) => v.activo)].sort((a, b) => a.id - b.id),
+    [vehicles],
+  );
   const vehicleOpts = [
     { value: '', label: 'Seleccionar vehículo' },
     ...active.map((v) => ({ value: String(v.id), label: `${v.placa} · ${v.marca} ${v.modelo}` })),
@@ -74,16 +78,25 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
 
   const filasPaginaFiltradas = useMemo(() => {
     const q = busquedaPagina.trim().toLowerCase();
-    if (!q) return controlFechasHistory;
-    return controlFechasHistory.filter((c) => {
-      const label = getVehicleLabel(c.vehicleId).toLowerCase();
-      return (
-        String(c.id).includes(q) ||
-        c.tipo.toLowerCase().includes(q) ||
-        (c.comentarios && c.comentarios.toLowerCase().includes(q)) ||
-        label.includes(q) ||
-        c.fechaVencimiento.includes(q)
-      );
+    const rows =
+      !q
+        ? controlFechasHistory
+        : controlFechasHistory.filter((c) => {
+            const label = getVehicleLabel(c.vehicleId).toLowerCase();
+            return (
+              String(c.id).includes(q) ||
+              c.tipo.toLowerCase().includes(q) ||
+              (c.comentarios && c.comentarios.toLowerCase().includes(q)) ||
+              label.includes(q) ||
+              c.fechaVencimiento.includes(q)
+            );
+          });
+    return [...rows].sort((a, b) => {
+      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+      if (vr !== 0) return vr;
+      const fd = b.fechaVencimiento.localeCompare(a.fechaVencimiento);
+      if (fd !== 0) return fd;
+      return b.id - a.id;
     });
   }, [controlFechasHistory, busquedaPagina, getVehicleLabel]);
 

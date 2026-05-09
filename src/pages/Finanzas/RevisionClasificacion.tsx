@@ -14,6 +14,7 @@ import {
 import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 
 const TIPO_OPCIONES = [
   { value: 'operativo_vehiculo', label: 'Operativo vehículo' },
@@ -75,10 +76,11 @@ const RevisionClasificacion: React.FC = () => {
 
   const ordenados = useMemo(
     () =>
-      [...gastosPendientesRevision].sort(
-        (a, b) =>
-          (a.clasificacion_confianza ?? 1) - (b.clasificacion_confianza ?? 1),
-      ),
+      [...gastosPendientesRevision].sort((a, b) => {
+        const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+        if (vr !== 0) return vr;
+        return (a.clasificacion_confianza ?? 1) - (b.clasificacion_confianza ?? 1);
+      }),
     [gastosPendientesRevision],
   );
 

@@ -5,6 +5,19 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/formatting';
 import SmartClock from '../../components/Common/SmartClock';
+
+type HubCardOption = {
+  title: string;
+  desc: string;
+  emoji: string;
+  path: string;
+  gradient: string;
+  border: string;
+  /** Si se omite o es cadena vacía, no se muestra el monto arriba a la derecha. */
+  stat?: string;
+  statColor?: string;
+};
+
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
   const { ingresos, gastos, cajaNegocioVehiculo } = useRegistrosContext();
@@ -12,9 +25,27 @@ const FinanzasHub: React.FC = () => {
   const totalGastosTabla = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
   const totalCajaNegocio = useMemo(() => cajaNegocioVehiculo.reduce((s, x) => s + x.monto, 0), [cajaNegocioVehiculo]);
 
-  const options = [
-    { title: 'Ingresos', desc: 'Tabla y gráficos de ingresos', emoji: '💰', path: '/finanzas/ingresos', gradient: 'from-emerald-500/10 to-teal-500/10', border: 'border-emerald-200 hover:border-emerald-400', stat: formatCurrency(kpis.totalIngresos), statColor: 'text-emerald-600' },
-    { title: 'Resumen', desc: 'Por mes/año y vehículo (tipo Excel)', emoji: '📋', path: '/finanzas/resumen', gradient: 'from-violet-500/10 to-fuchsia-500/10', border: 'border-violet-200 hover:border-violet-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-violet-700' : 'text-red-600' },
+  const options: HubCardOption[] = [
+    {
+      title: 'Ingresos',
+      desc: 'Tabla y gráficos de ingresos',
+      emoji: '💰',
+      path: '/finanzas/ingresos',
+      gradient: 'from-emerald-500/10 to-teal-500/10',
+      border: 'border-emerald-200 hover:border-emerald-400',
+      stat: formatCurrency(kpis.totalIngresos),
+      statColor: 'text-emerald-600',
+    },
+    {
+      title: 'Resumen',
+      desc: 'Por mes/año y vehículo (tipo Excel)',
+      emoji: '📋',
+      path: '/finanzas/resumen',
+      gradient: 'from-violet-500/10 to-fuchsia-500/10',
+      border: 'border-violet-200 hover:border-violet-400',
+      stat: formatCurrency(kpis.margenNeto),
+      statColor: kpis.margenNeto >= 0 ? 'text-violet-700' : 'text-red-600',
+    },
     {
       title: 'Gastos',
       desc: 'Gastos clasificados por categoría',
@@ -26,16 +57,31 @@ const FinanzasHub: React.FC = () => {
       statColor: 'text-red-500',
     },
     {
-      title: 'Caja negocio',
-      desc: 'Utilidad por vehículo — aparte de gastos operativos e ingresos',
-      emoji: '🏪',
+      title: 'Utilidad',
+      desc: 'Por vehículo — aparte de gastos operativos e ingresos',
+      emoji: '📈',
       path: '/finanzas/caja-negocio',
       gradient: 'from-teal-500/10 to-cyan-500/10',
       border: 'border-teal-200 hover:border-teal-400',
       stat: formatCurrency(totalCajaNegocio),
       statColor: 'text-teal-800',
     },
-    { title: 'Reportes', desc: 'Análisis y comparativas', emoji: '📊', path: '/finanzas/reportes', gradient: 'from-purple-500/10 to-pink-500/10', border: 'border-purple-200 hover:border-purple-400', stat: formatCurrency(kpis.margenNeto), statColor: kpis.margenNeto >= 0 ? 'text-primary-600' : 'text-red-600' },
+    {
+      title: 'Financiamiento',
+      desc: 'Préstamos y aportes de capital',
+      emoji: '🏦',
+      path: '/finanzas/financiamiento',
+      gradient: 'from-indigo-500/10 to-blue-500/10',
+      border: 'border-indigo-200 hover:border-indigo-400',
+    },
+    {
+      title: 'Reportes',
+      desc: 'Análisis y comparativas',
+      emoji: '📊',
+      path: '/finanzas/reportes',
+      gradient: 'from-purple-500/10 to-pink-500/10',
+      border: 'border-purple-200 hover:border-purple-400',
+    },
   ];
 
   return (
@@ -54,21 +100,39 @@ const FinanzasHub: React.FC = () => {
         <SmartClock variant="hub" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
-        {options.map(o => (
-          <button key={o.path} onClick={() => navigate(o.path)}
-            className={`mission-btn bg-gradient-to-br ${o.gradient} border-2 ${o.border} group text-left`}>
-            <div className="flex items-start justify-between mb-3">
-              <span className="text-4xl group-hover:scale-110 transition-transform">{o.emoji}</span>
-              <span className={`text-base font-bold ${o.statColor}`}>{o.stat}</span>
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">{o.title}</h3>
-            <p className="text-sm text-gray-500">{o.desc}</p>
-            <div className="mt-4 flex items-center gap-1 text-xs text-gray-400 group-hover:text-primary-500 font-semibold transition-colors">
-              Ver {o.title} <ChevronRight size={14} />
-            </div>
-          </button>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {options.map((o) => {
+          const showStat = o.stat != null && String(o.stat).trim() !== '';
+          return (
+            <button
+              key={o.path}
+              type="button"
+              onClick={() => navigate(o.path)}
+              className={`mission-btn bg-gradient-to-br ${o.gradient} border-2 ${o.border} group text-left`}
+            >
+              <div
+                className={[
+                  'flex items-start gap-2 mb-3',
+                  showStat ? 'justify-between' : 'justify-start',
+                ].join(' ')}
+              >
+                <span className="text-4xl group-hover:scale-110 transition-transform shrink-0">{o.emoji}</span>
+                {showStat ? (
+                  <span
+                    className={`text-sm sm:text-base font-bold ${o.statColor ?? 'text-gray-800'} text-right leading-snug break-words max-w-[min(100%,14rem)]`}
+                  >
+                    {o.stat}
+                  </span>
+                ) : null}
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">{o.title}</h3>
+              <p className="text-sm text-gray-500">{o.desc}</p>
+              <div className="mt-4 flex items-center gap-1 text-xs text-gray-400 group-hover:text-primary-500 font-semibold transition-colors">
+                Ver {o.title} <ChevronRight size={14} />
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import Select from '../../components/Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import type { EstadoPendiente, Pendiente, PrioridadPendiente } from '../../data/types';
+import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 
 const ESTADOS_PENDIENTE: { value: EstadoPendiente; label: string }[] = [
   { value: 'ABIERTO', label: 'Abierto' },
@@ -78,6 +79,8 @@ const PendientesPage: React.FC = () => {
     }
     const rank: Record<PrioridadPendiente, number> = { ALTA: 0, MEDIA: 1, BAJA: 2 };
     return [...list].sort((a, b) => {
+      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+      if (vr !== 0) return vr;
       const rp = rank[a.prioridad] - rank[b.prioridad];
       if (rp !== 0) return rp;
       const fd = b.fecha.localeCompare(a.fecha);
@@ -88,7 +91,7 @@ const PendientesPage: React.FC = () => {
 
   const vehicleOptions = [
     { value: '', label: 'Todos los vehículos' },
-    ...vehicles.map((v) => ({
+    ...[...vehicles].sort((a, b) => a.id - b.id).map((v) => ({
       value: String(v.id),
       label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
     })),
