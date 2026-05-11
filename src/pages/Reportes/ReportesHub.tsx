@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { calculateKPIs, calculateVehicleRentability } from '../../utils/calculations';
+import { calculateVehicleRentability } from '../../utils/calculations';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { formatCurrency } from '../../utils/formatting';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line } from 'recharts';
@@ -43,7 +43,6 @@ const ReportesHub: React.FC = () => {
   const navigate = useNavigate();
   const { ingresos, gastos, descuentos, vehicles } = useRegistrosContext();
   const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
-  const kpis = useMemo(() => calculateKPIs(ingresos, gastos, descuentos), [ingresos, gastos, descuentos]);
   const rentability = useMemo(
     () => calculateVehicleRentability(vehicles, ingresos, gastos, descuentos),
     [vehicles, ingresos, gastos, descuentos],
@@ -137,50 +136,32 @@ const ReportesHub: React.FC = () => {
     }));
   }, [gastosOp]);
 
-  const margenPct = kpis.totalIngresos > 0 ? (kpis.margenNeto / kpis.totalIngresos) * 100 : 0;
-
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+    <div className="mx-auto max-w-5xl space-y-6 pb-8 animate-fade-in">
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/finanzas')}
+          className="mt-0.5 shrink-0 rounded-xl p-2 text-gray-500 hover:bg-gray-100"
+          aria-label="Volver a Finanzas"
+        >
           <ChevronLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📊 Reportes</h1>
-          <p className="text-sm text-gray-500">Análisis financiero completo</p>
-        </div>
-      </div>
-
-      {/* KPI strip – premium dark cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 p-5 shadow-lg shadow-emerald-500/20">
-          <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-white/10" />
-          <p className="text-[11px] font-semibold text-emerald-100 uppercase tracking-widest mb-2">Total ingresos</p>
-          <p className="text-2xl font-bold text-white tabular-nums leading-none">{formatCurrency(kpis.totalIngresos)}</p>
-          <p className="text-[11px] text-emerald-200 mt-2">{ingresos.length} registros</p>
-        </div>
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-600 to-rose-500 p-5 shadow-lg shadow-rose-500/20">
-          <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-white/10" />
-          <p className="text-[11px] font-semibold text-rose-100 uppercase tracking-widest mb-2">Total gastos</p>
-          <p className="text-2xl font-bold text-white tabular-nums leading-none">{formatCurrency(kpis.totalGastos)}</p>
-          <p className="text-[11px] text-rose-200 mt-2">{gastosOp.length} registros</p>
-        </div>
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-amber-400 p-5 shadow-lg shadow-amber-400/20">
-          <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-white/10" />
-          <p className="text-[11px] font-semibold text-amber-100 uppercase tracking-widest mb-2">Rebajes</p>
-          <p className="text-2xl font-bold text-white tabular-nums leading-none">{formatCurrency(kpis.totalDescuentos)}</p>
-          <p className="text-[11px] text-amber-100 mt-2">{descuentos.length} registros</p>
-        </div>
-        <div className={`relative overflow-hidden rounded-2xl p-5 shadow-lg ${kpis.margenNeto >= 0 ? 'bg-gradient-to-br from-violet-600 to-violet-500 shadow-violet-500/20' : 'bg-gradient-to-br from-slate-600 to-slate-500 shadow-slate-500/10'}`}>
-          <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-white/10" />
-          <p className="text-[11px] font-semibold text-white/70 uppercase tracking-widest mb-2">Utilidad neta</p>
-          <p className="text-2xl font-bold text-white tabular-nums leading-none">{formatCurrency(kpis.margenNeto)}</p>
-          <div className="flex items-center gap-1 mt-2">
-            {kpis.margenNeto >= 0
-              ? <TrendingUp size={13} className="text-violet-200" />
-              : <TrendingDown size={13} className="text-slate-300" />}
-            <p className="text-[11px] text-white/60">{margenPct.toFixed(1)}% margen</p>
-          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600/90">Finanzas</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Reportes</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Tendencia <span className="font-semibold text-gray-800">mes a mes por año</span> y ranking de flota. Los totales por
+            período flexible y alertas están en{' '}
+            <Link to="/finanzas/resumen" className="font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2">
+              Resumen
+            </Link>
+            ; el detalle de cobros en{' '}
+            <Link to="/finanzas/ingresos" className="font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2">
+              Ingresos
+            </Link>
+            .
+          </p>
         </div>
       </div>
 
@@ -193,9 +174,11 @@ const ReportesHub: React.FC = () => {
         <div className="relative px-6 pt-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">Rendimiento mensual</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Por año calendario · Gastos operativos · Utilidad = ingresos − gastos + rebajes
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Rendimiento mensual {chartYear ? `· ${chartYear}` : ''}
+              </h3>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
+                Solo el año seleccionado. Gastos = operativos. Utilidad del mes = ingresos − esos gastos + rebajes del mes.
               </p>
             </div>
             {/* Year pills */}
@@ -290,78 +273,70 @@ const ReportesHub: React.FC = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Leyenda inline */}
-        <div className="flex flex-wrap items-center gap-4 px-6 pb-5 mt-1">
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-            <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: 'linear-gradient(#34D399,#059669)' }} />
+        {/* Leyenda */}
+        <div className="flex flex-wrap items-center gap-4 border-t border-slate-700/40 px-6 py-4">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+            <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: 'linear-gradient(#34D399,#059669)' }} />
             Ingresos
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-            <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: 'linear-gradient(#FB7185,#E11D48)' }} />
-            Gastos
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+            <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: 'linear-gradient(#FB7185,#E11D48)' }} />
+            Gastos operativos
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-            <span className="w-8 h-0.5 rounded-full bg-violet-400 shrink-0" />
-            Utilidad
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+            <span className="h-0.5 w-8 shrink-0 rounded-full bg-violet-400" />
+            Utilidad del mes
           </span>
-        </div>
-
-        {/* Month grid – dark cards */}
-        <div className="border-t border-slate-700/50 px-6 py-5">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">
-            Detalle mensual {chartYear || '—'}
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-1.5">
-            {chartData.map((row) => (
-              <div
-                key={row.mes}
-                className="rounded-xl bg-slate-800/70 border border-slate-700/40 px-1.5 py-2 text-center hover:bg-slate-700/60 transition-colors"
-              >
-                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">{row.mes}</div>
-                <div className="space-y-0.5 tabular-nums">
-                  <div className="text-[10px] font-semibold text-emerald-400">
-                    {row.ingresos > 0 ? `${(row.ingresos / 1000).toFixed(1)}k` : <span className="text-slate-600">—</span>}
-                  </div>
-                  <div className="text-[10px] font-semibold text-rose-400">
-                    {row.gastos > 0 ? `${(row.gastos / 1000).toFixed(1)}k` : <span className="text-slate-600">—</span>}
-                  </div>
-                  <div className={`text-[10px] font-bold border-t border-slate-700/50 pt-0.5 mt-0.5 ${!row.hayMovimiento ? 'text-slate-600' : row.utilidad >= 0 ? 'text-violet-400' : 'text-red-400'}`}>
-                    {!row.hayMovimiento ? '—' : `${row.utilidad >= 0 ? '' : '-'}${(Math.abs(row.utilidad) / 1000).toFixed(1)}k`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-[10px] text-slate-600 mt-3">
-            Verde = ingresos · Rojo = gastos · Violeta = utilidad · cifras en miles de soles
-          </p>
+          <span className="text-[10px] text-slate-500">Pasa el cursor sobre un mes para ver montos exactos.</span>
         </div>
       </div>
 
-      {/* Gastos por categoría */}
+      {/* Gastos por categoría (legacy) — no compite con el gráfico principal */}
       {gastosCat.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Gastos por Categoría</h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={gastosCat} layout="vertical" margin={{ top: 0, right: 20, left: 5, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}
-                  tickFormatter={(v) => `S/${v.toLocaleString()}`} />
-                <YAxis dataKey="cat" type="category" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} width={100} />
-                <Tooltip formatter={(v) => [formatCurrency(Number(v)), 'Total']}
-                  contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }} />
-                <Bar dataKey="Total" fill="#8B5CF6" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <details className="rounded-2xl border border-gray-200 bg-gray-50/80 shadow-sm">
+          <summary className="cursor-pointer list-none px-5 py-4 text-sm font-bold text-gray-800 [&::-webkit-details-marker]:hidden">
+            <span className="underline decoration-gray-300 underline-offset-2">Gastos por categoría clásica</span>
+            <span className="ml-2 text-xs font-normal text-gray-500">(campo categoría; distinto del tipo de gasto en Resumen / Gastos)</span>
+          </summary>
+          <div className="border-t border-gray-200 bg-white px-5 pb-5 pt-2">
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={gastosCat} layout="vertical" margin={{ top: 0, right: 20, left: 5, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `S/${v.toLocaleString()}`}
+                  />
+                  <YAxis
+                    dataKey="cat"
+                    type="category"
+                    tick={{ fontSize: 11, fill: '#6B7280' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={100}
+                  />
+                  <Tooltip
+                    formatter={(v) => [formatCurrency(Number(v)), 'Total']}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="Total" fill="#8B5CF6" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        </details>
       )}
 
       {/* Vehicle ranking table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-800">Rentabilidad por Vehículo</h3>
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-soft">
+        <div className="border-b border-gray-100 px-5 py-4">
+          <h3 className="font-bold text-gray-800">Rentabilidad por vehículo</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Ingresos y gastos operativos por unidad (histórico completo). Toca una fila para abrir el detalle.
+          </p>
         </div>
         <div className="divide-y divide-gray-50">
           {rentability.map((r, i) => (

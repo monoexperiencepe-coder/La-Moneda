@@ -541,7 +541,7 @@ async function run() {
     const vehRef =
       vehRefRaw === null || vehRefRaw === '' ? null : String(vehRefRaw).trim() || null;
     const monto = parseMoney(cell(row, 'monto'));
-    const moneda = mapMoneda(cell(row, 'moneda'), 'PEN');
+    const moneda = mapMoneda(cell(row, 'moneda'), 'USD');
     const fechaAporte = parseDate(cell(row, 'fecha_aporte'));
     const generaInteres = parseBool(cell(row, 'genera_interes'));
     const tipoRaw = cell(row, 'tipo');

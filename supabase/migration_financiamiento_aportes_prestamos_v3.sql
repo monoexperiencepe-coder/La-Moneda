@@ -110,7 +110,7 @@ create table if not exists public.aportes_accionistas (
   accionista text not null default '',
   vehiculo_referencia text,
   monto numeric not null,
-  moneda text not null default 'PEN' check (moneda in ('PEN', 'USD')),
+  moneda text not null default 'USD' check (moneda in ('PEN', 'USD')),
   fecha_aporte date not null,
   genera_interes boolean not null default false,
   tipo text not null default 'aporte_accionista',

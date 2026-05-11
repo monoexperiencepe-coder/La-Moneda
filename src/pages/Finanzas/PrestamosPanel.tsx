@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ChevronDown, Info } from 'lucide-react';
+import { ArrowDown, ChevronDown } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import { fetchPrestamosFinancierosDetalle } from '../../services/prestamosFinancierosService';
 import type {
@@ -9,7 +9,7 @@ import type {
   PrestamoFinancieroDetalle,
   PrestamoFinancieroTramo,
 } from '../../data/types';
-import { calcularPrestamoFinancieroInfo, endOfPreviousMonthIso } from '../../utils/prestamosFinancierosCalc';
+import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 
@@ -55,17 +55,30 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista }: PrestamoCardProps) {
   );
 
   const activo = p.estado === 'activo';
-  const formulaNote =
-    p.modalidadPago === 'cuota_fija'
-      ? 'según cuota fija'
-      : p.tasaAnual != null
-        ? 'capital × tasa / 12'
-        : 'registro';
 
   return (
-    <article className="rounded-lg border border-slate-200/90 bg-white shadow-sm shadow-slate-200/20 overflow-hidden">
-      <header className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-3 py-2.5 sm:px-4 sm:py-3">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgba(99,102,241,0.14),transparent)] pointer-events-none" aria-hidden />
+    <article
+      className={
+        activo
+          ? 'rounded-lg border border-slate-200/90 bg-white shadow-sm shadow-slate-200/20 overflow-hidden'
+          : 'rounded-lg border border-red-200/80 bg-white shadow-sm shadow-red-200/25 overflow-hidden'
+      }
+    >
+      <header
+        className={
+          activo
+            ? 'relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-3 py-2.5 sm:px-4 sm:py-3'
+            : 'relative bg-gradient-to-br from-red-950 via-red-900 to-red-950 px-3 py-2.5 sm:px-4 sm:py-3'
+        }
+      >
+        <div
+          className={
+            activo
+              ? 'absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgba(99,102,241,0.14),transparent)] pointer-events-none'
+              : 'absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgba(252,165,165,0.2),transparent)] pointer-events-none'
+          }
+          aria-hidden
+        />
         <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="flex min-w-0 gap-2 sm:gap-2.5">
             <span
@@ -103,16 +116,11 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista }: PrestamoCardProps) {
                   className={
                     activo
                       ? 'inline-flex items-center rounded-md bg-emerald-400/20 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-200 ring-1 ring-emerald-400/30'
-                      : 'inline-flex items-center rounded-md bg-white/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-slate-300 ring-1 ring-white/15'
+                      : 'inline-flex items-center rounded-md bg-red-500/25 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-red-100 ring-1 ring-red-400/45'
                   }
                 >
                   {activo ? 'Activo' : 'Cancelado'}
                 </span>
-                {p.codigo ? (
-                  <span className="text-[9px] text-white/50 font-mono truncate max-w-[180px] sm:max-w-[240px]" title={p.codigo}>
-                    {p.codigo}
-                  </span>
-                ) : null}
               </div>
             </div>
           </div>
@@ -122,9 +130,9 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista }: PrestamoCardProps) {
             <span className="text-xl sm:text-2xl font-bold tabular-nums tracking-tight text-white leading-none mt-0.5">
               {montoFmt(p.interesMensualActual, p.monedaPago)}
             </span>
-            <span className="text-[9px] text-white/40 tabular-nums leading-none mt-0.5">
-              ≈ {montoFmt(calc.interesMensualEstimado, p.monedaPago)} ({formulaNote})
-            </span>
+            {p.modalidadPago === 'cuota_fija' ? (
+              <span className="text-[9px] text-white/45 leading-none mt-0.5">Cuota fija</span>
+            ) : null}
           </div>
         </div>
       </header>
@@ -169,13 +177,7 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista }: PrestamoCardProps) {
           <h3 className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide mb-1">Tramos</h3>
           <TramosTimeline tramos={tramosOrdenados} calc={calc} />
         </div>
-      ) : (
-        <div className="px-3 pb-2 sm:px-4">
-          <p className="text-[10px] text-slate-500 bg-slate-50 rounded-md px-2 py-1.5 leading-snug">
-            Sin tramos: total estimado con una sola cuota hasta la fecha de corte.
-          </p>
-        </div>
-      )}
+      ) : null}
 
       <details className="group border-t border-slate-100 bg-slate-50/60">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-1.5 sm:px-4 text-[11px] font-medium text-slate-600 hover:bg-slate-100/80 transition-colors [&::-webkit-details-marker]:hidden">
@@ -349,8 +351,6 @@ const PrestamosPanel: React.FC = () => {
     void reload();
   }, [reload]);
 
-  const topeLabel = endOfPreviousMonthIso();
-
   const detalleOrdenado = useMemo(() => {
     return [...detalle].sort((a, b) => {
       const ca = a.prestamo.capitalActualEstimado;
@@ -378,23 +378,6 @@ const PrestamosPanel: React.FC = () => {
           <code className="text-[10px] bg-white/80 px-1 rounded">prestamos_tramos</code>.
         </div>
       ) : null}
-      <details className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden group">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 sm:px-3 text-[11px] text-slate-600 hover:bg-slate-50 transition-colors [&::-webkit-details-marker]:hidden">
-          <Info className="h-3 w-3 shrink-0 text-indigo-500" aria-hidden />
-          <span className="font-medium text-slate-700">Acerca de estos números</span>
-          <ChevronDown className="ml-auto h-3 w-3 text-slate-400 transition-transform group-open:rotate-180 shrink-0" aria-hidden />
-        </summary>
-        <div className="px-2.5 pb-2 pt-0 sm:px-3 text-[10px] sm:text-[11px] text-slate-600 leading-snug border-t border-slate-100 bg-slate-50/50">
-          <p className="pt-1.5">
-            Vista solo informativa: tablas <code className="text-[10px] bg-slate-200/80 px-1 rounded">prestamos_financieros</code> y{' '}
-            <code className="text-[10px] bg-slate-200/80 px-1 rounded">prestamos_tramos</code> en Supabase. No incluye la tabla de gastos ni la categoría{' '}
-            <code className="text-[10px] bg-slate-200/80 px-1 rounded">financiero_prestamo</code>.
-            Estimaciones hasta el mes anterior (
-            <strong className="text-slate-800">{formatDate(topeLabel)}</strong>
-            ). Totales de cuota en moneda de pago.
-          </p>
-        </div>
-      </details>
 
       {!EMPRESA_ID ? (
         <Card title="Configuración">

@@ -8,6 +8,7 @@ import type {
   Gasto,
   CajaNegocioVehiculo,
   InversionVehiculo,
+  InversionGeneralVehiculo,
   GastoCaja,
   Moneda,
   TipoDocumento,
@@ -210,6 +211,23 @@ export function mapCajaNegocioVehiculoRow(r: Record<string, unknown>): CajaNegoc
     origenGastoId: numOrNull(r.origen_gasto_id),
     comentarios: str(r.comentarios),
     excelExtra: jsonRecordOrNull(r.excel_extra),
+    createdAt: isoCreated(r.created_at),
+  };
+}
+
+export function mapInversionGeneralVehiculoRow(r: Record<string, unknown>): InversionGeneralVehiculo {
+  const monRaw = str(r.moneda).trim().toUpperCase();
+  const moneda: Moneda = monRaw === 'USD' ? 'USD' : 'PEN';
+  return {
+    id: mapRowId(r.id),
+    vehiculoReferencia: str(r.vehiculo_referencia),
+    vehiculoNumero: numOrNull(r.vehiculo_numero),
+    placa: strOrNull(r.placa),
+    modelo: strOrNull(r.modelo),
+    montoTotal: num(r.monto_total),
+    moneda,
+    fuente: str(r.fuente) || 'VALOR DE INVERSION',
+    observaciones: strOrNull(r.observaciones),
     createdAt: isoCreated(r.created_at),
   };
 }

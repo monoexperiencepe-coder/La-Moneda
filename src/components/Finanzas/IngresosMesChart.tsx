@@ -2,20 +2,19 @@ import React from 'react';
 import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency } from '../../utils/formatting';
 
-export interface GastosMesChartProps {
+export interface IngresosMesChartProps {
   chartData: Array<{ mes: string; total: number }>;
-  /** Colores premium para barras (por categoría de gasto). */
   barFrom?: string;
   barTo?: string;
 }
 
-const GastosMesChart: React.FC<GastosMesChartProps> = ({
+const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
   chartData,
-  barFrom = '#FB7185',
-  barTo = '#B91C1C',
+  barFrom = '#34D399',
+  barTo = '#047857',
 }) => {
   const gid = React.useId().replace(/:/g, '');
-  const gradId = `gastoBar-${gid}`;
+  const gradId = `ingresoBar-${gid}`;
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -41,13 +40,13 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
           tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`}
         />
         <Tooltip
-          cursor={{ fill: 'rgba(248, 250, 252, 0.85)', radius: 8 }}
-          formatter={(v) => [formatCurrency(Number(v)), 'Gastos del mes']}
+          cursor={{ fill: 'rgba(236, 253, 245, 0.9)', radius: 8 }}
+          formatter={(v) => [formatCurrency(Number(v)), 'Ingresos del mes']}
           labelFormatter={(label) => `Mes: ${label}`}
           contentStyle={{
             borderRadius: '14px',
-            border: '1px solid rgba(226, 232, 240, 0.95)',
-            boxShadow: '0 10px 40px -12px rgba(15, 23, 42, 0.18)',
+            border: '1px solid rgba(209, 250, 229, 0.95)',
+            boxShadow: '0 10px 40px -12px rgba(6, 78, 59, 0.2)',
             fontSize: '13px',
             padding: '10px 14px',
           }}
@@ -58,4 +57,4 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
   );
 };
 
-export default GastosMesChart;
+export default IngresosMesChart;

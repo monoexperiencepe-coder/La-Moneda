@@ -32,6 +32,10 @@ export interface MonthlyBarChartCardProps {
   variant?: MonthlyBarChartVariant;
   /** Texto opcional bajo el subtítulo (ej. aclarar filtros activos). */
   footerHint?: string;
+  /** Etiqueta del selector de año (p. ej. «Año del gráfico» vs listado). */
+  yearSelectLabel?: string;
+  /** Cuando es false, oculta la rejilla de montos por mes bajo el gráfico (vista más limpia). */
+  showMonthTotalsGrid?: boolean;
 }
 
 const toNumberSafe = (value: unknown): number => {
@@ -49,6 +53,8 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
   tooltipSeriesName,
   variant = 'emerald',
   footerHint,
+  yearSelectLabel = 'Año',
+  showMonthTotalsGrid = true,
 }) => {
   const vs = VARIANT_STYLES[variant];
 
@@ -61,8 +67,8 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
           {footerHint && <p className="text-[11px] text-gray-400 mt-1">{footerHint}</p>}
         </div>
         {yearOptions.length > 0 ? (
-          <div className="w-full sm:w-40 shrink-0">
-            <Select label="Año" options={yearOptions} value={chartYear} onChange={onChartYearChange} />
+          <div className="w-full sm:w-44 shrink-0 [&_.label]:text-xs [&_.label]:font-semibold [&_.label]:text-slate-600">
+            <Select label={yearSelectLabel} options={yearOptions} value={chartYear} onChange={onChartYearChange} />
           </div>
         ) : (
           <p className="text-xs text-gray-400">Sin fechas para graficar</p>
@@ -113,24 +119,26 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-5 pt-5 border-t border-gray-100">
-        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Montos del año ({chartYear || '—'})
-        </p>
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
-          {chartData.map((row) => (
-            <div
-              key={row.mes}
-              className="rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100/90 px-2 py-2 text-center shadow-sm"
-            >
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{row.mes}</div>
-              <div className={`mt-1 text-xs font-bold tabular-nums leading-tight ${vs.gridAmountClass}`}>
-                {row.total > 0 ? formatCurrency(row.total) : '—'}
+      {showMonthTotalsGrid ? (
+        <div className="mt-5 border-t border-gray-100 pt-5">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Montos del año ({chartYear || '—'})
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12">
+            {chartData.map((row) => (
+              <div
+                key={row.mes}
+                className="rounded-xl border border-gray-100/90 bg-gradient-to-b from-gray-50 to-white px-2 py-2 text-center shadow-sm"
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{row.mes}</div>
+                <div className={`mt-1 text-xs font-bold tabular-nums leading-tight ${vs.gridAmountClass}`}>
+                  {row.total > 0 ? formatCurrency(row.total) : '—'}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 };

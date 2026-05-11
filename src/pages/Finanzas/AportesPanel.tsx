@@ -84,7 +84,9 @@ const AportesPanel: React.FC = () => {
         </p>
       ) : null}
       <div className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950 leading-snug">
-        <strong className="font-semibold">Importante:</strong> No genera interés. Es capital aportado.
+        <strong className="font-semibold">Importante:</strong> No genera interés. Es capital aportado.{' '}
+        <span className="font-semibold">Montos en dólares (US$)</span> salvo que una fila indique explícitamente PEN en base de
+        datos.
       </div>
 
       {!EMPRESA_ID ? (
@@ -114,13 +116,13 @@ const AportesPanel: React.FC = () => {
         </Card>
       ) : (
         <>
-          <Card title="Total aportado">
+          <Card title="Total aportado" subtitle="Suma por moneda registrada en cada fila (convención: US$).">
             <div className="flex flex-wrap gap-3 text-sm">
-              {totalesPorMoneda.pen > 0 ? (
-                <span className="font-semibold text-slate-900">{montoFmt(totalesPorMoneda.pen, 'PEN')}</span>
-              ) : null}
               {totalesPorMoneda.usd > 0 ? (
                 <span className="font-semibold text-slate-900">{montoFmt(totalesPorMoneda.usd, 'USD')}</span>
+              ) : null}
+              {totalesPorMoneda.pen > 0 ? (
+                <span className="font-semibold text-slate-700">{montoFmt(totalesPorMoneda.pen, 'PEN')}</span>
               ) : null}
               {totalesPorMoneda.pen === 0 && totalesPorMoneda.usd === 0 ? (
                 <span className="text-slate-500">—</span>
@@ -134,8 +136,8 @@ const AportesPanel: React.FC = () => {
                 <li key={nombre} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                   <span className="font-medium text-slate-800">{nombre}</span>
                   <span className="text-slate-600 tabular-nums text-xs sm:text-sm">
-                    {t.pen > 0 ? <span className="mr-2">{montoFmt(t.pen, 'PEN')}</span> : null}
-                    {t.usd > 0 ? <span>{montoFmt(t.usd, 'USD')}</span> : null}
+                    {t.usd > 0 ? <span className="mr-2 font-semibold text-slate-900">{montoFmt(t.usd, 'USD')}</span> : null}
+                    {t.pen > 0 ? <span>{montoFmt(t.pen, 'PEN')}</span> : null}
                   </span>
                 </li>
               ))}
@@ -150,7 +152,8 @@ const AportesPanel: React.FC = () => {
                     <th className="py-1.5 pr-2 font-medium">Fecha</th>
                     <th className="py-1.5 pr-2 font-medium">Accionista</th>
                     <th className="py-1.5 pr-2 font-medium">Vehículo ref.</th>
-                    <th className="py-1.5 pr-2 font-medium text-right">Monto</th>
+                    <th className="py-1.5 pr-2 text-right font-medium">Monto</th>
+                    <th className="py-1.5 pr-2 font-medium">Moneda</th>
                     <th className="py-1.5 font-medium">Tipo</th>
                   </tr>
                 </thead>
@@ -165,6 +168,7 @@ const AportesPanel: React.FC = () => {
                       <td className="py-2 pr-2 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">
                         {montoFmt(r.monto, r.moneda)}
                       </td>
+                      <td className="py-2 pr-2 whitespace-nowrap text-slate-600">{r.moneda}</td>
                       <td className="py-2 text-slate-500">{r.tipo}</td>
                     </tr>
                   ))}

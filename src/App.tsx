@@ -15,11 +15,16 @@ const Inicio = lazy(() => import('./pages/Dashboard/Inicio'));
 const FinanzasHub = lazy(() => import('./pages/Finanzas/FinanzasHub'));
 const Ingresos = lazy(() => import('./pages/Finanzas/Ingresos'));
 const Gastos = lazy(() => import('./pages/Finanzas/Gastos'));
+const Inversiones = lazy(() => import('./pages/Finanzas/Inversiones'));
+const InversionesUtilidad = lazy(() => import('./pages/Finanzas/InversionesUtilidad'));
+const InversionesGenerales = lazy(() => import('./pages/Finanzas/InversionesGenerales'));
 const GastosCaja = lazy(() => import('./pages/Finanzas/GastosCaja'));
 const CajaNegocio = lazy(() => import('./pages/Finanzas/CajaNegocio'));
 const Descuentos = lazy(() => import('./pages/Finanzas/Descuentos'));
 const Prestamos = lazy(() => import('./pages/Finanzas/Prestamos'));
 const Financiamiento = lazy(() => import('./pages/Finanzas/Financiamiento'));
+const FinanciamientoPrestamos = lazy(() => import('./pages/Finanzas/FinanciamientoPrestamos'));
+const FinanciamientoAportes = lazy(() => import('./pages/Finanzas/FinanciamientoAportes'));
 const ReportesHub = lazy(() => import('./pages/Reportes/ReportesHub'));
 const Resumen = lazy(() => import('./pages/Finanzas/Resumen'));
 const RevisionClasificacion = lazy(() => import('./pages/Finanzas/RevisionClasificacion'));
@@ -106,10 +111,15 @@ const AppContent: React.FC = () => {
                         <Route path="/finanzas" element={<FinanzasHub />} />
                         <Route path="/finanzas/ingresos" element={<Ingresos />} />
                         <Route path="/finanzas/gastos" element={<Gastos />} />
+                        <Route path="/finanzas/inversiones" element={<Inversiones />} />
+                        <Route path="/finanzas/inversiones/utilidad" element={<InversionesUtilidad />} />
+                        <Route path="/finanzas/inversiones/generales" element={<InversionesGenerales />} />
                         <Route path="/finanzas/gastos-caja" element={<GastosCaja />} />
                         <Route path="/finanzas/caja-negocio" element={<CajaNegocio />} />
                         <Route path="/finanzas/descuentos" element={<Descuentos />} />
                         <Route path="/finanzas/financiamiento" element={<Financiamiento />} />
+                        <Route path="/finanzas/financiamiento/prestamos" element={<FinanciamientoPrestamos />} />
+                        <Route path="/finanzas/financiamiento/aportes" element={<FinanciamientoAportes />} />
                         <Route path="/finanzas/prestamos" element={<Prestamos />} />
                         <Route path="/finanzas/reportes" element={<ReportesHub />} />
                         <Route path="/finanzas/resumen" element={<Resumen />} />

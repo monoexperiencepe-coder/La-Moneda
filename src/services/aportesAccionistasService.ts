@@ -11,7 +11,7 @@ function mapRow(r: Record<string, unknown>): AporteAccionista {
     vehiculoReferencia:
       veh == null || String(veh).trim() === '' ? null : String(veh).trim(),
     monto: Number(r.monto ?? 0),
-    moneda: (String(r.moneda ?? 'PEN').toUpperCase() === 'USD' ? 'USD' : 'PEN') as Moneda,
+    moneda: (String(r.moneda ?? 'USD').toUpperCase() === 'USD' ? 'USD' : 'PEN') as Moneda,
     fechaAporte: String(r.fecha_aporte ?? '').slice(0, 10),
     generaInteres: Boolean(r.genera_interes),
     tipo: String(r.tipo ?? 'aporte_accionista'),

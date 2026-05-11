@@ -245,6 +245,23 @@ export interface Gasto {
  * Costo histórico de inversión / adquisición por unidad (tabla inversiones_vehiculo).
  * No es gasto operativo mensual; no se mezcla con totales de gastos Fact.
  */
+/**
+ * Total de inversión inicial por vehículo (tabla inversiones_generales_vehiculo).
+ * Origen Excel VALOR DE INVERSION; no es fila de public.gastos.
+ */
+export interface InversionGeneralVehiculo {
+  id: string;
+  vehiculoReferencia: string;
+  vehiculoNumero: number | null;
+  placa: string | null;
+  modelo: string | null;
+  montoTotal: number;
+  moneda: Moneda;
+  fuente: string;
+  observaciones: string | null;
+  createdAt: string;
+}
+
 export interface InversionVehiculo {
   id: number;
   vehicleId: number | null;
