@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PlusCircle, CalendarRange } from 'lucide-react';
 import Button from '../Common/Button';
 import Input from '../Common/Input';
@@ -14,20 +14,41 @@ import {
   getDetallesMetodoPago,
   METODOS_PAGO,
 } from '../../data/factCatalog';
+import {
+  FINANZA_GASTO_REGISTRO_OPTIONS,
+  firstFactTipoForFinanza,
+  getFactTiposForFinanza,
+  type FinanzaGastoRegistroValue,
+} from '../../data/finanzaGastoRegistro';
+import {
+  REPRESENTACION_INTERNA_FACT_SUBTIPO,
+  REPRESENTACION_INTERNA_FACT_TIPO,
+  SUBTIPOS_REPRESENTACION_INTERNA,
+  defaultSubtipoRepresentacionInterna,
+} from '../../data/representacionInterna';
+import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
+import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { todayStr } from '../../utils/formatting';
 
 interface ExpenseFormProps {
   vehicles: Vehicle[];
   gastos?: Gasto[];
   onSubmit: (gasto: Omit<Gasto, 'id' | 'createdAt'>) => void;
+  noCard?: boolean;
+  prefillVehicleId?: number | null;
+  /** Solo inversión con utilidad: categoría fija `inversion_compra` (Finanzas → Inversiones). */
+  finanzaPreset?: 'inversion_compra' | null;
 }
 
 interface FormState {
+  categoriaFinanciera: FinanzaGastoRegistroValue | '';
   fecha: string;
   vehicleId: string;
   tipo: string;
   subTipo: string;
+  /** Solo categoría `representacion_interna`: subtipo financiero (no Fact). */
+  subtipoRepresentacion: string;
   fechaDesde: string;
   fechaHasta: string;
   metodoPago: string;
@@ -37,14 +58,22 @@ interface FormState {
   comentarios: string;
 }
 
+/** Tipo Fact por defecto al abrir el formulario (evita depender del orden alfabético del catálogo). */
+const DEFAULT_TIPO_GASTO_FACT = 'MECÁNICOS';
+
 function emptyForm(): FormState {
-  const tipo0 = TIPOS_GASTO_FACT[0] ?? '';
+  const tipo0 =
+    (DEFAULT_TIPO_GASTO_FACT && TIPOS_GASTO_FACT.includes(DEFAULT_TIPO_GASTO_FACT)
+      ? DEFAULT_TIPO_GASTO_FACT
+      : TIPOS_GASTO_FACT[0]) ?? '';
   const y = getDetallesMetodoPago('Yape')[0];
   return {
+    categoriaFinanciera: '',
     fecha: todayStr(),
     vehicleId: '',
     tipo: tipo0,
     subTipo: getSubtiposGasto(tipo0)[0] ?? '',
+    subtipoRepresentacion: '',
     fechaDesde: '',
     fechaHasta: '',
     metodoPago: 'Yape',
@@ -55,24 +84,103 @@ function emptyForm(): FormState {
   };
 }
 
-const ExpenseForm: React.FC<ExpenseFormProps> = ({ vehicles, gastos = [], onSubmit }) => {
-  const [form, setForm] = useState<FormState>(emptyForm);
+function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState {
+  if (finanzaPreset === 'inversion_compra') {
+    const cat: FinanzaGastoRegistroValue = 'inversion_compra';
+    const t0 = firstFactTipoForFinanza(cat);
+    const y = getDetallesMetodoPago('Yape')[0];
+    return {
+      categoriaFinanciera: cat,
+      fecha: todayStr(),
+      vehicleId: '',
+      tipo: t0,
+      subTipo: getSubtiposGasto(t0)[0] ?? '',
+      subtipoRepresentacion: '',
+      fechaDesde: '',
+      fechaHasta: '',
+      metodoPago: 'Yape',
+      metodoPagoDetalle: y?.detalle ?? '',
+      monto: '',
+      pagadoA: '',
+      comentarios: '',
+    };
+  }
+  return emptyForm();
+}
+
+const ExpenseForm: React.FC<ExpenseFormProps> = ({
+  vehicles,
+  gastos = [],
+  onSubmit,
+  noCard = false,
+  prefillVehicleId = null,
+  finanzaPreset = null,
+}) => {
+  const [form, setForm] = useState<FormState>(() => initialExpenseForm(finanzaPreset));
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [periodoOpen, setPeriodoOpen] = useState(false);
 
+  useEffect(() => {
+    if (prefillVehicleId != null && Number.isFinite(prefillVehicleId) && prefillVehicleId > 0) {
+      setForm((f) => ({ ...f, vehicleId: String(prefillVehicleId) }));
+    }
+  }, [prefillVehicleId]);
+
+  useEffect(() => {
+    if (form.categoriaFinanciera === 'gastos_globales') {
+      setForm((f) => (f.vehicleId ? { ...f, vehicleId: '' } : f));
+    }
+  }, [form.categoriaFinanciera]);
+
+  useEffect(() => {
+    if (!form.categoriaFinanciera) return;
+    const allowed = getFactTiposForFinanza(form.categoriaFinanciera);
+    if (allowed.length === 0 || allowed.includes(form.tipo)) return;
+    const t0 = allowed[0];
+    setForm((f) => ({ ...f, tipo: t0, subTipo: getSubtiposGasto(t0)[0] ?? '' }));
+  }, [form.categoriaFinanciera, form.tipo]);
+
   const subtipos = useMemo(() => getSubtiposGasto(form.tipo), [form.tipo]);
+
+  const tiposFactParaCategoria = useMemo(() => {
+    if (!form.categoriaFinanciera) return [...TIPOS_GASTO_FACT];
+    return getFactTiposForFinanza(form.categoriaFinanciera);
+  }, [form.categoriaFinanciera]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
+    if (!form.categoriaFinanciera) newErrors.categoriaFinanciera = 'Elige categoría financiera';
     if (!form.fecha) newErrors.fecha = 'La fecha de movimiento es requerida';
-    if (!form.tipo) newErrors.tipo = 'Selecciona el tipo de gasto';
-    if (subtipos.length > 0 && !form.subTipo) newErrors.subTipo = 'Selecciona sub tipo';
+    if (!form.tipo) {
+      newErrors.tipo = 'Selecciona el tipo de gasto';
+    } else if (form.categoriaFinanciera && form.categoriaFinanciera !== 'representacion_interna') {
+      const permitidos = getFactTiposForFinanza(form.categoriaFinanciera);
+      if (!permitidos.includes(form.tipo)) {
+        newErrors.tipo = 'Elige un tipo Fact válido para esta categoría';
+      }
+    }
+    if (form.categoriaFinanciera === 'representacion_interna') {
+      if (!form.subtipoRepresentacion.trim()) {
+        newErrors.subtipoRepresentacion = 'Elige subtipo de representación interna';
+      }
+    } else if (subtipos.length > 0 && !form.subTipo) {
+      newErrors.subTipo = 'Selecciona sub tipo';
+    }
     const m = Number(form.monto);
     if (!form.monto?.trim() || Number.isNaN(m) || m <= 0) {
       newErrors.monto = 'Ingresa un monto válido';
     }
     if (!form.metodoPagoDetalle.trim()) newErrors.metodoPagoDetalle = 'Selecciona la cuenta de pago';
+    if (
+      (form.categoriaFinanciera === 'operativo_vehiculo' || form.categoriaFinanciera === 'inversion_compra')
+      && !form.vehicleId.trim()
+    ) {
+      newErrors.vehicleId =
+        form.categoriaFinanciera === 'inversion_compra'
+          ? 'Indica el vehículo (inversión con utilidad va por unidad).'
+          : 'Operativo: indica el vehículo (N° unidad)';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -83,27 +191,42 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ vehicles, gastos = [], onSubm
     setLoading(true);
     await new Promise(r => setTimeout(r, 400));
     const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
-    const sub = form.subTipo || null;
+    const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
+    const esGlobal = catFin === 'gastos_globales';
+    const esRep = catFin === 'representacion_interna';
+    const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
+    const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
+    const subtipoFin = esRep ? form.subtipoRepresentacion.trim() : (form.subTipo || null) ? form.subTipo.trim() : null;
+    const motivoFin = esRep
+      ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
+      : (form.subTipo || form.tipo);
     const rawM = Number(Number(form.monto).toFixed(2));
     onSubmit({
       fecha: form.fecha,
       fechaRegistro: todayStr(),
-      vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
-      tipo: form.tipo,
-      subTipo: sub,
+      vehicleId: esGlobal ? null : form.vehicleId.trim() ? Number(form.vehicleId) : null,
+      tipo: factTipo,
+      subTipo: factSub,
       fechaDesde: form.fechaDesde.trim() || null,
       fechaHasta: form.fechaHasta.trim() || null,
       metodoPago: form.metodoPago,
       metodoPagoDetalle: form.metodoPagoDetalle.trim(),
       celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
-      categoria: inferCategoriaFromTipoGasto(form.tipo),
-      motivo: sub ?? form.tipo,
+      categoria: inferCategoriaFromTipoGasto(factTipo),
+      motivo: motivoFin,
       signo: '-',
       monto: rawM,
       pagadoA: form.pagadoA.trim(),
       comentarios: form.comentarios,
+      tipo_gasto: catFin,
+      subtipo_gasto: subtipoFin,
+      es_global_flota: esGlobal,
+      origen_clasificacion: 'registro_ui',
+      clasificacion_manual: true,
+      clasificacion_confianza: 1,
+      requiere_revision: false,
     });
-    setForm(emptyForm());
+    setForm(initialExpenseForm(finanzaPreset));
     setErrors({});
     setLoading(false);
   };
@@ -115,157 +238,325 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ vehicles, gastos = [], onSubm
         ? `${form.fechaDesde || '…'} → ${form.fechaHasta || '…'}`
         : null;
 
-  return (
-    <Card title="Registrar Gasto" subtitle="Movimiento, período opcional, método y cuenta">
-      <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Fecha de movimiento"
-            type="date"
-            value={form.fecha}
-            onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))}
-            error={errors.fecha}
-            required
-          />
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
-            <p className="text-xs font-medium text-gray-600">Fecha de registro</p>
-            <p className="text-sm text-gray-800 mt-0.5">
-              Automática al guardar: <strong>{todayStr()}</strong> (fecha del sistema)
-            </p>
-          </div>
+  const seleccionesBloqueadas = !form.categoriaFinanciera;
+
+  const inner = (
+    <form onSubmit={handleSubmit} className="mt-2 space-y-3">
+      {finanzaPreset === 'inversion_compra' ? (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2.5">
+          <p className="text-xs font-bold text-violet-900">Inversión con utilidad</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-violet-800/95">
+            Se guarda en la tabla de gastos con <span className="font-mono">tipo_gasto = inversion_compra</span>. Debes
+            elegir la unidad (N° vehículo).
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
-            label="N° Vehículo (opcional)"
-            options={vehicles.filter(v => v.activo).map(v => ({
-              value: v.id,
-              label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
-            }))}
-            value={form.vehicleId}
-            placeholder="General / sin vehículo"
-            onChange={v => setForm(p => ({ ...p, vehicleId: v }))}
-            helper="Dejar vacío si es un gasto general"
-          />
-          <div className="flex flex-col justify-end">
-            <button
-              type="button"
-              onClick={() => setPeriodoOpen(true)}
-              className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-rose-300 hover:bg-rose-50/50 transition-colors"
-            >
-              <CalendarRange size={18} className="text-rose-600 shrink-0" />
-              <span className="truncate">
-                {periodoLabel ? `Período: ${periodoLabel}` : 'Período del gasto (opcional)'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <PeriodoPagoModal
-          isOpen={periodoOpen}
-          onClose={() => setPeriodoOpen(false)}
-          fechaDesde={form.fechaDesde}
-          fechaHasta={form.fechaHasta}
-          onGuardar={(desde, hasta) => {
-            setForm(p => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
-          }}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
-            label="Tipo (Fact)"
-            options={TIPOS_GASTO_FACT.map(t => ({ value: t, label: t }))}
-            value={form.tipo}
-            placeholder="Seleccionar tipo..."
-            onChange={v => {
-              const subs = getSubtiposGasto(v);
-              setForm(p => ({
+      ) : (
+        <Select
+          label="Categoría financiera"
+          placeholder="— Elige una —"
+          options={FINANZA_GASTO_REGISTRO_OPTIONS.map((o) => ({
+            value: o.value,
+            label: `${o.emoji} ${o.label}`,
+          }))}
+          value={form.categoriaFinanciera}
+          onChange={(v) => {
+            if (!v) {
+              setForm((p) => {
+                const next = {
+                  ...emptyForm(),
+                  fecha: p.fecha,
+                  metodoPago: p.metodoPago,
+                  metodoPagoDetalle: p.metodoPagoDetalle,
+                };
+                if (prefillVehicleId != null && Number.isFinite(prefillVehicleId) && prefillVehicleId > 0) {
+                  next.vehicleId = String(prefillVehicleId);
+                }
+                return next;
+              });
+              setErrors({});
+              return;
+            }
+            const cat = v as FinanzaGastoRegistroValue;
+            setForm((p) => {
+              if (cat === 'representacion_interna') {
+                return {
+                  ...p,
+                  categoriaFinanciera: cat,
+                  tipo: REPRESENTACION_INTERNA_FACT_TIPO,
+                  subTipo: REPRESENTACION_INTERNA_FACT_SUBTIPO,
+                  subtipoRepresentacion: defaultSubtipoRepresentacionInterna(),
+                  vehicleId: p.vehicleId,
+                };
+              }
+              const tipo0 = firstFactTipoForFinanza(cat);
+              return {
                 ...p,
-                tipo: v,
-                subTipo: subs[0] ?? '',
-              }));
-              setErrors(p => ({ ...p, tipo: '', subTipo: '' }));
-            }}
-            error={errors.tipo}
-            required
-          />
-          <Select
-            label="Sub tipo"
-            options={subtipos.map(s => ({ value: s, label: s }))}
-            value={form.subTipo}
-            placeholder={subtipos.length ? 'Seleccionar...' : '—'}
-            onChange={v => {
-              setForm(p => ({ ...p, subTipo: v }));
-              setErrors(p => ({ ...p, subTipo: '' }));
-            }}
-            error={errors.subTipo}
-            disabled={subtipos.length === 0}
-            required={subtipos.length > 0}
-          />
-        </div>
+                categoriaFinanciera: cat,
+                tipo: tipo0,
+                subTipo: getSubtiposGasto(tipo0)[0] ?? '',
+                subtipoRepresentacion: '',
+                vehicleId: cat === 'gastos_globales' ? '' : p.vehicleId,
+              };
+            });
+            setErrors((e) => ({
+              ...e,
+              categoriaFinanciera: '',
+              tipo: '',
+              subTipo: '',
+              subtipoRepresentacion: '',
+              vehicleId: '',
+            }));
+          }}
+          error={errors.categoriaFinanciera}
+          helper="Primero elige categoría: hasta entonces fecha, vehículo, período, tipo Fact y método de pago no se pueden cambiar."
+          required
+        />
+      )}
 
-        <p className="text-xs text-gray-500">
-          Categoría KPI: {inferCategoriaFromTipoGasto(form.tipo).replace(/_/g, ' ')}
+      <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-3 shadow-inner shadow-gray-900/[0.03] sm:p-4">
+        <p className="mb-2 text-[11px] leading-snug text-gray-600">
+          {form.categoriaFinanciera
+            ? FINANZA_GASTO_REGISTRO_OPTIONS.find((o) => o.value === form.categoriaFinanciera)?.hint
+            : 'Elige categoría financiera arriba para afinar tipo Fact y validaciones (vehículo obligatorio en operativo, etc.).'}
         </p>
 
-        <MetodoCuentaPicker
-          metodosChips={METODOS_PAGO}
-          metodoPago={form.metodoPago}
-          metodoPagoDetalle={form.metodoPagoDetalle}
-          registrosForCount={gastos}
-          theme="rose"
-          conteoEtiqueta="gastos"
-          onChange={({ metodoPago, metodoPagoDetalle }) => {
-            setForm(p => ({ ...p, metodoPago, metodoPagoDetalle }));
-            setErrors(e => ({ ...e, metodoPagoDetalle: '' }));
-          }}
-        />
-        {errors.metodoPagoDetalle && (
-          <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>
-        )}
+        <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Fecha de movimiento"
+                type="date"
+                value={form.fecha}
+                onChange={(e) => setForm((p) => ({ ...p, fecha: e.target.value }))}
+                error={errors.fecha}
+                required
+                disabled={seleccionesBloqueadas}
+              />
+              <div className="flex flex-col justify-center rounded-lg border border-dashed border-gray-200 bg-white/80 px-3 py-2">
+                <p className="text-[11px] font-medium text-gray-600">Fecha de registro</p>
+                <p className="text-xs text-gray-800">
+                  Al guardar: <strong>{todayStr()}</strong>
+                </p>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Monto (S/)"
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.monto}
-            onChange={e => {
-              setForm(p => ({ ...p, monto: e.target.value }));
-              setErrors(p => ({ ...p, monto: '' }));
-            }}
-            error={errors.monto}
-            placeholder="0.00"
-            required
-          />
-          <Input
-            label="Pagado a"
-            type="text"
-            value={form.pagadoA}
-            onChange={e => setForm(p => ({ ...p, pagadoA: e.target.value }))}
-            placeholder="Ej. Taller San José, mecánico Juan…"
-            helper="Quién recibe el pago (aparte del tipo de gasto y la cuenta de salida)"
-          />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {form.categoriaFinanciera === 'gastos_globales' ? (
+                <div className="rounded-lg border border-teal-100 bg-teal-50/60 px-3 py-2 sm:col-span-2">
+                  <p className="text-[11px] font-medium text-teal-900">Globales: sin unidad asignada</p>
+                  <p className="mt-0.5 text-[11px] text-teal-800/90">
+                    El gasto queda como flota general (campo es_global_flota). No uses N° vehículo aquí.
+                  </p>
+                </div>
+              ) : (
+                <Select
+                  label={
+                    form.categoriaFinanciera === 'operativo_vehiculo' ||
+                    form.categoriaFinanciera === 'inversion_compra'
+                      ? 'N° Vehículo (obligatorio)'
+                      : 'N° Vehículo (opcional)'
+                  }
+                  options={vehicles.filter((v) => v.activo).map((v) => ({
+                    value: String(v.id),
+                    label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+                  }))}
+                  value={form.vehicleId}
+                  placeholder="General / sin vehículo"
+                  onChange={(v) => setForm((p) => ({ ...p, vehicleId: v }))}
+                  helper={
+                    form.categoriaFinanciera === 'operativo_vehiculo'
+                      ? 'Operativo: debe estar ligado a una unidad.'
+                      : form.categoriaFinanciera === 'inversion_compra'
+                        ? 'Inversión con utilidad: asigna la unidad donde aplica la compra o inversión.'
+                        : 'Opcional si el gasto aplica a una unidad concreta.'
+                  }
+                  error={errors.vehicleId}
+                  disabled={seleccionesBloqueadas}
+                />
+              )}
+              <div className="flex flex-col justify-end">
+                <button
+                  type="button"
+                  disabled={seleccionesBloqueadas}
+                  onClick={() => setPeriodoOpen(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:border-rose-300 hover:bg-rose-50/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-gray-200 disabled:hover:bg-transparent"
+                >
+                  <CalendarRange size={18} className="shrink-0 text-rose-600" />
+                  <span className="truncate">
+                    {periodoLabel ? `Período: ${periodoLabel}` : 'Período del gasto (opcional)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <PeriodoPagoModal
+              isOpen={periodoOpen}
+              onClose={() => setPeriodoOpen(false)}
+              fechaDesde={form.fechaDesde}
+              fechaHasta={form.fechaHasta}
+              onGuardar={(desde, hasta) => {
+                setForm((p) => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
+              }}
+            />
+
+            <p className="text-[10px] leading-snug text-gray-500">
+              Sin categoría el catálogo Fact se muestra completo pero los desplegables de tipo están bloqueados; al elegir categoría se desbloquean y el tipo se ajusta a lo coherente.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {form.categoriaFinanciera === 'representacion_interna' ? (
+                <Select
+                  label="Subtipo (representación interna)"
+                  options={SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
+                    value: s,
+                    label: getRepresentacionInternaSubtipoLabel(s),
+                  }))}
+                  value={form.subtipoRepresentacion}
+                  placeholder="Seleccionar…"
+                  onChange={(v) => {
+                    setForm((p) => ({ ...p, subtipoRepresentacion: v }));
+                    setErrors((e) => ({ ...e, subtipoRepresentacion: '' }));
+                  }}
+                  error={errors.subtipoRepresentacion}
+                  required
+                  disabled={seleccionesBloqueadas}
+                  helper="Tipo Fact fijo (OTROS GASTOS · REPRESENTACIÓN) para no duplicar selección."
+                />
+              ) : (
+                <>
+                  <Select
+                    label="Tipo (Fact)"
+                    options={tiposFactParaCategoria.map((t) => ({ value: t, label: t }))}
+                    value={form.tipo}
+                    placeholder="Seleccionar tipo..."
+                    onChange={(v) => {
+                      const subs = getSubtiposGasto(v);
+                      setForm((p) => ({
+                        ...p,
+                        tipo: v,
+                        subTipo: subs[0] ?? '',
+                      }));
+                      setErrors((p) => ({ ...p, tipo: '', subTipo: '' }));
+                    }}
+                    error={errors.tipo}
+                    required
+                    disabled={seleccionesBloqueadas}
+                  />
+                  <Select
+                    label="Sub tipo"
+                    options={subtipos.map((s) => ({ value: s, label: s }))}
+                    value={form.subTipo}
+                    placeholder={subtipos.length ? 'Seleccionar...' : '—'}
+                    onChange={(v) => {
+                      setForm((p) => ({ ...p, subTipo: v }));
+                      setErrors((p) => ({ ...p, subTipo: '' }));
+                    }}
+                    error={errors.subTipo}
+                    disabled={seleccionesBloqueadas || subtipos.length === 0}
+                    required={subtipos.length > 0}
+                  />
+                </>
+              )}
+            </div>
+
+            {form.tipo === 'GNV' ? (
+              <p className="text-[11px] leading-snug text-amber-900/90 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2">
+                Usar para instalación, certificado, reparación o equipo GNV. Para recargas, usar{' '}
+                <span className="font-semibold">Abastecimiento de combustible</span>.
+              </p>
+            ) : null}
+            {form.tipo === 'ABASTECIMIENTO DE COMBUSTIBLE' ? (
+              <p className="text-[11px] leading-snug text-sky-900/90 rounded-lg border border-sky-200/80 bg-sky-50/90 px-3 py-2">
+                Usar para recargas o consumo de combustible: GNV, GLP o gasolina.
+              </p>
+            ) : null}
+
+            <p className="text-[11px] text-gray-500">
+              Clasificación guardada:{' '}
+              <span className="font-semibold text-gray-800">
+                {form.categoriaFinanciera
+                  ? FINANZA_GASTO_REGISTRO_OPTIONS.find((o) => o.value === form.categoriaFinanciera)?.label
+                    ?? labelTipoGastoFinanciero(form.categoriaFinanciera)
+                  : '— elige categoría —'}
+              </span>
+              {' · '}
+              KPI Fact: {inferCategoriaFromTipoGasto(form.tipo).replace(/_/g, ' ')}
+            </p>
+
+            <MetodoCuentaPicker
+              metodosChips={METODOS_PAGO}
+              metodoPago={form.metodoPago}
+              metodoPagoDetalle={form.metodoPagoDetalle}
+              registrosForCount={gastos}
+              theme="rose"
+              conteoEtiqueta="gastos"
+              disabled={seleccionesBloqueadas}
+              onChange={({ metodoPago, metodoPagoDetalle }) => {
+                setForm((p) => ({ ...p, metodoPago, metodoPagoDetalle }));
+                setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
+              }}
+            />
+            {errors.metodoPagoDetalle ? (
+              <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Monto (S/)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.monto}
+                onChange={(e) => {
+                  setForm((p) => ({ ...p, monto: e.target.value }));
+                  setErrors((p) => ({ ...p, monto: '' }));
+                }}
+                error={errors.monto}
+                placeholder="0.00"
+                required
+              />
+              <Input
+                label="Pagado a"
+                type="text"
+                value={form.pagadoA}
+                onChange={(e) => setForm((p) => ({ ...p, pagadoA: e.target.value }))}
+                placeholder="Ej. Taller San José, mecánico Juan…"
+                helper="Quién recibe el pago"
+              />
+            </div>
+
+            <Input
+              label="Comentarios u observaciones (opcional)"
+              type="text"
+              value={form.comentarios}
+              onChange={(e) => setForm((p) => ({ ...p, comentarios: e.target.value }))}
+              placeholder="Notas adicionales…"
+            />
+
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-200/80 pt-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setForm(initialExpenseForm(finanzaPreset));
+                  setErrors({});
+                }}
+              >
+                Limpiar todo
+              </Button>
+              <Button type="submit" loading={loading} icon={<PlusCircle size={16} />} variant="danger">
+                {finanzaPreset === 'inversion_compra' ? 'Registrar inversión' : 'Registrar gasto'}
+              </Button>
+            </div>
+          </div>
         </div>
+    </form>
+  );
 
-        <Input
-          label="Comentarios u observaciones (opcional)"
-          type="text"
-          value={form.comentarios}
-          onChange={e => setForm(p => ({ ...p, comentarios: e.target.value }))}
-          placeholder="Notas adicionales sobre el gasto…"
-        />
+  if (noCard) return inner;
 
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Button type="button" variant="ghost" onClick={() => { setForm(emptyForm()); setErrors({}); }}>
-            Limpiar
-          </Button>
-          <Button type="submit" loading={loading} icon={<PlusCircle size={16} />} variant="danger">
-            Registrar Gasto
-          </Button>
-        </div>
-      </form>
+  return (
+    <Card title="Registrar gasto" subtitle="Formulario siempre visible; la categoría financiera ajusta tipo Fact y reglas">
+      {inner}
     </Card>
   );
 };

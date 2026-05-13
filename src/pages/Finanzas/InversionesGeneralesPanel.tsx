@@ -9,7 +9,17 @@ function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
 }
 
-type SortKey = 'numero' | 'referencia' | 'placa' | 'modelo' | 'monto' | 'moneda';
+function fmtUsdCell(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  return formatUSD(Number(v));
+}
+
+function fmtPenRef(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  return formatCurrency(Number(v), 'S/');
+}
+
+type SortKey = 'numero' | 'referencia' | 'placa' | 'monto' | 'moneda';
 
 function cmpStrEmptyLast(a: string, b: string, mul: 1 | -1): number {
   const ea = !a.trim();
@@ -33,8 +43,6 @@ function compareInversionesRow(a: InversionGeneralVehiculo, b: InversionGeneralV
       return mul * a.vehiculoReferencia.localeCompare(b.vehiculoReferencia, 'es', { sensitivity: 'base' });
     case 'placa':
       return cmpStrEmptyLast(a.placa ?? '', b.placa ?? '', mul);
-    case 'modelo':
-      return cmpStrEmptyLast(a.modelo ?? '', b.modelo ?? '', mul);
     case 'monto': {
       const d = a.montoTotal - b.montoTotal;
       if (d !== 0) return mul * d;
@@ -61,11 +69,21 @@ function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   );
 }
 
+/** Borde derecho entre columnas (last:* quita borde en la última celda). */
+const colSep = 'border-r border-slate-200/90 last:border-r-0';
+
+const thBase = `px-2 py-1.5 text-[10px] sm:text-[11px] font-semibold normal-case tracking-normal text-slate-600 whitespace-nowrap leading-tight ${colSep}`;
+const thText = `${thBase} text-left`;
+const thUsd = `${thBase} text-right max-w-[4.75rem]`;
+const tdBase = `px-2 py-1 text-[10px] sm:text-[11px] tabular-nums text-slate-700 leading-tight ${colSep}`;
+const tdText = `${tdBase} text-left`;
+const tdUsd = `${tdBase} text-right max-w-[4.75rem]`;
+
 const InversionesGeneralesPanel: React.FC = () => {
   const [rows, setRows] = useState<InversionGeneralVehiculo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'asc' });
+  const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: 'numero', dir: 'asc' });
 
   const reload = useCallback(async () => {
     if (!EMPRESA_ID) {
@@ -129,11 +147,6 @@ const InversionesGeneralesPanel: React.FC = () => {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 leading-snug">
-        Este valor representa el costo total de inversión inicial del vehículo para operar, no un gasto operativo. Ordená la
-        tabla desde los encabezados (monto: primer clic de mayor a menor; PEN y USD mezclados solo como referencia numérica).
-      </p>
-
       {loading ? (
         <p className="text-sm text-slate-500 py-6">Cargando…</p>
       ) : error ? (
@@ -141,7 +154,7 @@ const InversionesGeneralesPanel: React.FC = () => {
       ) : rows.length === 0 ? (
         <p className="text-sm text-slate-600">
           No hay filas en <code className="text-xs bg-slate-100 px-1 rounded">inversiones_generales_vehiculo</code>. Ejecuta la
-          migración SQL y el import desde Excel (hoja VALOR DE INVERSION).
+          migración SQL, el script de import desde Excel (hoja VALOR DE INVERSION) y vuelve a cargar.
         </p>
       ) : (
         <>
@@ -163,41 +176,47 @@ const InversionesGeneralesPanel: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full text-left text-xs sm:text-sm">
+            <table className="min-w-[1020px] w-full border-collapse text-left">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wide text-[10px] sm:text-[11px]">
-                  <th className="px-3 py-2" aria-sort={sort.key === 'numero' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wide">
+                  <th className={thText} aria-sort={sort.key === 'numero' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     <button type="button" className={sortThBtn} onClick={() => handleSortHeader('numero')}>
                       N° <SortGlyph active={sort.key === 'numero'} dir={sort.dir} />
                     </button>
                   </th>
-                  <th className="px-3 py-2" aria-sort={sort.key === 'referencia' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <th
+                    className={`${thText} min-w-[6.25rem]`}
+                    aria-sort={sort.key === 'referencia' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  >
                     <button type="button" className={sortThBtn} onClick={() => handleSortHeader('referencia')}>
-                      Referencia / vehículo <SortGlyph active={sort.key === 'referencia'} dir={sort.dir} />
+                      Unidad <SortGlyph active={sort.key === 'referencia'} dir={sort.dir} />
                     </button>
                   </th>
-                  <th className="px-3 py-2" aria-sort={sort.key === 'placa' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <th className={thText} aria-sort={sort.key === 'placa' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     <button type="button" className={sortThBtn} onClick={() => handleSortHeader('placa')}>
                       Placa <SortGlyph active={sort.key === 'placa'} dir={sort.dir} />
                     </button>
                   </th>
-                  <th className="px-3 py-2" aria-sort={sort.key === 'modelo' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    <button type="button" className={sortThBtn} onClick={() => handleSortHeader('modelo')}>
-                      Modelo <SortGlyph active={sort.key === 'modelo'} dir={sort.dir} />
-                    </button>
-                  </th>
+                  <th className={`${thText} whitespace-nowrap`}>Compra</th>
+                  <th className={thUsd}>Valor veh.</th>
+                  <th className={thUsd}>GNV</th>
+                  <th className={thUsd}>Notarial</th>
+                  <th className={thUsd}>Seguro</th>
+                  <th className={thUsd}>GPS</th>
+                  <th className={thUsd}>Fundas</th>
                   <th
-                    className="px-3 py-2 text-right"
+                    className={`${thUsd} min-w-[5.75rem]`}
                     title="Entre PEN y USD el orden por cifra es orientativo."
                     aria-sort={sort.key === 'monto' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
                     <button type="button" className={`${sortThBtn} w-full justify-end`} onClick={() => handleSortHeader('monto')}>
-                      Monto total <SortGlyph active={sort.key === 'monto'} dir={sort.dir} />
+                      Total inv. <SortGlyph active={sort.key === 'monto'} dir={sort.dir} />
                     </button>
                   </th>
-                  <th className="px-3 py-2" aria-sort={sort.key === 'moneda' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <th className={`${thUsd} min-w-[5rem]`}>Equiv. S/</th>
+                  <th className={thText} aria-sort={sort.key === 'moneda' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     <button type="button" className={sortThBtn} onClick={() => handleSortHeader('moneda')}>
-                      Moneda <SortGlyph active={sort.key === 'moneda'} dir={sort.dir} />
+                      Mon. <SortGlyph active={sort.key === 'moneda'} dir={sort.dir} />
                     </button>
                   </th>
                 </tr>
@@ -205,12 +224,21 @@ const InversionesGeneralesPanel: React.FC = () => {
               <tbody>
                 {displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
-                    <td className="px-3 py-2 tabular-nums text-slate-600">{r.vehiculoNumero ?? '—'}</td>
-                    <td className="px-3 py-2 font-medium text-slate-900">{r.vehiculoReferencia}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.placa ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.modelo ?? '—'}</td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{montoFmt(r.montoTotal, r.moneda)}</td>
-                    <td className="px-3 py-2 text-slate-500">{r.moneda}</td>
+                    <td className={`${tdText} tabular-nums text-slate-600`}>{r.vehiculoNumero ?? '—'}</td>
+                    <td className={`${tdText} font-medium text-slate-900`}>{r.vehiculoReferencia}</td>
+                    <td className={`${tdText} text-slate-600 whitespace-nowrap`}>{r.placa ?? '—'}</td>
+                    <td className={`${tdText} tabular-nums text-slate-600 whitespace-nowrap`}>
+                      {r.fechaCompra ? r.fechaCompra.slice(0, 10) : '—'}
+                    </td>
+                    <td className={tdUsd}>{fmtUsdCell(r.valorCompraUsd)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gastoGnvUsd)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gastoNotarialUsd)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.seguroUsd)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gpsUsd)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.fundasAccesoriosUsd)}</td>
+                    <td className={`${tdUsd} font-semibold text-slate-900`}>{montoFmt(r.montoTotal, r.moneda)}</td>
+                    <td className={tdUsd}>{fmtPenRef(r.totalInversionPen)}</td>
+                    <td className={`${tdText} text-slate-500`}>{r.moneda}</td>
                   </tr>
                 ))}
               </tbody>

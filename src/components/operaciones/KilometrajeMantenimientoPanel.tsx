@@ -2,10 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Card from '../Common/Card';
 import Input from '../Common/Input';
 import Select from '../Common/Select';
-import { formatCurrency, formatDate, todayStr } from '../../utils/formatting';
-import { diffDaysFromToday } from '../../utils/fleetPanel';
-import type { KilometrajeRegistro, Vehicle } from '../../data/types';
+import { formatDate, todayStr } from '../../utils/formatting';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import type { KilometrajeRegistro, Vehicle } from '../../data/types';
+import {
+  buildKmControlRows,
+  KM_ALERTA_VARIACION_DESDE_MANT,
+  tipoMantenimientoDesdeRegistro,
+  variacionSuperaUmbralAlerta,
+} from '../../utils/kmMantenimientoControl';
 import { Trash2 } from 'lucide-react';
 
 interface Props {
@@ -36,8 +41,8 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     kmMantenimiento: '',
     kilometraje: '',
     descripcion: '',
-    costo: '',
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (restrictVehicleId == null) return;
@@ -46,61 +51,10 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     setKm((p) => ({ ...p, vehicleId: String(restrictVehicleId) }));
   }, [restrictVehicleId, vehicles]);
 
-  const controlKm = useMemo(() => {
-    const byVehicle = new Map<number, KilometrajeRegistro[]>();
-    kilometrajes.forEach((r) => {
-      const arr = byVehicle.get(r.vehicleId) ?? [];
-      arr.push(r);
-      byVehicle.set(r.vehicleId, arr);
-    });
-
-    const entries = Array.from(byVehicle.entries()).filter(([vid]) =>
-      restrictVehicleId == null ? true : vid === restrictVehicleId,
-    );
-    entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
-    return entries.map(([vehicleId, rows]) => {
-      const maxKmMant = rows.reduce<number | null>((acc, r) => {
-        if (r.kmMantenimiento == null) return acc;
-        return acc == null ? r.kmMantenimiento : Math.max(acc, r.kmMantenimiento);
-      }, null);
-      const maxKm = rows.reduce<number | null>((acc, r) => {
-        if (r.kilometraje == null) return acc;
-        return acc == null ? r.kilometraje : Math.max(acc, r.kilometraje);
-      }, null);
-      const fMant =
-        maxKmMant == null
-          ? null
-          : rows
-              .filter((r) => r.kmMantenimiento === maxKmMant)
-              .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]?.fecha ?? null;
-      const fUlt =
-        maxKm == null
-          ? null
-          : rows
-              .filter((r) => r.kilometraje === maxKm)
-              .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]?.fecha ?? null;
-      const variacion = maxKm != null && maxKmMant != null ? maxKm - maxKmMant : null;
-      const dias = fMant && fUlt ? Math.abs(diffDaysFromToday(fMant) - diffDaysFromToday(fUlt)) : null;
-      const lastMantDesc =
-        rows
-          .filter((r) => r.descripcion?.trim())
-          .sort((a, b) => (b.fecha + b.createdAt).localeCompare(a.fecha + a.createdAt))[0]
-          ?.descripcion?.trim()
-          ?.toUpperCase() ?? '';
-
-      return {
-        vehicleId,
-        kmMant: maxKmMant,
-        kmUlt: maxKm,
-        fMant,
-        fUlt,
-        variacion,
-        dias,
-        mantRealizado:
-          lastMantDesc || (variacion != null && variacion >= 3500 ? 'MANT.COMPLETO' : 'MANT.SIMPLE'),
-      };
-    });
-  }, [kilometrajes, restrictVehicleId]);
+  const controlKm = useMemo(
+    () => buildKmControlRows(kilometrajes, restrictVehicleId ?? null),
+    [kilometrajes, restrictVehicleId],
+  );
 
   const ultimos = useMemo(() => {
     const base = restrictVehicleId != null ? kilometrajes.filter((r) => r.vehicleId === restrictVehicleId) : kilometrajes;
@@ -115,13 +69,61 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
       .slice(0, restrictVehicleId != null ? 40 : 60);
   }, [kilometrajes, restrictVehicleId]);
 
+  const guardar = async () => {
+    setFormError(null);
+    if (!km.vehicleId) {
+      setFormError('Elige un vehículo.');
+      return;
+    }
+    const kmActRaw = km.kilometraje.trim();
+    const kmMantRaw = km.kmMantenimiento.trim();
+    const kmAct = kmActRaw === '' ? null : Number(kmActRaw.replace(',', '.'));
+    const kmMant = kmMantRaw === '' ? null : Number(kmMantRaw.replace(',', '.'));
+
+    if (kmMantRaw !== '' && (!Number.isFinite(kmMant) || (kmMant as number) < 0)) {
+      setFormError('KM mantenimiento no es válido.');
+      return;
+    }
+    if (kmActRaw !== '' && (!Number.isFinite(kmAct) || (kmAct as number) < 0)) {
+      setFormError('Kilometraje actual no es válido.');
+      return;
+    }
+    if (kmMant == null && kmAct == null) {
+      setFormError('Indica al menos KM de mantenimiento o kilometraje actual.');
+      return;
+    }
+
+    const created = await addKilometraje({
+      vehicleId: Number(km.vehicleId),
+      fecha: km.fecha,
+      fechaRegistro: todayStr(),
+      kmMantenimiento: kmMant,
+      kilometraje: kmAct,
+      descripcion: km.descripcion.trim(),
+      costo: null,
+    });
+
+    if (created) {
+      setKm((p) => ({
+        ...p,
+        kmMantenimiento: '',
+        kilometraje: '',
+        descripcion: '',
+        fecha: todayStr(),
+      }));
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <Card title="Registrar kilometraje" subtitle="Misma tabla Supabase que antes estaba en Control global">
+      <Card
+        title="Registrar kilometraje"
+        subtitle="Indica al menos uno: KM de mantenimiento (taller) o kilometraje actual (odómetro). Pueden ir los dos. La descripción es opcional."
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Select
             label="Vehículo"
-            options={active.map((v) => ({ value: String(v.id), label: `${v.placa} · ${v.marca}` }))}
+            options={active.map((v) => ({ value: String(v.id), label: `#${v.id} · ${v.placa} · ${v.marca}` }))}
             value={km.vehicleId}
             placeholder="Elegir"
             onChange={(v) => setKm((p) => ({ ...p, vehicleId: v }))}
@@ -133,39 +135,41 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
             type="number"
             value={km.kmMantenimiento}
             onChange={(e) => setKm((p) => ({ ...p, kmMantenimiento: e.target.value }))}
+            placeholder="Opcional si ya pones km actual"
           />
           <Input
             label="Kilometraje actual"
             type="number"
             value={km.kilometraje}
             onChange={(e) => setKm((p) => ({ ...p, kilometraje: e.target.value }))}
+            placeholder="Opcional si ya pones km mant."
           />
-          <Input label="Descripción" value={km.descripcion} onChange={(e) => setKm((p) => ({ ...p, descripcion: e.target.value }))} />
-          <Input label="Costo (S/)" type="number" value={km.costo} onChange={(e) => setKm((p) => ({ ...p, costo: e.target.value }))} />
+          <div className="sm:col-span-2">
+            <Input
+              label="Descripción (opcional)"
+              value={km.descripcion}
+              onChange={(e) => setKm((p) => ({ ...p, descripcion: e.target.value }))}
+              placeholder="Ej. MANT.SIMPLE, taller, observaciones…"
+            />
+          </div>
         </div>
+        {formError ? <p className="mt-2 text-sm text-red-600">{formError}</p> : null}
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             disabled={!km.vehicleId}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold"
-            onClick={() => {
-              void addKilometraje({
-                vehicleId: Number(km.vehicleId),
-                fecha: km.fecha,
-                fechaRegistro: todayStr(),
-                kmMantenimiento: km.kmMantenimiento ? Number(km.kmMantenimiento) : null,
-                kilometraje: km.kilometraje ? Number(km.kilometraje) : null,
-                descripcion: km.descripcion.trim(),
-                costo: km.costo ? Number(km.costo) : null,
-              });
-            }}
+            onClick={() => void guardar()}
           >
             Guardar kilometraje
           </button>
         </div>
       </Card>
 
-      <Card title="Control KMS (referencia rápida)" subtitle="Variación entre último KM de mantenimiento y último KM registrado">
+      <Card
+        title="Control KMS (referencia rápida)"
+        subtitle={`Variación = km actuales − km del último mantenimiento registrado. Alerta si ≥ ${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km.`}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
             <thead>
@@ -175,7 +179,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                 <th className="text-right py-2">Km actual</th>
                 <th className="text-right py-2">Variación</th>
                 <th className="text-right py-2">Δ días</th>
-                <th className="text-right py-2">Mant.</th>
+                <th className="text-right py-2">Tipo mant.</th>
               </tr>
             </thead>
             <tbody>
@@ -186,23 +190,35 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                   </td>
                 </tr>
               ) : (
-                controlKm.map((r) => (
-                  <tr key={r.vehicleId} className="border-b border-gray-50">
-                    <td className="py-2">{getVehicleLabel(r.vehicleId)}</td>
-                    <td className="py-2 text-right tabular-nums">{r.kmMant ?? '—'}</td>
-                    <td className="py-2 text-right tabular-nums">{r.kmUlt ?? '—'}</td>
-                    <td className="py-2 text-right tabular-nums">{r.variacion ?? '—'}</td>
-                    <td className="py-2 text-right">{r.dias ?? '—'}</td>
-                    <td className="py-2 text-right text-xs font-semibold">{r.mantRealizado}</td>
-                  </tr>
-                ))
+                controlKm.map((r) => {
+                  const alerta = variacionSuperaUmbralAlerta(r.variacion);
+                  return (
+                    <tr key={r.vehicleId} className={`border-b border-gray-50 ${alerta ? 'bg-red-50/50' : ''}`}>
+                      <td className="py-2">{getVehicleLabel(r.vehicleId)}</td>
+                      <td className="py-2 text-right tabular-nums">{r.kmMant ?? '—'}</td>
+                      <td className="py-2 text-right tabular-nums">{r.kmUlt ?? '—'}</td>
+                      <td
+                        className={`py-2 text-right tabular-nums font-semibold ${
+                          alerta ? 'text-red-700' : 'text-gray-900'
+                        }`}
+                      >
+                        {r.variacion ?? '—'}
+                        {alerta ? (
+                          <span className="ml-1 text-[10px] font-bold uppercase text-red-600">¡Alerta!</span>
+                        ) : null}
+                      </td>
+                      <td className="py-2 text-right">{r.dias ?? '—'}</td>
+                      <td className="py-2 text-right text-xs font-semibold text-gray-800">{r.tipoMant}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </Card>
 
-      <Card title="Últimos registros de kilometraje">
+      <Card title="Últimos registros de kilometraje" subtitle="Al borrar una fila, el control KMS se recalcula con los datos anteriores.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[560px]">
             <thead>
@@ -211,29 +227,39 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                 <th className="text-left py-2">Unidad</th>
                 <th className="text-right py-2">KM mant.</th>
                 <th className="text-right py-2">KM</th>
-                <th className="text-right py-2">Costo</th>
+                <th className="text-right py-2">Tipo mant.</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
-              {ultimos.map((r) => (
-                <tr key={r.id} className="border-b border-gray-50">
-                  <td className="py-2">{formatDate(r.fecha)}</td>
-                  <td className="py-2 text-xs">{getVehicleLabel(r.vehicleId)}</td>
-                  <td className="py-2 text-right">{r.kmMantenimiento ?? '—'}</td>
-                  <td className="py-2 text-right">{r.kilometraje ?? '—'}</td>
-                  <td className="py-2 text-right">{r.costo != null ? formatCurrency(r.costo) : '—'}</td>
-                  <td className="py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => void deleteKilometraje(r.id)}
-                      className="text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {ultimos.map((r) => {
+                const tipo = tipoMantenimientoDesdeRegistro(r);
+                const tieneMant = r.kmMantenimiento != null || (r.descripcion ?? '').trim().length > 0;
+                return (
+                  <tr key={r.id} className="border-b border-gray-50">
+                    <td className="py-2">{formatDate(r.fecha)}</td>
+                    <td className="py-2 text-xs">{getVehicleLabel(r.vehicleId)}</td>
+                    <td className="py-2 text-right">{r.kmMantenimiento ?? '—'}</td>
+                    <td className="py-2 text-right">{r.kilometraje ?? '—'}</td>
+                    <td className="py-2 text-right text-xs align-top">
+                      <div className="font-medium text-gray-900">{tipo ?? '—'}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        {tieneMant ? 'Incluye mantenimiento' : 'Solo km semanal'}
+                      </div>
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void deleteKilometraje(r.id)}
+                        className="text-gray-400 hover:text-red-500"
+                        title="Eliminar registro"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

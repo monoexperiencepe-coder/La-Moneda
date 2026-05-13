@@ -331,7 +331,8 @@ function exclusionOperativoMover(blob) {
   if (/\bfamilia\b/.test(blob)) return { hit: true, tag: 'familia' }
   if (/\bsunat\b/.test(blob) || /\brus\b/.test(blob) || /\boficina\b/.test(blob) || /\bboletas?\b/.test(blob))
     return { hit: true, tag: 'admin_sunat_rus' }
-  if (/chips?\s*gps/.test(blob) || /plataforma\s*gps/.test(blob)) return { hit: true, tag: 'gps_plataforma' }
+  if (/plataforma\s*gps|gps\s*plataforma/.test(blob)) return { hit: true, tag: 'gps_plataforma' }
+  if (/chips?\s*gps|gps\s*chips?|chip\s+gps|recarga\s*chips?/.test(blob)) return { hit: true, tag: 'gps_chips_operativo' }
   if (hasCajaNegocio(blob)) return { hit: true, tag: 'caja_negocio' }
   return { hit: false, tag: '' }
 }
@@ -377,6 +378,7 @@ function routeExcludedToBucket(blob) {
   if (ex.tag === 'compra_otra') return 'quedarse_gastos_caja'
   if (ex.tag === 'socios' || ex.tag === 'casa' || ex.tag === 'familia') return 'personal_socios'
   if (ex.tag === 'admin_sunat_rus' || ex.tag === 'gps_plataforma') return 'administrativo_empresa'
+  if (ex.tag === 'gps_chips_operativo') return 'candidato_mover_operativo_vehiculo'
   if (ex.tag === 'mpba_mbpa' || ex.tag === 'abuela' || ex.tag === 'asv_asb_dsb') return 'quedarse_gastos_caja'
   return 'quedarse_gastos_caja'
 }

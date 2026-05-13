@@ -127,7 +127,7 @@ const KEYWORDS = {
     'pechy mant varios carros',
   ],
   operativoVehiculoAmplio: [
-    'mecanic', 'taller', 'repuesto', 'autoparte', 'bateria', 'bateria',
+    'mecanic', 'taller', 'repuesto', 'autoparte', 'bateria',
     'amortiguador', 'trapecio', 'radiador', 'bujia', 'bujias', 'caliper',
     'bomba', 'filtro', 'filtros', 'aceite', 'alineamiento', 'balanceo', 'lavado',
     'servicio', 'modulo', 'mampara', 'fraccionamiento', 'conductos',
@@ -135,6 +135,23 @@ const KEYWORDS = {
     'cremallera', 'hidrolina', 'refrigerante',
   ],
   subtipo: {
+    'Batería': [
+      'bateria',
+      'batería',
+      'compra bateria',
+      'compra de bateria',
+      'compra batería',
+      'compra de batería',
+      'cambio bateria',
+      'cambio de bateria',
+      'cambio batería',
+      'bateria carro',
+      'batería carro',
+      'bateria vehiculo',
+      'batería vehiculo',
+      'bateria vehículo',
+      'batería vehículo',
+    ],
     soat: ['soat', 'afocat'],
     impuesto_vehicular: ['impuesto ve', 'impuesti ve', 'impuesto vehicular'],
     gnv: ['gnv'],
@@ -142,9 +159,25 @@ const KEYWORDS = {
     motor: ['embrague', 'bobina', 'bobinas', 'alternador', 'manguera', 'retificacion', 'rectificacion', 'sensor', 'motor', 'inyector', 'inyectores', 'filtro', 'filtros', 'bujia', 'bujias'],
     frenos: ['pastillas', 'zapata', 'freno', 'frenos', 'caliper', 'disco'],
     suspension: ['suspension', 'suspension', 'amortiguador', 'amortiguadores', 'trapecio', 'trapecios', 'articulacion'],
-    accesorios: ['gps', 'gps instalacion', 'gps delantero', 'gps trasero', 'polarizado', 'accesorios', 'focos', 'faros', 'mica faro'],
+    accesorios: [
+      'gps',
+      'gps instalacion',
+      'gps delantero',
+      'gps trasero',
+      'gps chips',
+      'gps chip',
+      'chip gps',
+      'recarga chips',
+      'recarga chip',
+      'chips claro',
+      'polarizado',
+      'accesorios',
+      'focos',
+      'faros',
+      'mica faro',
+    ],
     interior: ['forro', 'asientos', 'techo', 'timon', 'piso'],
-    electricidad: ['alternador', 'bobina', 'bobinas', 'sensor', 'focos', 'faros', 'bateria', 'batería'],
+    electricidad: ['alternador', 'bobina', 'bobinas', 'sensor', 'focos', 'faros'],
     aire_acondicionado: ['aire acondicionado', 'a/c', 'acondicionado'],
     llantas: ['llanta', 'llantas'],
     planchado_pintura: ['planchado', 'pintura'],
@@ -193,11 +226,6 @@ const CONF_ALTA_KEYWORDS = [
   'impuesti ve',
   'sunat',
   'rus',
-  'gps chips',
-  'gps chip',
-  'chip gps',
-  'recarga chips',
-  'recarga chip',
 ]
 
 const CONF_MEDIA_KEYWORDS = [
@@ -240,12 +268,17 @@ const RULES_CONFIDENCE_EXACT = new Set([
   'gastos_caja_vehicle_sin_senales_fuertes',
 ])
 
+/** Línea SIM / chips (no software tipo plataforma SaaS). */
+/** @param {string} text */
+function matchGpsChipsLineaOperativo(text) {
+  if (/\bplataforma\s+gps\b|\bgps\s+plataforma\b/i.test(text)) return false
+  return /\bchip\s+gps\b|\bgps\s+chip\b|\bgps\s+chips\b|\brecarga\s+chips?\b|\bchips\s+claro\b/i.test(text)
+}
+
 /** @param {string} text */
 function matchAdministrativoEmpresa(text) {
   if (hasAny(text, KEYWORDS.administrativo)) return true
-  return /\bchip\s+gps\b|\bgps\s+chip\b|\bgps\s+chips\b|\brecarga\s+chips?\b|\bplataforma\s+gps\b|\bgps\s+plataforma\b|\bchips\s+claro\b/i.test(
-    text,
-  )
+  return /\bplataforma\s+gps\b|\bgps\s+plataforma\b/i.test(text)
 }
 
 /** ASV/ASB/DSB como código de pago + naturaleza operativa vehículo → no financiero directo */
@@ -326,6 +359,7 @@ function ruleConfidenceFloor(rule) {
     financiero_keywords: 0.92,
     inversion_keywords: 0.92,
     administrativo_keywords: 0.92,
+    gps_chips_linea_operativo: 0.92,
     operativo_vehiculo_forzado_keywords: 0.92,
     operativo_vehiculo_amplio_keywords: 0.72,
     personal_keywords: 0.85,
@@ -424,6 +458,7 @@ function hasAny(text, kws) {
 
 function getSubtipoOperativoVehiculo(text) {
   const ordered = [
+    'Batería',
     'soat',
     'impuesto_vehicular',
     'aire_acondicionado',
@@ -703,7 +738,19 @@ function clasificarDesdeTextoCore(g, text, opts = {}) {
     }
   }
 
-  // 5) administrativo_empresa (prioridad alta; chip solo no basta)
+  // 5a) chips GPS / recargas línea → operativo (antes de admin: lista admin incluye "plataforma" suelta)
+  if (matchGpsChipsLineaOperativo(text)) {
+    return {
+      tipo_gasto: 'operativo_vehiculo',
+      subtipo_gasto: 'GPS chips',
+      origen_clasificacion: 'reglas_v1',
+      es_global_flota: false,
+      requiere_revision: false,
+      rule: 'gps_chips_linea_operativo',
+    }
+  }
+
+  // 5b) administrativo_empresa (SUNAT / oficina / plataforma GPS SaaS, etc.)
   if (matchAdministrativoEmpresa(text)) {
     return {
       tipo_gasto: 'administrativo_empresa',

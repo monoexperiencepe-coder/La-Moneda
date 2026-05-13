@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
   Loader2,
@@ -18,6 +18,9 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { canMutateIngresos } from '../../utils/roles';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
+import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
+import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -136,11 +139,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [deletingIngresoId, setDeletingIngresoId] = useState<string | null>(null);
   const [viewItem, setViewItem] = useState<Ingreso | Gasto | null>(null);
 
-  const getVehicleLabel = (vehicleId: number | null) => {
+  const getVehicleLabel = useCallback((vehicleId: number | null) => {
     if (!vehicleId) return 'General';
-    const v = vehicles.find(v => v.id === vehicleId);
+    const v = vehicles.find((x) => x.id === vehicleId);
     return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${vehicleId}`;
-  };
+  }, [vehicles]);
 
   const getVehicleIdPlaca = (vehicleId: number | null) => {
     if (!vehicleId) return 'General';
@@ -150,6 +153,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   };
 
   const rawData = mode === 'ingresos' ? ingresos : gastos;
+
+  const vehicleSearchIds = useMemo(
+    () => extractVehicleSearchIds(query, vehicles),
+    [query, vehicles],
+  );
+
+  const vehicleSearchStrict = useMemo(
+    () => isStrictVehicleOnlyQuery(query, vehicleSearchIds),
+    [query, vehicleSearchIds],
+  );
 
   const filtered = useMemo(() => {
     let data = rawData;
@@ -162,11 +175,22 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     /* ── Búsqueda libre ── */
     if (!query.trim()) return data;
     const lower = query.toLowerCase();
+    const idSet = new Set(vehicleSearchIds);
+
     return data.filter(item => {
+      const vidRaw = 'vehicleId' in item ? item.vehicleId : null;
+      const vidNum = vidRaw != null && Number.isFinite(Number(vidRaw)) ? Number(vidRaw) : null;
+      const byVehicleId = idSet.size > 0 && vidNum != null && idSet.has(vidNum);
+
+      if (vehicleSearchStrict) {
+        return byVehicleId;
+      }
+
       const vehicleLabel = getVehicleLabel('vehicleId' in item ? item.vehicleId : null).toLowerCase();
       if (mode === 'ingresos') {
         const i = item as Ingreso;
         return (
+          byVehicleId ||
           i.tipo.toLowerCase().includes(lower) ||
           (i.subTipo ?? '').toLowerCase().includes(lower) ||
           `${i.metodoPago} ${i.metodoPagoDetalle} ${i.celularMetodo ?? ''}`.toLowerCase().includes(lower) ||
@@ -180,6 +204,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       } else {
         const g = item as Gasto;
         return (
+          byVehicleId ||
           `${g.tipo} ${g.subTipo ?? ''}`.toLowerCase().includes(lower) ||
           g.categoria.toLowerCase().includes(lower) ||
           g.motivo.toLowerCase().includes(lower) ||
@@ -196,7 +221,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         );
       }
     });
-  }, [rawData, query, mode, filterEstadoPago]);
+  }, [rawData, query, mode, filterEstadoPago, vehicles, vehicleSearchIds, vehicleSearchStrict, getVehicleLabel]);
 
   const rowVehicleRank = (item: Ingreso | Gasto) =>
     vehicleIdSortRank('vehicleId' in item ? item.vehicleId : null);
@@ -270,15 +295,32 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     <div className="bg-white rounded-xl border border-gray-100 shadow-soft">
       {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
-        <div className="relative flex-1 w-full sm:max-w-sm">
+        <div className="relative flex-1 w-full sm:max-w-md">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={query}
             onChange={e => { setQuery(e.target.value); setPage(1); }}
-            placeholder={`Buscar ${mode === 'ingresos' ? 'ingresos' : 'gastos'}...`}
+            placeholder={
+              mode === 'ingresos'
+                ? 'Buscar ingresos (texto, fecha, #3, carro 5, placa…)'
+                : 'Buscar gastos (texto, fecha, #3, carro 5, placa…)'
+            }
             className="input-field pl-9 text-sm"
+            aria-describedby={vehicleSearchIds.length > 0 ? 'registros-busqueda-vehiculo' : undefined}
           />
+          {vehicleSearchIds.length > 0 ? (
+            <p id="registros-busqueda-vehiculo" className="mt-1.5 pl-1 text-[11px] leading-snug text-emerald-800">
+              <span className="font-semibold">
+                {vehicleSearchStrict ? 'Solo movimientos de:' : 'Incluye unidad:'}
+              </span>{' '}
+              {vehicleSearchIds.map((id) => (
+                <span key={id} className="mr-2 inline-block">
+                  #{id} — {getVehicleLabel(id)}
+                </span>
+              ))}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           {/* Filtro estado_pago — solo ingresos */}
@@ -393,11 +435,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               {mode === 'gastos' && showClasificacionFinanciera && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {(item as Gasto).tipo_gasto ? (
-                    <Badge variant="secondary" size="sm">{(item as Gasto).tipo_gasto}</Badge>
+                    <Badge variant="secondary" size="sm">
+                      {labelTipoGastoFinanciero((item as Gasto).tipo_gasto)}
+                    </Badge>
                   ) : null}
-                  {(item as Gasto).subtipo_gasto ? (
+                      {(item as Gasto).subtipo_gasto ? (
                     <span className="text-[10px] text-gray-500 truncate max-w-[140px]">
-                      {(item as Gasto).subtipo_gasto}
+                      {getSubtipoFinancieroLabel((item as Gasto).subtipo_gasto)}
                     </span>
                   ) : null}
                   <Badge

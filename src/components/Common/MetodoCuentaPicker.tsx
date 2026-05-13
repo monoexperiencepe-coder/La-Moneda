@@ -20,6 +20,8 @@ export interface MetodoCuentaPickerProps {
   theme: 'emerald' | 'rose';
   /** Texto del pie del conteo: "ingresos" | "gastos" */
   conteoEtiqueta?: string;
+  /** Si true, chips y cuentas no responden al clic (contenido visible). */
+  disabled?: boolean;
 }
 
 const chipActive: Record<MetodoCuentaPickerProps['theme'], string> = {
@@ -49,10 +51,12 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
   registrosForCount,
   theme,
   conteoEtiqueta = 'registros',
+  disabled = false,
 }) => {
   const cuentas = useMemo(() => getDetallesMetodoPago(metodoPago), [metodoPago]);
 
   const pick = (row: MetodoPagoDetalleRow) => {
+    if (disabled) return;
     onChange({
       metodoPago: row.metodo,
       metodoPagoDetalle: row.detalle.trim(),
@@ -61,7 +65,7 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
   };
 
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${disabled ? 'opacity-55' : ''}`}>
       <div>
         <p className="label mb-2">Método de pago</p>
         <div className="flex flex-wrap gap-2">
@@ -69,7 +73,9 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
             <button
               key={m}
               type="button"
+              disabled={disabled}
               onClick={() => {
+                if (disabled) return;
                 const rows = getDetallesMetodoPago(m);
                 const first = rows[0];
                 if (first) pick(first);
@@ -105,6 +111,7 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
                 <button
                   key={row.id}
                   type="button"
+                  disabled={disabled}
                   onClick={() => pick(row)}
                   className={`text-left rounded-lg px-2.5 py-2 text-xs transition-all border
                     ${active ? cuentaActive[theme] : cuentaIdle}`}

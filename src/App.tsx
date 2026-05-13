@@ -4,7 +4,6 @@ import Preloader from './components/Preloader/Preloader';
 import MainLayout from './components/Layout/MainLayout';
 import { ToastContainer } from './components/Common/Toast';
 import { RegistrosProvider, useRegistrosContext } from './context/RegistrosContext';
-import { DrawerProvider } from './context/DrawerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Auth
@@ -184,9 +183,7 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <RegistrosProvider>
-        <DrawerProvider>
-          <AppContent />
-        </DrawerProvider>
+        <AppContent />
       </RegistrosProvider>
     </AuthProvider>
   );

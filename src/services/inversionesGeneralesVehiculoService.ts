@@ -11,6 +11,7 @@ export async function fetchInversionesGeneralesVehiculo(): Promise<InversionGene
       .from('inversiones_generales_vehiculo')
       .select('*')
       .eq('empresa_id', EMPRESA_ID)
+      .order('vehiculo_numero', { ascending: true, nullsFirst: false })
       .order('vehiculo_referencia', { ascending: true })
       .range(from, to);
     return { data, error };

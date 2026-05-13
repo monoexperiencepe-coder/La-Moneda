@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Banknote, CalendarClock, CarFront } from 'lucide-react';
+import { AlertTriangle, Banknote, CalendarClock, CarFront, Gauge } from 'lucide-react';
 import type { OperativeAlertItem, OperativeAlertKind } from '../../utils/buildOperativeAlerts';
 
 const KIND_META: Record<
@@ -16,6 +16,11 @@ const KIND_META: Record<
     label: 'Vencimientos próximos',
     icon: <CalendarClock size={16} className="text-orange-600" />,
     accent: 'border-orange-200 bg-orange-50/70',
+  },
+  KM_MANTENIMIENTO: {
+    label: 'Kilometraje · mantenimiento',
+    icon: <Gauge size={16} className="text-red-600" />,
+    accent: 'border-red-200 bg-red-50/70',
   },
   SIN_INGRESOS: {
     label: 'Sin ingresos recientes',
@@ -39,7 +44,7 @@ const OperativeAlertsPanel: React.FC<OperativeAlertsPanelProps> = ({
   const navigate = useNavigate();
 
   const grouped = useMemo(() => {
-    const order: OperativeAlertKind[] = ['INGRESO_PENDIENTE', 'VENCIMIENTO', 'SIN_INGRESOS'];
+    const order: OperativeAlertKind[] = ['INGRESO_PENDIENTE', 'VENCIMIENTO', 'KM_MANTENIMIENTO', 'SIN_INGRESOS'];
     const map = new Map<OperativeAlertKind, OperativeAlertItem[]>();
     order.forEach((k) => map.set(k, []));
     for (const a of alerts) {
@@ -60,7 +65,7 @@ const OperativeAlertsPanel: React.FC<OperativeAlertsPanelProps> = ({
       >
         <span className="font-semibold">Alertas automáticas:</span>{' '}
         <span className="text-emerald-700">
-          todo en orden (sin cobros pendientes detectados, vencimientos en ventana ni vehículos sin ingresos
+          todo en orden (sin cobros pendientes detectados, vencimientos en ventana, km sin mantenimiento ni vehículos sin ingresos
           recientes).
         </span>
       </div>
@@ -77,7 +82,7 @@ const OperativeAlertsPanel: React.FC<OperativeAlertsPanelProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {grouped.map(({ kind, items, total }) => {
           const meta = KIND_META[kind];
           const hidden = total - items.length;

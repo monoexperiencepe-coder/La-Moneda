@@ -204,3 +204,219 @@ export async function fetchPrestamosFinancierosDetalle(): Promise<PrestamosFinan
     tramosError: null,
   };
 }
+
+/** Campos editables del préstamo (cabecera); se envían a `prestamos_financieros`. */
+export type PrestamoFinancieroUpdateInput = {
+  codigo?: string;
+  prestamista?: string;
+  titulo?: string;
+  monedaCapital?: Moneda;
+  monedaPago?: Moneda;
+  modalidadPago?: ModalidadPagoPrestamo;
+  montoOriginal?: number;
+  capitalActualEstimado?: number;
+  tasaAnual?: number | null;
+  cuotaFijaMensual?: number | null;
+  interesMensualActual?: number;
+  fechaInicio?: string;
+  estado?: PrestamoFinancieroEstado;
+  fechaCancelacion?: string | null;
+  requiereTramos?: boolean;
+  notas?: string;
+  observaciones?: string;
+};
+
+function buildPrestamoUpdateRow(input: PrestamoFinancieroUpdateInput): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (input.codigo !== undefined) row.codigo = input.codigo;
+  if (input.prestamista !== undefined) row.prestamista = input.prestamista;
+  if (input.titulo !== undefined) row.titulo = input.titulo;
+  if (input.monedaCapital !== undefined) {
+    row.moneda_capital = input.monedaCapital;
+    row.moneda = input.monedaCapital;
+  }
+  if (input.monedaPago !== undefined) row.moneda_pago = input.monedaPago;
+  if (input.modalidadPago !== undefined) row.modalidad_pago = input.modalidadPago;
+  if (input.montoOriginal !== undefined) row.monto_original = input.montoOriginal;
+  if (input.capitalActualEstimado !== undefined) row.capital_actual_estimado = input.capitalActualEstimado;
+  if (input.tasaAnual !== undefined) row.tasa_anual = input.tasaAnual;
+  if (input.cuotaFijaMensual !== undefined) row.cuota_fija_mensual = input.cuotaFijaMensual;
+  if (input.interesMensualActual !== undefined) row.interes_mensual_actual = input.interesMensualActual;
+  if (input.fechaInicio !== undefined) row.fecha_inicio = input.fechaInicio;
+  if (input.estado !== undefined) row.estado = input.estado;
+  if (input.fechaCancelacion !== undefined) row.fecha_cancelacion = input.fechaCancelacion;
+  if (input.requiereTramos !== undefined) row.requiere_tramos = input.requiereTramos;
+  if (input.notas !== undefined) row.notas = input.notas;
+  if (input.observaciones !== undefined) row.observaciones = input.observaciones;
+  return row;
+}
+
+export async function updatePrestamoFinanciero(
+  prestamoId: number,
+  input: PrestamoFinancieroUpdateInput,
+): Promise<{ error: string | null }> {
+  if (!EMPRESA_ID) {
+    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  }
+  const row = buildPrestamoUpdateRow(input);
+  if (Object.keys(row).length === 0) {
+    return { error: 'No hay cambios para guardar.' };
+  }
+  const { error } = await supabase
+    .from('prestamos_financieros')
+    .update(row)
+    .eq('id', prestamoId)
+    .eq('empresa_id', EMPRESA_ID);
+  return { error: error?.message ?? null };
+}
+
+export type PrestamoTramoUpdateInput = {
+  monedaCapital?: Moneda;
+  monedaPago?: Moneda;
+  modalidadPago?: ModalidadPagoPrestamo;
+  desde?: string;
+  hasta?: string | null;
+  capitalReferencial?: number | null;
+  tasaAnual?: number | null;
+  cuotaFijaMensual?: number | null;
+  interesMensual?: number | null;
+  evento?: string;
+  nota?: string;
+  orden?: number;
+};
+
+function buildTramoUpdateRow(input: PrestamoTramoUpdateInput): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (input.monedaCapital !== undefined) {
+    row.moneda_capital = input.monedaCapital;
+    row.moneda = input.monedaCapital;
+  }
+  if (input.monedaPago !== undefined) row.moneda_pago = input.monedaPago;
+  if (input.modalidadPago !== undefined) row.modalidad_pago = input.modalidadPago;
+  if (input.desde !== undefined) row.desde = input.desde;
+  if (input.hasta !== undefined) row.hasta = input.hasta;
+  if (input.capitalReferencial !== undefined) row.capital_referencial = input.capitalReferencial;
+  if (input.tasaAnual !== undefined) row.tasa_anual = input.tasaAnual;
+  if (input.cuotaFijaMensual !== undefined) row.cuota_fija_mensual = input.cuotaFijaMensual;
+  if (input.interesMensual !== undefined) row.interes_mensual = input.interesMensual;
+  if (input.evento !== undefined) row.evento = input.evento;
+  if (input.nota !== undefined) row.nota = input.nota;
+  if (input.orden !== undefined) row.orden = input.orden;
+  return row;
+}
+
+export async function updatePrestamoTramo(
+  prestamoFinancieroId: number,
+  tramoId: number,
+  input: PrestamoTramoUpdateInput,
+): Promise<{ error: string | null }> {
+  const row = buildTramoUpdateRow(input);
+  if (Object.keys(row).length === 0) {
+    return { error: null };
+  }
+  const { error } = await supabase
+    .from('prestamos_tramos')
+    .update(row)
+    .eq('id', tramoId)
+    .eq('prestamo_financiero_id', prestamoFinancieroId);
+  return { error: error?.message ?? null };
+}
+
+/** Alta de cabecera en `prestamos_financieros` (requiere RLS INSERT y empresa_id válido). */
+export type PrestamoFinancieroInsertInput = {
+  codigo: string;
+  prestamista: string;
+  titulo: string;
+  monedaCapital: Moneda;
+  monedaPago: Moneda;
+  modalidadPago: ModalidadPagoPrestamo;
+  montoOriginal: number;
+  capitalActualEstimado: number;
+  tasaAnual: number | null;
+  cuotaFijaMensual: number | null;
+  interesMensualActual: number;
+  fechaInicio: string;
+  estado: PrestamoFinancieroEstado;
+  fechaCancelacion: string | null;
+  requiereTramos: boolean;
+  notas: string;
+  observaciones: string;
+};
+
+export async function insertPrestamoFinanciero(
+  input: PrestamoFinancieroInsertInput,
+): Promise<{ id: number | null; error: string | null }> {
+  if (!EMPRESA_ID) {
+    return { id: null, error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  }
+  const row: Record<string, unknown> = {
+    empresa_id: EMPRESA_ID,
+    codigo: input.codigo,
+    prestamista: input.prestamista,
+    titulo: input.titulo,
+    moneda: input.monedaCapital,
+    moneda_capital: input.monedaCapital,
+    moneda_pago: input.monedaPago,
+    modalidad_pago: input.modalidadPago,
+    monto_original: input.montoOriginal,
+    capital_actual_estimado: input.capitalActualEstimado,
+    tasa_anual: input.tasaAnual,
+    cuota_fija_mensual: input.cuotaFijaMensual,
+    interes_mensual_actual: input.interesMensualActual,
+    fecha_inicio: input.fechaInicio,
+    estado: input.estado,
+    fecha_cancelacion: input.fechaCancelacion,
+    requiere_tramos: input.requiereTramos,
+    notas: input.notas,
+    observaciones: input.observaciones,
+  };
+  const { data, error } = await supabase
+    .from('prestamos_financieros')
+    .insert(row)
+    .select('id')
+    .single();
+  if (error) {
+    return { id: null, error: error.message };
+  }
+  const rid = data?.id != null ? Number(data.id) : NaN;
+  return { id: Number.isFinite(rid) ? rid : null, error: null };
+}
+
+export type PrestamoTramoInsertInput = {
+  monedaCapital: Moneda;
+  monedaPago: Moneda;
+  modalidadPago: ModalidadPagoPrestamo;
+  desde: string;
+  hasta?: string | null;
+  capitalReferencial?: number | null;
+  tasaAnual?: number | null;
+  cuotaFijaMensual?: number | null;
+  interesMensual?: number | null;
+  evento?: string;
+  nota?: string;
+  orden: number;
+};
+
+export async function insertPrestamoTramo(
+  prestamoFinancieroId: number,
+  input: PrestamoTramoInsertInput,
+): Promise<{ error: string | null }> {
+  const row: Record<string, unknown> = {
+    prestamo_financiero_id: prestamoFinancieroId,
+    moneda: input.monedaCapital,
+    moneda_capital: input.monedaCapital,
+    moneda_pago: input.monedaPago,
+    modalidad_pago: input.modalidadPago,
+    desde: input.desde,
+    hasta: input.hasta ?? null,
+    capital_referencial: input.capitalReferencial ?? null,
+    tasa_anual: input.tasaAnual ?? null,
+    cuota_fija_mensual: input.cuotaFijaMensual ?? null,
+    interes_mensual: input.interesMensual ?? null,
+    evento: input.evento ?? '',
+    nota: input.nota ?? '',
+    orden: input.orden,
+  };
+  const { error } = await supabase.from('prestamos_tramos').insert(row);
+  return { error: error?.message ?? null };
+}

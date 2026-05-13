@@ -2,11 +2,11 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, ChevronLeft, ArrowRight, Zap, Command } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { useDrawer } from '../../context/DrawerContext';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { computeTodayReview, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
+import { KM_ALERTA_VARIACION_DESDE_MANT } from '../../utils/kmMantenimientoControl';
 import SmartClock from '../../components/Common/SmartClock';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
@@ -50,18 +50,18 @@ const MODULES = [
 ];
 
 /* ─── Acciones rápidas ───────────────────────────────────────────────────── */
-const buildQuickActions = (open: (t: 'income' | 'expense') => void, navigate: (p: string) => void) => [
+const buildQuickActions = (navigate: (p: string) => void) => [
   {
     emoji: '💵', label: '+ Ingreso', hint: 'Registrar cobro',
     cls: 'border-emerald-200 bg-gradient-to-br from-white to-emerald-50/80 text-emerald-950',
     glow: 'hover:shadow-[0_4px_20px_rgba(16,185,129,0.18)]',
-    action: () => open('income'),
+    action: () => navigate('/finanzas/ingresos?registrar=1'),
   },
   {
     emoji: '💸', label: '+ Gasto', hint: 'Registrar salida',
     cls: 'border-rose-200 bg-gradient-to-br from-white to-rose-50/80 text-rose-950',
     glow: 'hover:shadow-[0_4px_20px_rgba(244,63,94,0.18)]',
-    action: () => open('expense'),
+    action: () => navigate('/finanzas/gastos?registrar=1'),
   },
   {
     emoji: '🛠️', label: '+ Kilometraje', hint: 'Control de km',
@@ -141,8 +141,7 @@ const Inicio: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewAlertas = searchParams.get('view') === 'alertas';
 
-  const { ingresos, gastos, vehicles, controlFechas, pendientes, getVehicleLabel } = useRegistrosContext();
-  const { open } = useDrawer();
+  const { ingresos, gastos, vehicles, controlFechas, pendientes, getVehicleLabel, kilometrajes } = useRegistrosContext();
 
   /* Búsqueda */
   const [query, setQuery] = useState('');
@@ -180,8 +179,8 @@ const Inicio: React.FC = () => {
     [ingresos],
   );
   const queRevisar = useMemo(
-    () => computeTodayReview(vehicles, controlFechas, ingresos, pendientes),
-    [vehicles, controlFechas, ingresos, pendientes],
+    () => computeTodayReview(vehicles, controlFechas, ingresos, pendientes, DIAS_ALERTA_SIN_INGRESO, kilometrajes),
+    [vehicles, controlFechas, ingresos, pendientes, kilometrajes],
   );
   const totalAlertas = useMemo(
     () =>
@@ -189,7 +188,8 @@ const Inicio: React.FC = () => {
       queRevisar.vencidosCount +
       queRevisar.porVencerCount +
       queRevisar.sinIngresoCount +
-      queRevisar.pendientesAltaActivosCount,
+      queRevisar.pendientesAltaActivosCount +
+      queRevisar.kmMantVariacionAlertCount,
     [cobrosPendientes, queRevisar],
   );
 
@@ -230,6 +230,10 @@ const Inicio: React.FC = () => {
   const vencidosLines  = useMemo(() => queRevisar.muestraVencidos.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
   const porVencerLines = useMemo(() => queRevisar.muestraPorVencer.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
   const sinIngresoLines = useMemo(() => queRevisar.muestraSinIngreso.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
+  const kmVariacionLines = useMemo(
+    () => queRevisar.muestraKmMantVariacion.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`),
+    [queRevisar],
+  );
   const pendientesAltaLines = useMemo(
     () => queRevisar.muestraPendientesAlta.slice(0, 3).map((p) => {
       const v = p.vehicleId != null ? vehicles.find((x) => x.id === p.vehicleId) : null;
@@ -246,7 +250,7 @@ const Inicio: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const quickActions = useMemo(() => buildQuickActions(open, navigate), [open, navigate]);
+  const quickActions = useMemo(() => buildQuickActions(navigate), [navigate]);
 
   /* ════════════════════════════════════════════════════════════════════
      VISTA: QUÉ HACER HOY
@@ -286,12 +290,21 @@ const Inicio: React.FC = () => {
         <WorkBlock title="Sin ingresos recientes" count={queRevisar.sinIngresoCount}
           subtitle={`Sin ingreso hace más de ${queRevisar.sinIngresoUmbralDias} días`} lines={sinIngresoLines}
           onVer={() => navigate('/operaciones?flota=sinIngreso')} accent="orange" />
+        <WorkBlock
+          title="Km sin mantenimiento"
+          count={queRevisar.kmMantVariacionAlertCount}
+          subtitle={`Variación ≥ ${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km desde el último mantenimiento registrado`}
+          lines={kmVariacionLines}
+          onVer={() => navigate('/operaciones/mantenimiento')}
+          accent="red"
+        />
         <WorkBlock title="Pendientes · alta prioridad" count={queRevisar.pendientesAltaActivosCount}
           subtitle="Abierto o en curso · prioridad alta" lines={pendientesAltaLines}
           onVer={() => navigate('/operaciones/pendientes?prioridad=ALTA&activos=1')} accent="violet" />
 
         <p className="text-[10px] text-gray-400 pb-2 pt-1">
-          Umbrales: sin ingreso &gt;{DIAS_ALERTA_SIN_INGRESO} d · docs próximos ≤30 d
+          Umbrales: sin ingreso &gt;{DIAS_ALERTA_SIN_INGRESO} d · docs próximos ≤30 d · km mant. ≥
+          {KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km
         </p>
       </div>
     );

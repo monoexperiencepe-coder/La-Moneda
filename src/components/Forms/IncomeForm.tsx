@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PlusCircle, CalendarRange } from 'lucide-react';
 import Button from '../Common/Button';
 import Input from '../Common/Input';
@@ -19,6 +19,10 @@ interface IncomeFormProps {
   vehicles: Vehicle[];
   ingresos?: Ingreso[];
   onSubmit: (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => void;
+  /** Sin tarjeta exterior (p. ej. dentro de un modal con título propio). */
+  noCard?: boolean;
+  /** Preselecciona N° vehículo al montar o al cambiar el id. */
+  prefillVehicleId?: number | null;
 }
 
 interface FormState {
@@ -55,13 +59,26 @@ function emptyForm(): FormState {
   };
 }
 
-const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubmit }) => {
+const IncomeForm: React.FC<IncomeFormProps> = ({
+  vehicles,
+  ingresos = [],
+  onSubmit,
+  noCard = false,
+  prefillVehicleId = null,
+}) => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [periodoOpen, setPeriodoOpen] = useState(false);
 
   const activeVehicles = vehicles.filter(v => v.activo);
+
+  useEffect(() => {
+    if (prefillVehicleId != null && Number.isFinite(prefillVehicleId) && prefillVehicleId > 0) {
+      setForm(f => ({ ...f, vehicleId: String(prefillVehicleId) }));
+      setErrors(e => ({ ...e, vehicleId: '' }));
+    }
+  }, [prefillVehicleId]);
 
   const subtipos = useMemo(() => getSubtiposIngreso(form.tipo), [form.tipo]);
 
@@ -137,8 +154,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubm
         ? `${form.fechaDesde || '…'} → ${form.fechaHasta || '…'}`
         : null;
 
-  return (
-    <Card title="Registrar Ingreso" subtitle="Fecha de movimiento/pago, pago por cuenta/celular, período cubierto opcional">
+  const inner = (
       <form onSubmit={handleSubmit} className="space-y-4 mt-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
@@ -332,6 +348,13 @@ const IncomeForm: React.FC<IncomeFormProps> = ({ vehicles, ingresos = [], onSubm
           </Button>
         </div>
       </form>
+  );
+
+  if (noCard) return inner;
+
+  return (
+    <Card title="Registrar Ingreso" subtitle="Fecha de movimiento/pago, pago por cuenta/celular, período cubierto opcional">
+      {inner}
     </Card>
   );
 };

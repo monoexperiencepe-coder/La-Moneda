@@ -17,6 +17,26 @@ export function tipoGastoEffective(g: Gasto): string | null {
   return LEGACY_TIPO_MAP[raw] ?? raw;
 }
 
+function isRepresentacionInternaBucket(eff: string): boolean {
+  return (
+    eff === 'representacion_interna' ||
+    eff === 'personal_socios_familiares' ||
+    eff === 'personal_socios' ||
+    eff === 'personales'
+  );
+}
+
+/** Valor unificado para tabs y modal «mover» (histórico personales → representacion_interna). */
+export function tipoGastoUiCanonical(g: Gasto): string | null {
+  const eff = tipoGastoEffective(g);
+  if (!eff) return null;
+  if (isRepresentacionInternaBucket(eff)) return 'representacion_interna';
+  return eff;
+}
+
 export function gastoMatchesTipoGasto(g: Gasto, tabTipo: string): boolean {
-  return tipoGastoEffective(g) === tabTipo;
+  const eff = tipoGastoEffective(g) ?? '';
+  if (tabTipo === 'representacion_interna') return isRepresentacionInternaBucket(eff);
+  if (isRepresentacionInternaBucket(eff)) return false;
+  return eff === tabTipo;
 }

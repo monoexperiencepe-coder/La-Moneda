@@ -24,7 +24,11 @@ function canonicalTipoGastoFinanciero(g: Gasto): string {
     personal_socios: 'personal_socios_familiares',
     operativo_flota_global: 'gastos_globales',
   };
-  return map[raw] ?? raw;
+  const mapped = map[raw] ?? raw;
+  if (mapped === 'personal_socios_familiares' || mapped === 'representacion_interna' || mapped === 'personales') {
+    return 'representacion_interna';
+  }
+  return mapped;
 }
 
 /**
@@ -48,7 +52,7 @@ export function calculateFinancialKPIs(ingresos: Ingreso[], gastos: Gasto[]): Fi
     else if (t === 'financiero_prestamo') gastos_financieros += m;
     else if (t === 'administrativo_empresa' || t === 'planilla_laboral') gastos_administrativos += m;
     else if (t === 'inversion_compra') gastos_inversion += m;
-    else if (t === 'personal_socios_familiares') gastos_personal_socios += m;
+    else if (t === 'representacion_interna') gastos_personal_socios += m;
     else if (t === 'gastos_globales') gastos_globales += m;
   }
 

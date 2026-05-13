@@ -218,12 +218,29 @@ export function mapCajaNegocioVehiculoRow(r: Record<string, unknown>): CajaNegoc
 export function mapInversionGeneralVehiculoRow(r: Record<string, unknown>): InversionGeneralVehiculo {
   const monRaw = str(r.moneda).trim().toUpperCase();
   const moneda: Moneda = monRaw === 'USD' ? 'USD' : 'PEN';
+  const fc = r.fecha_compra;
+  const fechaCompra =
+    fc == null || fc === ''
+      ? null
+      : (() => {
+          const d = toDateOnlyString(fc);
+          return d === '' ? null : d;
+        })();
   return {
     id: mapRowId(r.id),
     vehiculoReferencia: str(r.vehiculo_referencia),
     vehiculoNumero: numOrNull(r.vehiculo_numero),
     placa: strOrNull(r.placa),
     modelo: strOrNull(r.modelo),
+    fechaCompra,
+    valorCompraUsd: numOrNull(r.valor_compra_usd),
+    gastoGnvUsd: numOrNull(r.gasto_gnv_usd),
+    gastoNotarialUsd: numOrNull(r.gasto_notarial_usd),
+    legFirmasUsd: numOrNull(r.leg_firmas_usd),
+    seguroUsd: numOrNull(r.seguro_usd),
+    gpsUsd: numOrNull(r.gps_usd),
+    fundasAccesoriosUsd: numOrNull(r.fundas_accesorios_usd),
+    totalInversionPen: numOrNull(r.total_equivalente_pen),
     montoTotal: num(r.monto_total),
     moneda,
     fuente: str(r.fuente) || 'VALOR DE INVERSION',

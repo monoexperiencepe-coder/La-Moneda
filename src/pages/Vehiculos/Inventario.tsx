@@ -40,7 +40,7 @@ const Inventario: React.FC = () => {
 
       {/* Vehicle grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filteredVehicles.map(vehicle => (
+        {filteredVehicles.map((vehicle, idx) => (
           <VehicleCard
             key={vehicle.id}
             vehicle={vehicle}
@@ -48,6 +48,7 @@ const Inventario: React.FC = () => {
             gastos={gastos}
             documentaciones={documentaciones}
             inversionTotalUsd={totalInversionUsdForVehicle(inversionesVehiculo, vehicle.id)}
+            listaIndice={idx + 1}
           />
         ))}
       </div>

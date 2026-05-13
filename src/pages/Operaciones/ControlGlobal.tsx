@@ -9,7 +9,7 @@ import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperat
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
 const ID_TIPOS_INGRESO = ['ALQUILER', 'GARANTIA', 'PAPELETAS', 'CHOQUES / DANOS', 'INTERESES', 'PRESTAMOS'];
-const ID_G_MECANICOS = ['AIRE A/C', 'AUTOPARTES', 'BATERIA', 'DIRECCION Y SUSPENSION', 'GNV', 'GPS'];
+const ID_G_MECANICOS = ['AIRE A/C', 'AUTOPARTES', 'Batería', 'DIRECCION Y SUSPENSION', 'GNV', 'GPS'];
 const ID_G_TRIBUT = ['ASESORIA', 'MULTAS', 'PAPELETA', 'REVISION TECNICA', 'SAT', 'SUNARP', 'SUNAT'];
 
 function diffDays(dateStr: string): number {
@@ -100,7 +100,10 @@ const ControlGlobal: React.FC = () => {
 
   const unidadesConKm = useMemo(() => new Set(kilometrajes.map((k) => k.vehicleId)).size, [kilometrajes]);
 
-  const operativeAlerts = useMemo(() => buildOperativeAlerts(ingresos, controlFechas, vehicles), [ingresos, controlFechas, vehicles]);
+  const operativeAlerts = useMemo(
+    () => buildOperativeAlerts(ingresos, controlFechas, vehicles, kilometrajes),
+    [ingresos, controlFechas, vehicles, kilometrajes],
+  );
   const operativeAlertCounts = useMemo(() => countAlertsByKind(operativeAlerts), [operativeAlerts]);
 
   const quickLinks = [
@@ -173,7 +176,7 @@ const ControlGlobal: React.FC = () => {
             </p>
             <p className="text-xs text-amber-800 mt-0.5">
               {operativeAlertCounts.INGRESO_PENDIENTE} cobro(s) pendiente(s) · {operativeAlertCounts.VENCIMIENTO} vencimiento(s) ·{' '}
-              {operativeAlertCounts.SIN_INGRESOS} vehículo(s) sin ingresos recientes
+              {operativeAlertCounts.KM_MANTENIMIENTO} km sin mantenimiento · {operativeAlertCounts.SIN_INGRESOS} vehículo(s) sin ingresos recientes
             </p>
           </div>
           <button

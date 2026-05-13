@@ -42,7 +42,8 @@ const Select: React.FC<SelectProps> = ({
           {...props}
           onChange={(e) => onChange?.(e.target.value)}
           className={`
-            input-field appearance-none pr-10 cursor-pointer
+            input-field appearance-none pr-10
+            ${props.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
             ${error ? 'border-red-400 focus:ring-red-400' : ''}
             ${className}
           `}

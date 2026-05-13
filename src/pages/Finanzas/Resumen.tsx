@@ -15,7 +15,7 @@ const CATEGORIA_MAP = [
   { key: 'financiero_prestamo', label: 'Financieros' },
   { key: 'planilla_laboral', label: 'Planilla' },
   { key: 'inversion_compra', label: 'Inversión con utilidad' },
-  { key: 'personal_socios_familiares', label: 'Personales' },
+  { key: 'representacion_interna', label: 'Representación interna' },
   { key: 'gastos_globales', label: 'Globales' },
 ] as const;
 
@@ -76,7 +76,9 @@ function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: boolean)
     personal_socios: 'personal_socios_familiares',
     operativo_flota_global: 'gastos_globales',
   };
-  return legacyMap[t] ?? t;
+  const mapped = legacyMap[t] ?? t;
+  if (mapped === 'personal_socios_familiares' || mapped === 'representacion_interna' || mapped === 'personales') return 'representacion_interna';
+  return mapped;
 }
 
 const Resumen: React.FC = () => {

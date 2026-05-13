@@ -255,6 +255,16 @@ export interface InversionGeneralVehiculo {
   vehiculoNumero: number | null;
   placa: string | null;
   modelo: string | null;
+  /** Desglose hoja VALOR DE INVERSION (USD + equivalente PEN); null si aún no migró la fila. */
+  fechaCompra: string | null;
+  valorCompraUsd: number | null;
+  gastoGnvUsd: number | null;
+  gastoNotarialUsd: number | null;
+  legFirmasUsd: number | null;
+  seguroUsd: number | null;
+  gpsUsd: number | null;
+  fundasAccesoriosUsd: number | null;
+  totalInversionPen: number | null;
   montoTotal: number;
   moneda: Moneda;
   fuente: string;

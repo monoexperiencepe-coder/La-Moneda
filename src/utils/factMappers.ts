@@ -8,7 +8,7 @@ function stripAccents(s: string): string {
 export function inferCategoriaFromTipoGasto(tipo: string): CategoriaGasto {
   const t = stripAccents(tipo.toUpperCase());
 
-  if (/MECAN|GNV|ACCESOR|IMPLEMENTACION|COMPRA ACTIVO|DEVOLUCION/.test(t)) {
+  if (/MECAN|GNV|ACCESOR|IMPLEMENTACION|COMPRA ACTIVO|DEVOLUCION|ABASTECIMIENTO/.test(t)) {
     return 'GASTOS_MECANICOS';
   }
   if (/GASTOS FIJOS|FIJO/.test(t)) {

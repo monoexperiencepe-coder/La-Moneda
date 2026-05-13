@@ -6,7 +6,7 @@ export { TIPOS_INGRESO_FACT as TIPOS_INGRESO } from './factCatalog';
 export const GASTOS_MECANICOS = [
   'AIRE A/C',
   'AUTOPARTES',
-  'BATERIA',
+  'Batería',
   'DIRECCIÓN Y SUSPENSIÓN',
   'GNV',
   'GPS',

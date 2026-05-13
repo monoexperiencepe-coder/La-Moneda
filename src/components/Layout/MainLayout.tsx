@@ -1,9 +1,7 @@
 import React from 'react';
 import Header from './Header';
 import Footer from './Footer';
-import FloatingActionButton from '../FAB/FloatingActionButton';
-import QuickIncomeDrawer from '../Drawers/QuickIncomeDrawer';
-import QuickExpenseDrawer from '../Drawers/QuickExpenseDrawer';
+import FloatingRegistrosMenu from '../FAB/FloatingRegistrosMenu';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -20,12 +18,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       </main>
       <Footer />
 
-      {/* FAB always visible */}
-      <FloatingActionButton />
-
-      {/* Drawers */}
-      <QuickIncomeDrawer />
-      <QuickExpenseDrawer />
+      <FloatingRegistrosMenu />
     </div>
   );
 };

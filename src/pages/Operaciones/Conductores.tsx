@@ -21,7 +21,7 @@ import {
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import { conductorDisplayInitials, formatConductorDisplayLabel } from '../../utils/fleetPanel';
-import type { Conductor } from '../../data/types';
+import type { Conductor, TipoDocumento, TipoDomicilio } from '../../data/types';
 
 /* ─── types ─────────────────────────────────────────────────────────────── */
 type EstadoFilter = 'TODOS' | 'VIGENTE' | 'SUSPENDIDO';
@@ -29,6 +29,13 @@ type SortKey = 'apellidos' | 'vehicleId' | 'estado' | 'cochera' | 'celular';
 type SortDir = 'asc' | 'desc';
 
 type ConductorEditDraft = {
+  nombres: string;
+  apellidos: string;
+  tipoDocumento: TipoDocumento;
+  numeroDocumento: string;
+  domicilio: TipoDomicilio;
+  vehicleId: string;
+  estadoContrato: 'ABIERTO' | 'CERRADO';
   celular: string;
   cochera: string;
   direccion: string;
@@ -40,8 +47,27 @@ type ConductorEditDraft = {
   statusOriginal: string;
 };
 
+const TIPO_DOC_OPTS: { value: TipoDocumento; label: string }[] = [
+  { value: 'DNI', label: 'DNI' },
+  { value: 'CE', label: 'Carné de extranjería' },
+  { value: 'PASAPORTE', label: 'Pasaporte' },
+];
+
+const DOMICILIO_OPTS: { value: TipoDomicilio; label: string }[] = [
+  { value: 'PROPIO', label: 'Propio' },
+  { value: 'ALQUILADO', label: 'Alquilado' },
+  { value: 'CASA DE FAMILIA', label: 'Casa de familia' },
+];
+
 function conductorToDraft(c: Conductor): ConductorEditDraft {
   return {
+    nombres: c.nombres ?? '',
+    apellidos: c.apellidos ?? '',
+    tipoDocumento: c.tipoDocumento,
+    numeroDocumento: c.numeroDocumento ?? '',
+    domicilio: c.domicilio,
+    vehicleId: c.vehicleId != null ? String(c.vehicleId) : '',
+    estadoContrato: c.estadoContrato,
     celular: c.celular ?? '',
     cochera: c.cochera ?? '',
     direccion: c.direccion ?? '',
@@ -52,6 +78,27 @@ function conductorToDraft(c: Conductor): ConductorEditDraft {
     comentarios: c.comentarios ?? '',
     estado: c.estado,
     statusOriginal: c.statusOriginal ?? '',
+  };
+}
+
+function emptyNuevoConductorForm() {
+  return {
+    vehicleId: '',
+    tipoDocumento: 'DNI' as TipoDocumento,
+    numeroDocumento: '',
+    nombres: '',
+    apellidos: '',
+    celular: '',
+    domicilio: 'PROPIO' as TipoDomicilio,
+    estadoContrato: 'ABIERTO' as 'ABIERTO' | 'CERRADO',
+    estado: 'VIGENTE' as 'VIGENTE' | 'SUSPENDIDO',
+    cochera: '',
+    numeroEmergencia: '',
+    direccion: '',
+    fechaVencimientoContrato: '',
+    documentoFirmado: 'unset' as 'unset' | 'true' | 'false',
+    comentarios: '',
+    statusOriginal: '',
   };
 }
 
@@ -103,7 +150,7 @@ const SortTh: React.FC<{
 /* ─── component ─────────────────────────────────────────────────────────── */
 const Conductores: React.FC = () => {
   const navigate = useNavigate();
-  const { conductores, vehicles, deleteConductor, updateConductor } = useRegistrosContext();
+  const { conductores, vehicles, deleteConductor, updateConductor, addConductor } = useRegistrosContext();
 
   const [q, setQ] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>('TODOS');
@@ -116,6 +163,10 @@ const Conductores: React.FC = () => {
   const [fechaHasta, setFechaHasta] = useState('');
   const [mesFiltro, setMesFiltro] = useState('');
   const [anioFiltro, setAnioFiltro] = useState('');
+  const [showNuevoForm, setShowNuevoForm] = useState(false);
+  const [nuevoForm, setNuevoForm] = useState(emptyNuevoConductorForm);
+  const [nuevoError, setNuevoError] = useState('');
+  const [nuevoBusy, setNuevoBusy] = useState(false);
 
   const hasActiveFilters = estadoFilter !== 'TODOS' || fechaDesde || fechaHasta || mesFiltro || anioFiltro || q;
 
@@ -133,6 +184,58 @@ const Conductores: React.FC = () => {
     vehicles.forEach((v) => m.set(v.id, v));
     return m;
   }, [vehicles]);
+
+  const vehiclesSorted = useMemo(
+    () => [...vehicles].sort((a, b) => a.id - b.id),
+    [vehicles],
+  );
+
+  const toggleNuevoForm = useCallback(() => {
+    setShowNuevoForm((was) => !was);
+    setNuevoForm(emptyNuevoConductorForm());
+    setNuevoError('');
+  }, []);
+
+  const handleNuevoSubmit = useCallback(async () => {
+    setNuevoError('');
+    const f = nuevoForm;
+    if (!f.nombres.trim() || !f.apellidos.trim() || !f.numeroDocumento.trim() || !f.celular.trim()) {
+      setNuevoError('Completa nombres, apellidos, número de documento y celular.');
+      return;
+    }
+    const docFirm: boolean | null =
+      f.documentoFirmado === 'unset' ? null : f.documentoFirmado === 'true';
+    setNuevoBusy(true);
+    try {
+      const result = await addConductor({
+        vehicleId: f.vehicleId.trim() === '' ? null : Number(f.vehicleId),
+        tipoDocumento: f.tipoDocumento,
+        numeroDocumento: f.numeroDocumento.trim(),
+        nombres: f.nombres.trim(),
+        apellidos: f.apellidos.trim(),
+        celular: f.celular.trim(),
+        domicilio: f.domicilio,
+        estadoContrato: f.estadoContrato,
+        estado: f.estado,
+        statusOriginal: f.statusOriginal.trim() || null,
+        cochera: f.cochera.trim() || null,
+        numeroEmergencia: f.numeroEmergencia.trim() || null,
+        direccion: f.direccion.trim() || null,
+        documentoFirmado: docFirm,
+        fechaVencimientoContrato: f.fechaVencimientoContrato.trim() || null,
+        comentarios: f.comentarios.trim(),
+      });
+      if (!result) {
+        setNuevoError('No se pudo guardar. Revisa los datos o la conexión con Supabase.');
+        return;
+      }
+      setShowNuevoForm(false);
+      setNuevoForm(emptyNuevoConductorForm());
+      setExpandedId(result.id);
+    } finally {
+      setNuevoBusy(false);
+    }
+  }, [nuevoForm, addConductor]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortDir((prev) => (sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
@@ -162,6 +265,13 @@ const Conductores: React.FC = () => {
       const docFirm: boolean | null =
         d.documentoFirmado === 'unset' ? null : d.documentoFirmado === 'true';
       await updateConductor(id, {
+        nombres: d.nombres.trim(),
+        apellidos: d.apellidos.trim(),
+        tipoDocumento: d.tipoDocumento,
+        numeroDocumento: d.numeroDocumento.trim(),
+        domicilio: d.domicilio,
+        vehicleId: d.vehicleId.trim() === '' ? null : Number(d.vehicleId),
+        estadoContrato: d.estadoContrato,
         celular: d.celular.trim(),
         cochera: d.cochera.trim() || null,
         direccion: d.direccion.trim() || null,
@@ -250,10 +360,18 @@ const Conductores: React.FC = () => {
               <p className="text-[11px] text-gray-400">{conductores.length} registros · clic en fila para detalles · clic en columna para ordenar</p>
             </div>
           </div>
-          <button type="button" onClick={() => navigate('/operaciones/control-global')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 hover:bg-primary-600 text-white text-xs font-semibold transition-colors shadow-soft">
+          <button
+            type="button"
+            onClick={toggleNuevoForm}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors shadow-soft ${
+              showNuevoForm
+                ? 'bg-gray-700 hover:bg-gray-800 text-white'
+                : 'bg-primary-500 hover:bg-primary-600 text-white'
+            }`}
+          >
             <UserPlus size={13} />
-            <span className="hidden sm:inline">Nuevo</span>
+            <span className="hidden sm:inline">{showNuevoForm ? 'Cerrar' : 'Nuevo conductor'}</span>
+            <span className="sm:hidden">{showNuevoForm ? '×' : '+'}</span>
           </button>
         </div>
 
@@ -358,6 +476,220 @@ const Conductores: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showNuevoForm && (
+        <div className="shrink-0 mx-4 sm:mx-6 mt-2 mb-1 rounded-2xl border border-primary-100 bg-white shadow-soft px-4 py-4 animate-fade-in">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 mb-3 flex items-center gap-2">
+            <UserPlus size={12} /> Registrar conductor
+          </p>
+          {nuevoError && (
+            <p className="text-xs text-red-600 mb-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2">{nuevoError}</p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Nombres</span>
+              <input
+                type="text"
+                value={nuevoForm.nombres}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, nombres: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Apellidos</span>
+              <input
+                type="text"
+                value={nuevoForm.apellidos}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, apellidos: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Tipo documento</span>
+              <select
+                value={nuevoForm.tipoDocumento}
+                onChange={(e) =>
+                  setNuevoForm((p) => ({ ...p, tipoDocumento: e.target.value as TipoDocumento }))
+                }
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                {TIPO_DOC_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Número documento</span>
+              <input
+                type="text"
+                value={nuevoForm.numeroDocumento}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, numeroDocumento: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Celular</span>
+              <input
+                type="tel"
+                value={nuevoForm.celular}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, celular: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Domicilio</span>
+              <select
+                value={nuevoForm.domicilio}
+                onChange={(e) =>
+                  setNuevoForm((p) => ({ ...p, domicilio: e.target.value as TipoDomicilio }))
+                }
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                {DOMICILIO_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Vehículo</span>
+              <select
+                value={nuevoForm.vehicleId}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, vehicleId: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                <option value="">Sin vehículo asignado</option>
+                {vehiclesSorted.map((v) => (
+                  <option key={v.id} value={String(v.id)}>
+                    #{v.id} · {v.placa} · {v.marca} {v.modelo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado contrato</span>
+              <select
+                value={nuevoForm.estadoContrato}
+                onChange={(e) =>
+                  setNuevoForm((p) => ({
+                    ...p,
+                    estadoContrato: e.target.value as 'ABIERTO' | 'CERRADO',
+                  }))
+                }
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                <option value="ABIERTO">Abierto</option>
+                <option value="CERRADO">Cerrado</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado conductor</span>
+              <select
+                value={nuevoForm.estado}
+                onChange={(e) =>
+                  setNuevoForm((p) => ({
+                    ...p,
+                    estado: e.target.value as 'VIGENTE' | 'SUSPENDIDO',
+                  }))
+                }
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                <option value="VIGENTE">Vigente</option>
+                <option value="SUSPENDIDO">Suspendido</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cochera</span>
+              <input
+                type="text"
+                placeholder="Ej. Abierta / Cerrada"
+                value={nuevoForm.cochera}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, cochera: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Número de emergencia</span>
+              <input
+                type="text"
+                value={nuevoForm.numeroEmergencia}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, numeroEmergencia: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block sm:col-span-2 lg:col-span-3">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Dirección</span>
+              <input
+                type="text"
+                value={nuevoForm.direccion}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, direccion: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Vencimiento contrato</span>
+              <input
+                type="date"
+                value={nuevoForm.fechaVencimientoContrato}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, fechaVencimientoContrato: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Doc. firmado</span>
+              <select
+                value={nuevoForm.documentoFirmado}
+                onChange={(e) =>
+                  setNuevoForm((p) => ({
+                    ...p,
+                    documentoFirmado: e.target.value as 'unset' | 'true' | 'false',
+                  }))
+                }
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              >
+                <option value="unset">Sin registrar</option>
+                <option value="true">Sí, firmado</option>
+                <option value="false">No firmado</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Status original (Excel)</span>
+              <input
+                type="text"
+                value={nuevoForm.statusOriginal}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, statusOriginal: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block sm:col-span-2 lg:col-span-3">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Comentarios</span>
+              <textarea
+                rows={2}
+                value={nuevoForm.comentarios}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, comentarios: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none resize-y min-h-[2.5rem]"
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              disabled={nuevoBusy}
+              onClick={() => void handleNuevoSubmit()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft disabled:opacity-50"
+            >
+              <Save size={14} /> {nuevoBusy ? 'Guardando…' : 'Guardar conductor'}
+            </button>
+            <button
+              type="button"
+              disabled={nuevoBusy}
+              onClick={toggleNuevoForm}
+              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── TABLE ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto px-2 sm:px-4 py-2">
@@ -481,10 +813,104 @@ const Conductores: React.FC = () => {
                       <td />
                       <td colSpan={8} className="px-4 pb-4 pt-3 border-b border-primary-100">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 mb-3 flex items-center gap-2">
-                          <FileCheck size={12} /> Editar datos de contacto, status y contrato
+                          <FileCheck size={12} /> Editar conductor
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Nombres</span>
+                            <input
+                              type="text"
+                              value={draft.nombres}
+                              onChange={(e) => setDraft((p) => (p ? { ...p, nombres: e.target.value } : p))}
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Apellidos</span>
+                            <input
+                              type="text"
+                              value={draft.apellidos}
+                              onChange={(e) => setDraft((p) => (p ? { ...p, apellidos: e.target.value } : p))}
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Tipo documento</span>
+                            <select
+                              value={draft.tipoDocumento}
+                              onChange={(e) =>
+                                setDraft((p) =>
+                                  p ? { ...p, tipoDocumento: e.target.value as TipoDocumento } : p,
+                                )
+                              }
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            >
+                              {TIPO_DOC_OPTS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Número documento</span>
+                            <input
+                              type="text"
+                              value={draft.numeroDocumento}
+                              onChange={(e) => setDraft((p) => (p ? { ...p, numeroDocumento: e.target.value } : p))}
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Domicilio</span>
+                            <select
+                              value={draft.domicilio}
+                              onChange={(e) =>
+                                setDraft((p) =>
+                                  p ? { ...p, domicilio: e.target.value as TipoDomicilio } : p,
+                                )
+                              }
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            >
+                              {DOMICILIO_OPTS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block sm:col-span-2 lg:col-span-1">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Vehículo</span>
+                            <select
+                              value={draft.vehicleId}
+                              onChange={(e) => setDraft((p) => (p ? { ...p, vehicleId: e.target.value } : p))}
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            >
+                              <option value="">Sin vehículo asignado</option>
+                              {vehiclesSorted.map((v) => (
+                                <option key={v.id} value={String(v.id)}>
+                                  #{v.id} · {v.placa} · {v.marca} {v.modelo}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado contrato</span>
+                            <select
+                              value={draft.estadoContrato}
+                              onChange={(e) =>
+                                setDraft((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        estadoContrato: e.target.value as 'ABIERTO' | 'CERRADO',
+                                      }
+                                    : p,
+                                )
+                              }
+                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                            >
+                              <option value="ABIERTO">Abierto</option>
+                              <option value="CERRADO">Cerrado</option>
+                            </select>
+                          </label>
                           <label className="block">
                             <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Celular</span>
                             <input

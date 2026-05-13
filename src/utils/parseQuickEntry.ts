@@ -4,7 +4,9 @@
  * Ejemplos de entrada:
  *   "50 alquiler carro 3"          → monto:50 tipo:ALQUILER vehicleId:3
  *   "alquiler 80 carro 12 dia"     → monto:80 tipo:ALQUILER subtipo:Día vehicleId:12
- *   "gasolina 30 carro 5"          → monto:30 tipo:MECÁNICOS subtipo:COMBUSTIBLE vehicleId:5
+ *   "gasolina 30 carro 5"          → monto:30 tipo:ABASTECIMIENTO DE COMBUSTIBLE subtipo:GASOLINA vehicleId:5
+ *   "recarga gnv 40 carro 2"       → ABASTECIMIENTO DE COMBUSTIBLE · GNV
+ *   "reductor 200 carro 3"         → tipo GNV (técnico)
  *   "soat 200 carro 7"             → monto:200 tipo:SEGUROS/DOCUMENTOS subtipo:SOAT vehicleId:7
  *   "150"                          → monto:150 (resto sin detectar)
  *   "alquiler 50"                  → monto:50 tipo:ALQUILER
@@ -15,6 +17,12 @@ import { TIPOS_INGRESO_FACT, TIPOS_GASTO_FACT } from '../data/factCatalog';
 import factSubtiposIngresos from '../data/factSubtiposIngresos.json';
 import factSubtiposGastos from '../data/factSubtiposGastos.json';
 import type { Vehicle } from '../data/types';
+import {
+  REPRESENTACION_INTERNA_FACT_SUBTIPO,
+  REPRESENTACION_INTERNA_FACT_TIPO,
+  matchRepresentacionInternaSubtipoFromNormPhrase,
+} from '../data/representacionInterna';
+import { getRepresentacionInternaSubtipoLabel } from './representacionInternaSubtipoLabel';
 
 export type EntryMode = 'ingreso' | 'gasto';
 
@@ -28,6 +36,9 @@ export interface ParsedEntry {
   mode: EntryMode;
   /** Tokens no consumidos por ninguna regla (para debug / comentario) */
   restantes: string;
+  /** Gastos: capa financiera detectada por frase (p. ej. representacion_interna). */
+  finanzaTipoGasto?: string | null;
+  finanzaSubtipoGasto?: string | null;
 }
 
 /* ──────────────────────────────────────────────────
@@ -55,9 +66,40 @@ const INGRESO_ALIASES: [string[], string][] = [
   [['OTROS', 'INGRESO', 'INGRESOS'], 'OTROS INGRESOS'],
 ];
 
-/** Alias palabra → tipo Fact GASTO */
+/** Alias palabra → tipo Fact GASTO (orden: primero GNV técnico por frase, luego abastecimiento/recarga). */
 const GASTO_ALIASES: [string[], string][] = [
-  [['GASOLINA', 'COMBUSTIBLE', 'GASOIL', 'PETROLEO', 'GAS VEHICULO'], 'MECÁNICOS'],
+  [
+    [
+      'INSPECCION GNV',
+      'INSPECCION GAS',
+      'CERTIFICADO GNV',
+      'CERTIFICADO GAS',
+      'EQUIPO GNV',
+      'INSTALACION GNV',
+      'INSTALACION GAS',
+      'REPARACION GNV',
+      'REDUCTOR',
+      'VARIADOR',
+    ],
+    'GNV',
+  ],
+  [
+    [
+      'RECARGA GNV',
+      'GASOLINA',
+      'COMBUSTIBLE',
+      'GRIFO',
+      'GLP',
+      'PETROLEO',
+      'GASOIL',
+      'DIESEL',
+      'GAS NATURAL',
+      'GAS VEHICULO GNV',
+      'GNV',
+      'GAS',
+    ],
+    'ABASTECIMIENTO DE COMBUSTIBLE',
+  ],
   [['ACEITE', 'FILTRO', 'MECANICO', 'MECANICOS', 'TALLER', 'REPARACION', 'REPUESTO',
     'MANTENIMIENTO', 'MANT', 'BATERIA', 'LLANTA', 'FRENO', 'FRENOS',
     'ALINEAMIENTO', 'SUSPENSION', 'MOTOR', 'ARREGLO'], 'MECÁNICOS'],
@@ -68,7 +110,6 @@ const GASTO_ALIASES: [string[], string][] = [
   [['SUELDO', 'SUELDOS', 'SALARIO', 'GRATIFICACION', 'ALQUILER LOCAL', 'INTERES', 'INTERESES'], 'GASTOS FIJOS'],
   [['MULTA', 'PAPELETA', 'SAT', 'SUNARP', 'SUNAT', 'SUTRAN', 'NOTARIAL', 'TRAMITE',
     'TRIBUTARIO', 'MUNICIPAL', 'MUNICIPALES'], 'TRIBUTARIOS / NOTARIALES'],
-  [['GNV', 'GAS NATURAL', 'GAS VEHICULO GNV'], 'GNV'],
   [['GPS', 'ACCESORIO', 'ACCESORIOS', 'EXTINTORES', 'LLANTAS'], 'ACCESORIOS'],
   [['OTROS'], 'OTROS GASTOS'],
 ];
@@ -86,13 +127,34 @@ const SUBTIPO_INGRESO_ALIASES: [string[], string][] = [
 
 /** Alias subtipo para gastos (fragmento → subtipo Fact) */
 const SUBTIPO_GASTO_ALIASES: [string[], string][] = [
-  [['GASOLINA', 'COMBUSTIBLE', 'PETROLEO', 'GASOIL'], 'COMBUSTIBLE'],
+  [['GASOLINA', 'COMBUSTIBLE', 'PETROLEO', 'GASOIL', 'DIESEL'], 'GASOLINA'],
+  [['GLP', 'AUTOGAS'], 'GLP'],
+  [['GNV', 'GAS NATURAL'], 'GNV'],
   [['SOAT'], 'SOAT'],
   [['RT TAXI', 'RTV TAXI', 'REVISION TAXI', 'DETAXI'], 'REVISIÓN TÉCNICA TAXI'],
   [['RT PARTICULAR', 'RTV PARTICULAR', 'REVISION PARTICULAR'], 'REVISIÓN TÉCNICA PARTICULAR'],
   [['AFOCAT'], 'AFOCAT'],
   [['SUELDO', 'SUELDOS', 'SALARIO'], 'SUELDOS'],
-  [['BATERIA'], 'BATERÍA'],
+  [
+    [
+      'BATERIA',
+      'BATERÍA',
+      'COMPRA BATERIA',
+      'COMPRA DE BATERIA',
+      'COMPRA BATERÍA',
+      'COMPRA DE BATERÍA',
+      'CAMBIO BATERIA',
+      'CAMBIO DE BATERIA',
+      'CAMBIO BATERÍA',
+      'BATERIA CARRO',
+      'BATERÍA CARRO',
+      'BATERIA VEHICULO',
+      'BATERÍA VEHICULO',
+      'BATERIA VEHÍCULO',
+      'BATERÍA VEHÍCULO',
+    ],
+    'Batería',
+  ],
   [['LLANTA', 'LLANTAS'], 'LLANTAS'],
   [['FRENO', 'FRENOS'], 'FRENOS'],
   [['ALINEAMIENTO', 'BALANCE', 'BALANCEO'], 'ALINEAMIENTO Y BALANCEO'],
@@ -201,6 +263,8 @@ export function parseQuickEntry(
     comentarios: '',
     mode,
     restantes: '',
+    finanzaTipoGasto: null,
+    finanzaSubtipoGasto: null,
   };
 
   if (!raw.trim()) return result;
@@ -263,9 +327,28 @@ export function parseQuickEntry(
   const subAliases = mode === 'ingreso' ? SUBTIPO_INGRESO_ALIASES : SUBTIPO_GASTO_ALIASES;
   const tiposFact = mode === 'ingreso' ? TIPOS_INGRESO_FACT : TIPOS_GASTO_FACT;
 
+  let tipoFound: string | null = null;
+  let subFound: string | null = null;
+
+  if (mode === 'gasto') {
+    const repSub =
+      matchRepresentacionInternaSubtipoFromNormPhrase(norm(frase))
+      || matchRepresentacionInternaSubtipoFromNormPhrase(norm(raw.trim()));
+    if (repSub) {
+      tipoFound = REPRESENTACION_INTERNA_FACT_TIPO;
+      subFound = REPRESENTACION_INTERNA_FACT_SUBTIPO;
+      result.finanzaTipoGasto = 'representacion_interna';
+      result.finanzaSubtipoGasto = repSub;
+    }
+  }
+
   /* 4a) Intento con frase completa */
-  let tipoFound = matchAliasMultitoken(frase, typeAliases);
-  let subFound = matchAliasMultitoken(frase, subAliases);
+  if (!tipoFound) {
+    tipoFound = matchAliasMultitoken(frase, typeAliases);
+  }
+  if (!subFound) {
+    subFound = matchAliasMultitoken(frase, subAliases);
+  }
 
   /* 4b) Si no encontró con frase, buscar token a token */
   if (!tipoFound) {
@@ -338,5 +421,12 @@ export function previewParsed(p: ParsedEntry, vehicles: Vehicle[]): string {
     parts.push(`· ${v ? `#${v.id} ${v.marca} ${v.modelo}` : `carro #${p.vehicleId}`}`);
   }
   if (p.metodoPago) parts.push(`(${p.metodoPago})`);
+  if (p.finanzaTipoGasto && p.finanzaSubtipoGasto) {
+    const subLbl =
+      p.finanzaTipoGasto === 'representacion_interna'
+        ? getRepresentacionInternaSubtipoLabel(p.finanzaSubtipoGasto)
+        : p.finanzaSubtipoGasto;
+    parts.push(`· ${subLbl} (finanza: ${p.finanzaTipoGasto})`);
+  }
   return parts.join(' ') || '—';
 }

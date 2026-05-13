@@ -1,4 +1,9 @@
 {
+  "ABASTECIMIENTO DE COMBUSTIBLE": [
+    "GNV",
+    "GLP",
+    "GASOLINA"
+  ],
   "ACCESORIOS": [
     "BOTIQUÍN",
     "CHIPS TELEFONÍA",
@@ -58,7 +63,7 @@
     "ARREGLO ELECTRINICO",
     "ARREGLO MOTOR",
     "AUTOPARTE",
-    "BATERÍA",
+    "Batería",
     "COMBUSTIBLE",
     "DIRECCIÓN Y SUSPENSIÓN",
     "FRENOS",

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { useDrawer } from '../../context/DrawerContext';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { conductorAsignadoLabel, formatConductorDisplayLabel, ultimoKmPorVehiculo } from '../../utils/fleetPanel';
@@ -74,14 +73,8 @@ const VehiculoDetalle: React.FC = () => {
     inversionesVehiculo,
     cajaNegocioVehiculo,
   } = useRegistrosContext();
-  const { open, setLastVehicleId } = useDrawer();
 
   const vehicle = getVehicleById(vid);
-
-  useEffect(() => {
-    if (!Number.isFinite(vid) || !vehicle) return;
-    setLastVehicleId(vid);
-  }, [vid, vehicle, setLastVehicleId]);
 
   const setTab = (next: TabId) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -173,12 +166,10 @@ const VehiculoDetalle: React.FC = () => {
     'rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-gray-50 text-left';
 
   const openIncome = () => {
-    setLastVehicleId(vid);
-    open('income');
+    navigate(`/finanzas/ingresos?registrar=1&vehicleId=${encodeURIComponent(String(vid))}`);
   };
   const openExpense = () => {
-    setLastVehicleId(vid);
-    open('expense');
+    navigate(`/finanzas/gastos?registrar=1&vehicleId=${encodeURIComponent(String(vid))}`);
   };
 
   return (

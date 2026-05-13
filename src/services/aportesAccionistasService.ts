@@ -65,3 +65,47 @@ export async function fetchAportesAccionistas(): Promise<AportesAccionistasFetch
 
   return { rows, error: null };
 }
+
+function randomDedupeKeyManual(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `manual:${crypto.randomUUID()}`;
+  }
+  return `manual:${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export type AporteAccionistaInsertInput = {
+  accionista: string;
+  vehiculoReferencia: string | null;
+  monto: number;
+  moneda: Moneda;
+  fechaAporte: string;
+  generaInteres: boolean;
+  tipo: string;
+  observaciones: string;
+};
+
+/** Alta de un aporte (dedupe_key único generado en cliente). */
+export async function insertAporteAccionista(
+  input: AporteAccionistaInsertInput,
+): Promise<{ error: string | null }> {
+  if (!EMPRESA_ID) {
+    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  }
+  const row = {
+    empresa_id: EMPRESA_ID,
+    accionista: input.accionista.trim(),
+    vehiculo_referencia:
+      input.vehiculoReferencia == null || input.vehiculoReferencia.trim() === ''
+        ? null
+        : input.vehiculoReferencia.trim(),
+    monto: input.monto,
+    moneda: input.moneda,
+    fecha_aporte: input.fechaAporte.slice(0, 10),
+    genera_interes: input.generaInteres,
+    tipo: (input.tipo ?? 'aporte_accionista').trim() || 'aporte_accionista',
+    observaciones: input.observaciones.trim(),
+    dedupe_key: randomDedupeKeyManual(),
+  };
+  const { error } = await supabase.from('aportes_accionistas').insert(row);
+  return { error: error?.message ?? null };
+}

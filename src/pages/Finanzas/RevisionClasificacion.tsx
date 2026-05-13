@@ -15,6 +15,12 @@ import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { SUBTIPOS_REPRESENTACION_INTERNA } from '../../data/representacionInterna';
+import { normKey } from '../../utils/subtipoFinancieroLabel';
+import {
+  getRepresentacionInternaSubtipoLabel,
+  normalizeRepresentacionInternaSubtipo,
+} from '../../utils/representacionInternaSubtipoLabel';
 
 const TIPO_OPCIONES = [
   { value: 'operativo_vehiculo', label: 'Operativo vehículo' },
@@ -26,16 +32,17 @@ const TIPO_OPCIONES = [
   { value: 'financiero_prestamo', label: 'Financiero / préstamo' },
   { value: 'inversion', label: 'Inversión (legacy)' },
   { value: 'inversion_compra', label: 'Inversión / compra' },
+  { value: 'representacion_interna', label: 'Representación interna' },
   { value: 'personal_socios', label: 'Personal socios (legacy)' },
-  { value: 'personal_socios_familiares', label: 'Personal / socios / familiares' },
 ] as const;
 
-const SUBTIPO_OPCIONES = [
+const SUBTIPO_OPERATIVO_OPCIONES = [
   { value: 'motor', label: 'Motor' },
   { value: 'frenos', label: 'Frenos' },
   { value: 'suspension', label: 'Suspensión' },
   { value: 'llantas', label: 'Llantas' },
   { value: 'accesorios', label: 'Accesorios' },
+  { value: 'Batería', label: 'Batería' },
   { value: 'interior', label: 'Interior' },
   { value: 'combustible', label: 'Combustible' },
   { value: 'gnv', label: 'GNV' },
@@ -45,15 +52,32 @@ const SUBTIPO_OPCIONES = [
   { value: 'planchado_pintura', label: 'Planchado / pintura' },
 ] as const;
 
+const SUBTIPO_REPRESENTACION_OPCIONES = SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
+  value: s,
+  label: getRepresentacionInternaSubtipoLabel(s),
+})) as readonly { value: string; label: string }[];
+
+const SUBTIPO_OPCIONES = [...SUBTIPO_OPERATIVO_OPCIONES, ...SUBTIPO_REPRESENTACION_OPCIONES] as const;
+
 const TIPO_DEFAULT = TIPO_OPCIONES[0].value;
-const SUBTIPO_DEFAULT = SUBTIPO_OPCIONES[0].value;
+const SUBTIPO_DEFAULT = 'motor';
 
 function normalizeTipo(raw: string | null | undefined): string {
-  return raw != null && TIPO_OPCIONES.some((o) => o.value === raw) ? raw : TIPO_DEFAULT;
+  const r = (raw ?? '').trim();
+  if (r === 'personal_socios_familiares' || r === 'personal_socios' || r === 'personales') return 'representacion_interna';
+  return r && TIPO_OPCIONES.some((o) => o.value === r) ? r : TIPO_DEFAULT;
 }
 
-function normalizeSubtipo(raw: string | null | undefined): string {
-  return raw != null && SUBTIPO_OPCIONES.some((o) => o.value === raw) ? raw : SUBTIPO_DEFAULT;
+function normalizeSubtipo(raw: string | null | undefined, tipoFinanza: string): string {
+  const r0 = (raw ?? '').trim();
+  const r = normKey(r0) === 'bateria' ? 'Batería' : r0;
+  if (tipoFinanza === 'representacion_interna') {
+    const c = normalizeRepresentacionInternaSubtipo(r);
+    if (c) return c;
+    return SUBTIPOS_REPRESENTACION_INTERNA[0] ?? SUBTIPO_DEFAULT;
+  }
+  if (r && SUBTIPO_OPCIONES.some((o) => o.value === r)) return r;
+  return SUBTIPO_DEFAULT;
 }
 
 function formatRevisionAt(iso: string | null | undefined): string {
@@ -88,9 +112,10 @@ const RevisionClasificacion: React.FC = () => {
     setDrafts(() => {
       const next: Record<number, Draft> = {};
       for (const g of ordenados) {
+        const t = normalizeTipo(g.tipo_gasto);
         next[g.id] = {
-          tipo: normalizeTipo(g.tipo_gasto),
-          subtipo: normalizeSubtipo(g.subtipo_gasto),
+          tipo: t,
+          subtipo: normalizeSubtipo(g.subtipo_gasto, t),
         };
       }
       return next;
@@ -227,7 +252,7 @@ const RevisionClasificacion: React.FC = () => {
                   const rowApproving = pending?.id === g.id && pending.kind === 'approve';
                   const rowSavingTipo = pending?.id === g.id && pending.kind === 'tipo';
                   const serverTipo = normalizeTipo(g.tipo_gasto);
-                  const serverSub = normalizeSubtipo(g.subtipo_gasto);
+                  const serverSub = normalizeSubtipo(g.subtipo_gasto, serverTipo);
                   const dirty =
                     !!draft &&
                     (draft.tipo !== serverTipo || draft.subtipo !== serverSub);

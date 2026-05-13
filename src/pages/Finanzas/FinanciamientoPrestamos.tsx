@@ -6,19 +6,19 @@ import PrestamosPanel from './PrestamosPanel';
 const FinanciamientoPrestamos: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="space-y-4 sm:space-y-5 animate-fade-in max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
+    <div className="space-y-2 sm:space-y-3 animate-fade-in max-w-5xl mx-auto">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => navigate('/finanzas/financiamiento')}
-          className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
           aria-label="Volver a Financiamiento"
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={18} />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">🏦 Préstamos</h1>
-          <p className="text-sm text-slate-500">Detalle de financiamiento vía préstamos</p>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">🏦 Préstamos</h1>
+          <p className="text-xs text-slate-500 leading-snug mt-0.5">Financiamiento vía préstamos</p>
         </div>
       </div>
 

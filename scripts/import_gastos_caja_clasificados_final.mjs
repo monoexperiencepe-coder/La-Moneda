@@ -41,6 +41,7 @@ const ALLOWED_CATEGORIAS = new Set([
   'financiero_prestamo',
   'planilla_laboral',
   'inversion_compra',
+  'representacion_interna',
   'personal_socios_familiares',
   'gastos_globales',
 ])

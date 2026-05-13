@@ -1,7 +1,8 @@
-import type { ControlFecha, Ingreso, Vehicle } from '../data/types';
+import type { ControlFecha, Ingreso, Vehicle, KilometrajeRegistro } from '../data/types';
 import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import { formatCurrency, formatDate, todayStr } from './formatting';
 import { ingresoMontoPEN } from './moneda';
+import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
 
 /** Ventana para alertar vencimientos (control_fechas), alineado a Control Global. */
 export const DIAS_ALERTA_VENCIMIENTO = 30;
@@ -12,8 +13,9 @@ export const DIAS_SIN_INGRESOS_ALERTA = 14;
 const MAX_ALERTAS_INGRESO_PENDIENTE = 80;
 const MAX_ALERTAS_VENCIMIENTO = 150;
 const MAX_ALERTAS_SIN_INGRESOS = 60;
+const MAX_ALERTAS_KM_MANT = 40;
 
-export type OperativeAlertKind = 'INGRESO_PENDIENTE' | 'VENCIMIENTO' | 'SIN_INGRESOS';
+export type OperativeAlertKind = 'INGRESO_PENDIENTE' | 'VENCIMIENTO' | 'SIN_INGRESOS' | 'KM_MANTENIMIENTO';
 
 export interface OperativeAlertItem {
   kind: OperativeAlertKind;
@@ -48,6 +50,7 @@ export function buildOperativeAlerts(
   ingresos: Ingreso[],
   controlFechas: ControlFecha[],
   vehicles: Vehicle[],
+  kilometrajes: KilometrajeRegistro[] = [],
 ): OperativeAlertItem[] {
   const out: OperativeAlertItem[] = [];
   const activeVehicles = vehicles.filter((v) => v.activo);
@@ -134,6 +137,22 @@ export function buildOperativeAlerts(
     });
   }
 
+  /* 4) Kilometraje: muchos km desde el último mantenimiento registrado */
+  const activeIds = new Set(activeVehicles.map((v) => v.id));
+  const kmRows = buildKmControlRows(kilometrajes).filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
+  kmRows.sort((a, b) => (b.variacion ?? 0) - (a.variacion ?? 0));
+  for (const r of kmRows.slice(0, MAX_ALERTAS_KM_MANT)) {
+    const v = byId.get(r.vehicleId);
+    out.push({
+      kind: 'KM_MANTENIMIENTO',
+      id: `km-mant-${r.vehicleId}`,
+      severity: 'alta',
+      title: `${vehicleLabel(v)}`,
+      detail: `Variación +${(r.variacion ?? 0).toLocaleString('es-PE')} km desde último mantenimiento (≥${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km)`,
+      href: '/operaciones/mantenimiento',
+    });
+  }
+
   return out;
 }
 
@@ -142,6 +161,7 @@ export function countAlertsByKind(items: OperativeAlertItem[]): Record<Operative
     INGRESO_PENDIENTE: 0,
     VENCIMIENTO: 0,
     SIN_INGRESOS: 0,
+    KM_MANTENIMIENTO: 0,
   };
   for (const i of items) init[i.kind]++;
   return init;

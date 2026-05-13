@@ -13,9 +13,18 @@ interface VehicleCardProps {
   documentaciones: Documentacion[];
   /** Costo histórico de adquisición (USD); null si no hay fila en inversiones_vehiculo. */
   inversionTotalUsd?: number | null;
+  /** Orden en el inventario (1-based), para enumerar la flota. */
+  listaIndice?: number;
 }
 
-const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, documentaciones, inversionTotalUsd }) => {
+const VehicleCard: React.FC<VehicleCardProps> = ({
+  vehicle,
+  ingresos,
+  gastos,
+  documentaciones,
+  inversionTotalUsd,
+  listaIndice,
+}) => {
   const navigate = useNavigate();
 
   const todayIngresos = ingresos
@@ -62,9 +71,14 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
 
   return (
     <div
-      className={`game-card bg-gradient-to-br ${gradient} border border-gray-100 overflow-hidden
+      className={`relative game-card bg-gradient-to-br ${gradient} border border-gray-100 overflow-hidden
         ${!vehicle.activo ? 'opacity-60' : ''}`}
     >
+      {listaIndice != null ? (
+        <div className="absolute top-2 left-2 z-10 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md bg-gray-900/85 px-1.5 text-[10px] font-bold text-white tabular-nums shadow-sm ring-1 ring-white/20">
+          {listaIndice}
+        </div>
+      ) : null}
       {/* Status badge */}
       {!vehicle.activo && (
         <div className="bg-gray-200 text-gray-600 text-xs font-semibold text-center py-1">
@@ -75,12 +89,14 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, ingresos, gastos, do
       <div className="p-3.5">
         {/* Header */}
         <div className="flex items-start justify-between mb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-lg shadow-soft flex items-center justify-center text-xl">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-10 h-10 bg-white rounded-lg shadow-soft flex items-center justify-center text-xl shrink-0">
               🚙
             </div>
-            <div>
-              <p className="text-[10px] text-gray-400 font-medium">CARRO #{vehicle.id}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] text-gray-500 font-medium tabular-nums">
+                {listaIndice != null ? <>Lista #{listaIndice} · </> : null}ID {vehicle.id}
+              </p>
               <h3 className="text-sm font-bold text-gray-900 leading-tight">{vehicle.marca} {vehicle.modelo}</h3>
               <p className="text-[11px] text-gray-500 font-mono">{vehicle.placa}</p>
             </div>

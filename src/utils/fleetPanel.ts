@@ -1,6 +1,7 @@
 import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import type { Vehicle, Ingreso, ControlFecha, KilometrajeRegistro, Conductor, Pendiente } from '../data/types';
 import { todayStr } from './formatting';
+import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
 
 /** Días hasta/since fecha ISO (negativo = ya pasó). */
 export function diffDaysFromToday(dateStr: string): number {
@@ -157,10 +158,13 @@ export interface TodayReviewSnapshot {
   sinIngresoUmbralDias: number;
   sinIngresoCount: number;
   pendientesAltaActivosCount: number;
+  /** Vehículos activos con variación km ≥ umbral desde último mantenimiento registrado. */
+  kmMantVariacionAlertCount: number;
   muestraVencidos: TodayReviewItem[];
   muestraPorVencer: TodayReviewItem[];
   muestraSinIngreso: TodayReviewItem[];
   muestraPendientesAlta: { id: number; descripcion: string; vehicleId: number | null }[];
+  muestraKmMantVariacion: TodayReviewItem[];
 }
 
 function rowToReviewItem(c: ControlFecha, vehicles: Vehicle[]): TodayReviewItem | null {
@@ -184,6 +188,7 @@ export function computeTodayReview(
   ingresos: Ingreso[],
   pendientes: Pendiente[],
   sinIngresoUmbralDias: number = DIAS_ALERTA_SIN_INGRESO,
+  kilometrajes?: KilometrajeRegistro[],
 ): TodayReviewSnapshot {
   const activeIds = new Set(vehicles.filter((v) => v.activo).map((v) => v.id));
 
@@ -234,12 +239,27 @@ export function computeTodayReview(
   );
   pendAlta.sort((a, b) => b.fecha.localeCompare(a.fecha));
 
+  const kmRows = kilometrajes?.length ? buildKmControlRows(kilometrajes) : [];
+  const kmAlertRows = kmRows.filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
+  const muestraKmMantVariacion: TodayReviewItem[] = kmAlertRows.slice(0, 5).map((r) => {
+    const v = vehicles.find((x) => x.id === r.vehicleId && x.activo);
+    if (!v || r.variacion == null) return null;
+    return {
+      vehicleId: r.vehicleId,
+      placa: v.placa,
+      marca: v.marca,
+      modelo: v.modelo,
+      detail: `+${r.variacion.toLocaleString('es-PE')} km desde último mantenimiento (alerta ≥${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km)`,
+    };
+  }).filter((x): x is TodayReviewItem => x != null);
+
   return {
     vencidosCount: vencidosRows.length,
     porVencerCount: porVencerRows.length,
     sinIngresoUmbralDias,
     sinIngresoCount: sinIngresoItems.length,
     pendientesAltaActivosCount: pendAlta.length,
+    kmMantVariacionAlertCount: kmAlertRows.length,
     muestraVencidos: vencidosRows
       .slice(0, 5)
       .map((c) => rowToReviewItem(c, vehicles))
@@ -254,6 +274,7 @@ export function computeTodayReview(
       descripcion: p.descripcion,
       vehicleId: p.vehicleId,
     })),
+    muestraKmMantVariacion,
   };
 }
 
