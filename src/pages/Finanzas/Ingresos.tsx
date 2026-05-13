@@ -11,6 +11,7 @@ import Select from '../../components/Common/Select';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { MESES } from '../../data/catalogs';
+import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
@@ -20,7 +21,10 @@ const Ingresos: React.FC = () => {
   const cobroPendiente = searchParams.get('cobro') === 'pendiente';
   const { ingresos, vehicles, deleteIngreso, addIngreso } = useRegistrosContext();
 
-  const [rankingDim, setRankingDim] = useState<'vehicle' | 'tipo'>('vehicle');
+  /** Ranking por vehículo: mostrar toda la flota o solo unidades con al menos 1 ingreso en el período. */
+  const [rankingVehicleScope, setRankingVehicleScope] = useState<'all' | 'with_moves'>('all');
+  /** Orden de filas en ranking por vehículo (orden de flota = por id de vehículo). */
+  const [rankingVehicleSort, setRankingVehicleSort] = useState<'fleet' | 'moves' | 'total'>('fleet');
   const [registrarOpen, setRegistrarOpen] = useState(false);
   const [prefillVehicleId, setPrefillVehicleId] = useState<number | null>(null);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
@@ -66,6 +70,7 @@ const Ingresos: React.FC = () => {
   const [chartYear, setChartYear] = useState<string>('');
   const [chartMonth, setChartMonth] = useState<string>('ALL');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
+  const [historyMonth, setHistoryMonth] = useState<string>('ALL');
   const [animatedTotal, setAnimatedTotal] = useState(0);
   const prevTotalRef = useRef(0);
 
@@ -75,15 +80,12 @@ const Ingresos: React.FC = () => {
       return;
     }
     setChartYear((prev) => {
+      if (prev === 'ALL') return 'ALL';
       const n = prev ? Number(prev) : NaN;
       if (prev && Number.isFinite(n) && availableYears.includes(n)) return prev;
       return String(availableYears[0]);
     });
   }, [availableYears]);
-
-  useEffect(() => {
-    setChartMonth('ALL');
-  }, [chartYear]);
 
   useEffect(() => {
     if (availableYears.length === 0) {
@@ -98,25 +100,27 @@ const Ingresos: React.FC = () => {
     });
   }, [availableYears]);
 
-  const chartYearNum = chartYear ? Number(chartYear) : NaN;
+  const chartYearNum = chartYear && chartYear !== 'ALL' ? Number(chartYear) : NaN;
 
   const chartMonthLabel = useMemo(() => {
     if (chartMonth === 'ALL') return '';
     return MESES.find((m) => String(m.value).padStart(2, '0') === chartMonth)?.label ?? '';
   }, [chartMonth]);
 
-  const ingresosDelAnioGrafico = useMemo(() => {
+  const ingresosChartBase = useMemo(() => {
+    if (chartYear === 'ALL') return ingresos;
     if (!Number.isFinite(chartYearNum)) return [];
     const prefix = `${chartYearNum}-`;
     return ingresos.filter((i) => i.fecha.startsWith(prefix));
-  }, [ingresos, chartYearNum]);
+  }, [ingresos, chartYear, chartYearNum]);
 
   const ingresosVistaGrafico = useMemo(() => {
-    if (chartMonth === 'ALL') return ingresosDelAnioGrafico;
-    return ingresosDelAnioGrafico.filter((i) => i.fecha.slice(5, 7) === chartMonth);
-  }, [ingresosDelAnioGrafico, chartMonth]);
+    if (chartMonth === 'ALL') return ingresosChartBase;
+    const mm = chartMonth.padStart(2, '0');
+    return ingresosChartBase.filter((i) => i.fecha.slice(5, 7) === mm);
+  }, [ingresosChartBase, chartMonth]);
 
-  const totalAnioGrafico = ingresosDelAnioGrafico.reduce((s, i) => s + ingresoMontoPEN(i), 0);
+  const totalAnioGrafico = ingresosChartBase.reduce((s, i) => s + ingresoMontoPEN(i), 0);
   const totalVistaGrafico = ingresosVistaGrafico.reduce((s, i) => s + ingresoMontoPEN(i), 0);
 
   useEffect(() => {
@@ -141,10 +145,34 @@ const Ingresos: React.FC = () => {
   }, [totalVistaGrafico]);
 
   const chartData = useMemo(() => {
+    if (chartYear === 'ALL') {
+      const yearsSet = new Set<number>();
+      for (const i of ingresosChartBase) {
+        const y = Number(i.fecha.slice(0, 4));
+        if (Number.isFinite(y) && y > 0) yearsSet.add(y);
+      }
+      const yearsSorted = [...yearsSet].sort((a, b) => a - b);
+      if (chartMonth === 'ALL') {
+        return yearsSorted.map((y) => {
+          const prefix = `${y}-`;
+          const total = ingresosChartBase
+            .filter((i) => i.fecha.startsWith(prefix))
+            .reduce((s, i) => s + ingresoMontoPEN(i), 0);
+          return { mes: String(y), total };
+        });
+      }
+      const mm = chartMonth.padStart(2, '0');
+      return yearsSorted.map((y) => {
+        const total = ingresosChartBase
+          .filter((i) => i.fecha.startsWith(`${y}-`) && i.fecha.slice(5, 7) === mm)
+          .reduce((s, i) => s + ingresoMontoPEN(i), 0);
+        return { mes: String(y), total };
+      });
+    }
     if (chartMonth === 'ALL') {
       return MESES.map((mes) => {
         const month = String(mes.value).padStart(2, '0');
-        const total = ingresosDelAnioGrafico
+        const total = ingresosChartBase
           .filter((i) => i.fecha.slice(5, 7) === month)
           .reduce((s, i) => s + ingresoMontoPEN(i), 0);
         return { mes: mes.label.slice(0, 3), total };
@@ -159,12 +187,14 @@ const Ingresos: React.FC = () => {
       const d = idx + 1;
       const dd = String(d).padStart(2, '0');
       const iso = `${chartYearNum}-${mm}-${dd}`;
-      const total = ingresosDelAnioGrafico
+      const total = ingresosChartBase
         .filter((i) => i.fecha === iso)
         .reduce((s, i) => s + ingresoMontoPEN(i), 0);
       return { mes: String(d), total };
     });
-  }, [chartMonth, chartYearNum, ingresosDelAnioGrafico]);
+  }, [chartYear, chartMonth, chartYearNum, ingresosChartBase]);
+
+  const chartBucket = chartYear === 'ALL' ? 'year' : chartMonth === 'ALL' ? 'month' : 'day';
 
   const chartMonthAgg = useMemo(() => {
     if (chartMonth === 'ALL') return null;
@@ -175,8 +205,31 @@ const Ingresos: React.FC = () => {
     return { count, total, avgPerMov };
   }, [chartMonth, ingresosVistaGrafico]);
 
+  const allYearsRollup = useMemo(() => {
+    if (chartYear !== 'ALL') return null;
+    const byYear = new Map<number, number>();
+    const data = chartMonth === 'ALL' ? ingresosChartBase : ingresosVistaGrafico;
+    for (const i of data) {
+      const y = Number(i.fecha.slice(0, 4));
+      if (!Number.isFinite(y) || y <= 0) continue;
+      byYear.set(y, (byYear.get(y) ?? 0) + ingresoMontoPEN(i));
+    }
+    const yearCount = byYear.size;
+    const totalAgg = [...byYear.values()].reduce((s, v) => s + v, 0);
+    const avgPerYear = yearCount ? totalAgg / yearCount : 0;
+    let peakYear = 0;
+    let peakTotal = 0;
+    for (const [y, t] of byYear) {
+      if (t > peakTotal) {
+        peakTotal = t;
+        peakYear = y;
+      }
+    }
+    return { yearCount, avgPerYear, peakYear, peakTotal };
+  }, [chartYear, chartMonth, ingresosChartBase, ingresosVistaGrafico]);
+
   const chartYearInsights = useMemo(() => {
-    if (!Number.isFinite(chartYearNum)) {
+    if (chartYear === 'ALL' || !Number.isFinite(chartYearNum)) {
       return { avgMonthly: 0, peakLabel: '—', peakTotal: 0 };
     }
     const avgMonthly = totalAnioGrafico / 12;
@@ -184,7 +237,7 @@ const Ingresos: React.FC = () => {
     let peakLabel = '—';
     for (const mes of MESES) {
       const mm = String(mes.value).padStart(2, '0');
-      const monthTotal = ingresosDelAnioGrafico
+      const monthTotal = ingresosChartBase
         .filter((i) => i.fecha.slice(5, 7) === mm)
         .reduce((s, i) => s + ingresoMontoPEN(i), 0);
       if (monthTotal > peakTotal) {
@@ -194,7 +247,7 @@ const Ingresos: React.FC = () => {
     }
     if (peakTotal <= 0) peakLabel = '—';
     return { avgMonthly, peakLabel, peakTotal };
-  }, [chartYearNum, totalAnioGrafico, ingresosDelAnioGrafico]);
+  }, [chartYear, chartYearNum, totalAnioGrafico, ingresosChartBase]);
 
   const todayTotal = useMemo(
     () => ingresos.filter((i) => i.fecha === todayStr()).reduce((s, i) => s + ingresoMontoPEN(i), 0),
@@ -217,6 +270,11 @@ const Ingresos: React.FC = () => {
     [availableYears],
   );
 
+  const chartYearOptions = useMemo(
+    () => [{ value: 'ALL', label: 'Todos los años' }, ...yearOptions],
+    [yearOptions],
+  );
+
   const monthFilterOptions = useMemo(
     () => [
       { value: 'ALL', label: 'Todo el año' },
@@ -228,19 +286,79 @@ const Ingresos: React.FC = () => {
     [],
   );
 
-  const vistaRankingLabel =
-    chartMonth === 'ALL' ? chartYear || '—' : `${chartMonthLabel} ${chartYear || ''}`.trim();
+  const vistaRankingLabel = useMemo(() => {
+    const yLabel = chartYear === 'ALL' ? 'todos los años' : chartYear || '—';
+    if (chartMonth === 'ALL') return yLabel;
+    return `${chartMonthLabel} · ${yLabel}`;
+  }, [chartYear, chartMonth, chartMonthLabel]);
+
+  const historyMonthOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'Todos los meses' },
+      ...MESES.map((m) => ({
+        value: String(m.value).padStart(2, '0'),
+        label: m.label,
+      })),
+    ],
+    [],
+  );
 
   const historyYearOptions = useMemo(
     () => [{ value: 'ALL', label: 'Todos los años' }, ...yearOptions],
     [yearOptions],
   );
 
-  const ingresosHistorialFiltrados = useMemo(() => {
-    if (historyYear === 'ALL') return ingresos;
-    const prefix = `${historyYear}-`;
-    return ingresos.filter((i) => i.fecha.startsWith(prefix));
-  }, [ingresos, historyYear]);
+  const ingresosHistorialFiltrados = useMemo(
+    () => filterRowsByYearMonth(ingresos, historyYear, historyMonth),
+    [ingresos, historyYear, historyMonth],
+  );
+
+  const historialEmptyHint = useMemo(() => {
+    if (ingresos.length === 0) return 'No hay ingresos registrados.';
+    const parts: string[] = [];
+    if (historyYear !== 'ALL') parts.push(`año ${historyYear}`);
+    if (historyMonth !== 'ALL') {
+      const lab = MESES.find((m) => String(m.value).padStart(2, '0') === historyMonth)?.label ?? 'mes';
+      parts.push(lab);
+    }
+    if (parts.length === 0) return '';
+    return `No hay ingresos para ${parts.join(' · ')}. Cambie año o mes, o use «Todos».`;
+  }, [ingresos.length, historyYear, historyMonth]);
+
+  const totalCardTitle = useMemo(() => {
+    if (chartYear === 'ALL') {
+      return chartMonth === 'ALL' ? 'Total histórico' : `Total ${chartMonthLabel} (todos los años)`;
+    }
+    if (chartMonth === 'ALL') return `Total ${chartYear}`;
+    return `Total ${chartMonthLabel} ${chartYear}`;
+  }, [chartYear, chartMonth, chartMonthLabel]);
+
+  const chartTrendTitle = useMemo(() => {
+    if (chartYear === 'ALL') return chartMonth === 'ALL' ? 'Ingresos por año' : `${chartMonthLabel} por año`;
+    return chartMonth === 'ALL' ? 'Tendencia mensual' : 'Tendencia por día';
+  }, [chartYear, chartMonth, chartMonthLabel]);
+
+  const chartTrendSubtitle = useMemo(() => {
+    if (chartYear === 'ALL') {
+      return chartMonth === 'ALL' ? 'Histórico completo' : `Todos los años · ${chartMonthLabel}`;
+    }
+    return chartMonth === 'ALL' ? String(chartYear) : `${chartMonthLabel} ${chartYear}`;
+  }, [chartYear, chartMonth, chartMonthLabel]);
+
+  /** Texto tipo Gastos («Subtipos mostrados: …») para el período del gráfico y ranking. */
+  const graficoRankingResumen = useMemo(() => {
+    let periodLabel: string;
+    if (chartYear === 'ALL') {
+      periodLabel = chartMonth === 'ALL' ? 'Todos los años' : `${chartMonthLabel} (todos los años)`;
+    } else if (chartMonth === 'ALL') {
+      periodLabel = `Año ${chartYear}`;
+    } else {
+      periodLabel = `${chartMonthLabel} ${chartYear}`;
+    }
+    const count = ingresosVistaGrafico.length;
+    const total = ingresosVistaGrafico.reduce((s, i) => s + ingresoMontoPEN(i), 0);
+    return { periodLabel, count, total };
+  }, [chartYear, chartMonth, chartMonthLabel, ingresosVistaGrafico]);
 
   const getVehicleLabel = useCallback(
     (vehicleId: number) => {
@@ -278,19 +396,35 @@ const Ingresos: React.FC = () => {
     return rows;
   }, [ingresosVistaGrafico, vehicles]);
 
-  const tipoRankingRows = useMemo(() => {
-    const map = new Map<string, { total: number; count: number }>();
-    for (const i of ingresosVistaGrafico) {
-      const key = i.tipo?.trim() ? i.tipo.trim() : '(Sin tipo)';
-      const cur = map.get(key) ?? { total: 0, count: 0 };
-      cur.total += ingresoMontoPEN(i);
-      cur.count += 1;
-      map.set(key, cur);
+  const displayedVehicleRows = useMemo(() => {
+    let rows =
+      rankingVehicleScope === 'with_moves'
+        ? vehicleRankingRows.filter((r) => r.count > 0)
+        : vehicleRankingRows;
+    if (rankingVehicleSort === 'fleet') {
+      return rows;
     }
-    return [...map.entries()]
-      .map(([nombre, agg]) => ({ nombre, ...agg }))
-      .sort((a, b) => b.total - a.total);
-  }, [ingresosVistaGrafico]);
+    rows = [...rows];
+    if (rankingVehicleSort === 'moves') {
+      rows.sort(
+        (a, b) => b.count - a.count || b.total - a.total || a.vehicleId - b.vehicleId,
+      );
+    } else {
+      rows.sort(
+        (a, b) => b.total - a.total || b.count - a.count || a.vehicleId - b.vehicleId,
+      );
+    }
+    return rows;
+  }, [vehicleRankingRows, rankingVehicleScope, rankingVehicleSort]);
+
+  const displayedVehicleGrand = useMemo(
+    () =>
+      displayedVehicleRows.reduce(
+        (acc, r) => ({ count: acc.count + r.count, total: acc.total + r.total }),
+        { count: 0, total: 0 },
+      ),
+    [displayedVehicleRows],
+  );
 
   const setCobroPendienteFilter = () => {
     const next = new URLSearchParams(searchParams);
@@ -303,20 +437,6 @@ const Ingresos: React.FC = () => {
     next.delete('cobro');
     setSearchParams(next, { replace: true });
   };
-
-  const rankingRows = rankingDim === 'vehicle' ? vehicleRankingRows : tipoRankingRows;
-  const rankingGrand = useMemo(() => {
-    if (rankingDim === 'vehicle') {
-      return vehicleRankingRows.reduce(
-        (acc, r) => ({ count: acc.count + r.count, total: acc.total + r.total }),
-        { count: 0, total: 0 },
-      );
-    }
-    return tipoRankingRows.reduce(
-      (acc, r) => ({ count: acc.count + r.count, total: acc.total + r.total }),
-      { count: 0, total: 0 },
-    );
-  }, [rankingDim, vehicleRankingRows, tipoRankingRows]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -383,9 +503,7 @@ const Ingresos: React.FC = () => {
 
             <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {chartMonth === 'ALL' ? `Total ${chartYear || 'año'}` : `Total ${chartMonthLabel || 'mes'}`}
-                </p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{totalCardTitle}</p>
                 <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-emerald-900 sm:text-2xl">
                   {formatCurrency(animatedTotal)}
                 </p>
@@ -393,11 +511,21 @@ const Ingresos: React.FC = () => {
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
                 {chartMonth === 'ALL' ? (
                   <>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Promedio mensual</p>
-                    <p className="mt-1.5 text-lg font-bold tabular-nums text-slate-900 sm:text-xl">
-                      {formatCurrency(chartYearInsights.avgMonthly)}
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {chartYear === 'ALL' ? 'Promedio anual' : 'Promedio mensual'}
                     </p>
-                    <p className="mt-1 text-[11px] text-slate-400">Sobre 12 meses</p>
+                    <p className="mt-1.5 text-lg font-bold tabular-nums text-slate-900 sm:text-xl">
+                      {formatCurrency(
+                        chartYear === 'ALL' ? (allYearsRollup?.avgPerYear ?? 0) : chartYearInsights.avgMonthly,
+                      )}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {chartYear === 'ALL'
+                        ? allYearsRollup?.yearCount
+                          ? `En ${allYearsRollup.yearCount} año${allYearsRollup.yearCount === 1 ? '' : 's'} con datos`
+                          : 'Sin años con datos'
+                        : 'Sobre 12 meses'}
+                    </p>
                   </>
                 ) : (
                   <>
@@ -412,12 +540,20 @@ const Ingresos: React.FC = () => {
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
                 {chartMonth === 'ALL' ? (
                   <>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Mes más alto</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {chartYear === 'ALL' ? 'Año más alto' : 'Mes más alto'}
+                    </p>
                     <p className="mt-1.5 text-sm font-bold capitalize leading-snug text-slate-900 sm:text-base">
-                      {chartYearInsights.peakLabel}
+                      {chartYear === 'ALL'
+                        ? allYearsRollup?.peakYear
+                          ? String(allYearsRollup.peakYear)
+                          : '—'
+                        : chartYearInsights.peakLabel}
                     </p>
                     <p className="mt-1 text-base font-semibold tabular-nums text-slate-700 sm:text-lg">
-                      {formatCurrency(chartYearInsights.peakTotal)}
+                      {formatCurrency(
+                        chartYear === 'ALL' ? (allYearsRollup?.peakTotal ?? 0) : chartYearInsights.peakTotal,
+                      )}
                     </p>
                   </>
                 ) : (
@@ -465,15 +601,35 @@ const Ingresos: React.FC = () => {
               </div>
             </div>
 
-            {yearOptions.length > 0 ? (
-              <div className="mt-4 grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2 [&_.label]:mb-1 [&_.label]:text-xs [&_.label]:font-semibold [&_.label]:text-slate-600">
-                <Select label="Año del gráfico y ranking" options={yearOptions} value={chartYear} onChange={setChartYear} />
-                <Select
-                  label="Mes (gráfico y ranking)"
-                  options={monthFilterOptions}
-                  value={chartMonth}
-                  onChange={setChartMonth}
-                />
+            {ingresos.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Período del gráfico y del ranking
+                </p>
+                <div className="grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 [&_.label]:mb-1 [&_.label]:text-xs [&_.label]:font-semibold [&_.label]:text-slate-600">
+                  <Select
+                    label="Año"
+                    options={chartYearOptions}
+                    value={chartYear}
+                    onChange={setChartYear}
+                  />
+                  <Select
+                    label="Mes"
+                    options={monthFilterOptions}
+                    value={chartMonth}
+                    onChange={setChartMonth}
+                  />
+                </div>
+                <p className="mb-2.5 mt-3 text-[11px] leading-snug text-slate-600">
+                  <span className="font-semibold text-slate-800">Gráfico y ranking muestran:</span>{' '}
+                  <span>{graficoRankingResumen.periodLabel}</span>
+                  {' — '}
+                  <span className="tabular-nums">{graficoRankingResumen.count} movimientos</span>
+                  {' · '}
+                  <span className="tabular-nums font-semibold text-emerald-800">
+                    {formatCurrency(graficoRankingResumen.total)}
+                  </span>
+                </p>
               </div>
             ) : (
               <p className="mt-4 text-xs text-slate-400">Sin fechas para graficar.</p>
@@ -483,57 +639,126 @@ const Ingresos: React.FC = () => {
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
             <div className="min-w-0 lg:col-span-5">
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  {chartMonth === 'ALL' ? 'Tendencia mensual' : 'Tendencia por día'}
-                </h2>
-                <span className="text-xs font-medium tabular-nums text-slate-400">
-                  {chartMonth === 'ALL' ? chartYear : `${chartMonthLabel} ${chartYear}`}
-                </span>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">{chartTrendTitle}</h2>
+                <span className="text-xs font-medium tabular-nums text-slate-400">{chartTrendSubtitle}</span>
               </div>
-              <div className="h-[11rem] rounded-xl border border-slate-100 bg-gradient-to-b from-emerald-50/40 to-white px-1 pt-1 shadow-inner shadow-slate-900/[0.04] sm:h-44 lg:h-[14rem]">
-                <Suspense fallback={<div className="h-full w-full animate-pulse rounded-lg bg-emerald-50/80" />}>
-                  <IngresosMesChart
-                    chartData={chartData}
-                    bucket={chartMonth === 'ALL' ? 'month' : 'day'}
-                  />
-                </Suspense>
+              <div className="relative h-[11rem] rounded-xl border border-slate-100 bg-gradient-to-b from-emerald-50/40 to-white px-1 pt-1 shadow-inner shadow-slate-900/[0.04] sm:h-44 lg:h-[14rem]">
+                {chartData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center px-4 text-center text-xs text-slate-500">
+                    Sin ingresos para el período seleccionado (año / mes).
+                  </div>
+                ) : (
+                  <Suspense fallback={<div className="h-full w-full animate-pulse rounded-lg bg-emerald-50/80" />}>
+                    <IngresosMesChart chartData={chartData} bucket={chartBucket} />
+                  </Suspense>
+                )}
               </div>
             </div>
 
             <div className="flex min-w-0 flex-col border-t border-slate-100 pt-5 lg:col-span-7 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-3">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Ranking · {vistaRankingLabel}
                 </h2>
-                <div className="inline-flex rounded-xl border border-slate-200/90 bg-slate-50/80 p-0.5 shadow-inner">
-                  <button
-                    type="button"
-                    onClick={() => setRankingDim('vehicle')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                      rankingDim === 'vehicle'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Por vehículo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRankingDim('tipo')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                      rankingDim === 'tipo'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Por tipo
-                  </button>
+              </div>
+
+              <div className="mb-3 rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 shadow-sm">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Opciones del ranking
+                </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+                    <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                      <span className="shrink-0 text-xs font-semibold text-slate-600">Unidades en la tabla</span>
+                      <div
+                        className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm"
+                        role="group"
+                        aria-label="Qué unidades listar"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={rankingVehicleScope === 'all'}
+                          onClick={() => setRankingVehicleScope('all')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            rankingVehicleScope === 'all'
+                              ? 'bg-slate-800 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Todas
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={rankingVehicleScope === 'with_moves'}
+                          onClick={() => setRankingVehicleScope('with_moves')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            rankingVehicleScope === 'with_moves'
+                              ? 'bg-slate-800 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Solo con ingresos
+                        </button>
+                      </div>
+                    </div>
+                    <div className="hidden h-6 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
+                    <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                      <span className="shrink-0 text-xs font-semibold text-slate-600">Orden de la lista</span>
+                      <div
+                        className="inline-flex w-fit flex-wrap rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm"
+                        role="group"
+                        aria-label="Cómo ordenar el ranking"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={rankingVehicleSort === 'fleet'}
+                          onClick={() => setRankingVehicleSort('fleet')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            rankingVehicleSort === 'fleet'
+                              ? 'bg-emerald-700 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-emerald-50'
+                          }`}
+                        >
+                          Orden de flota
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={rankingVehicleSort === 'moves'}
+                          onClick={() => setRankingVehicleSort('moves')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            rankingVehicleSort === 'moves'
+                              ? 'bg-emerald-700 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-emerald-50'
+                          }`}
+                        >
+                          Más movimientos
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={rankingVehicleSort === 'total'}
+                          onClick={() => setRankingVehicleSort('total')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            rankingVehicleSort === 'total'
+                              ? 'bg-emerald-700 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-emerald-50'
+                          }`}
+                        >
+                          Mayor monto
+                        </button>
+                      </div>
+                  </div>
                 </div>
               </div>
 
-              {rankingRows.length === 0 ? (
+              {displayedVehicleRows.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 py-8 text-center text-sm text-slate-500">
-                  Sin ingresos en {vistaRankingLabel} para este ranking.
+                  {rankingVehicleScope === 'with_moves' ? (
+                    <>
+                      Ninguna unidad con ingresos en {vistaRankingLabel}. Elija «Todas las unidades» arriba para ver
+                      toda la flota (incluye 0 movimientos).
+                    </>
+                  ) : (
+                    <>Sin ingresos en {vistaRankingLabel} para este ranking.</>
+                  )}
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm shadow-slate-900/[0.03]">
@@ -541,65 +766,43 @@ const Ingresos: React.FC = () => {
                     <table className="min-w-full text-left text-[13px]">
                       <thead className="sticky top-0 z-[1] bg-slate-50/95 shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm">
                         <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          {rankingDim === 'vehicle' ? (
-                            <th className="w-12 py-2.5 pl-3 pr-1 font-semibold tabular-nums">ID</th>
-                          ) : null}
-                          <th className={`py-2.5 pr-2 font-semibold ${rankingDim === 'vehicle' ? 'pl-0' : 'pl-3'}`}>
-                            {rankingDim === 'vehicle' ? 'Unidad' : 'Tipo de ingreso'}
-                          </th>
+                          <th className="w-12 py-2.5 pl-3 pr-1 font-semibold tabular-nums">ID</th>
+                          <th className="py-2.5 pl-0 pr-2 font-semibold">Unidad</th>
                           <ColumnCountHintTh
-                            hint="Cantidad de registros de ingreso en el período filtrado (año y, si aplica, mes del gráfico)."
+                            className="min-w-[3.25rem]"
+                            hint="Cantidad de registros de ingreso en el período elegido arriba (año y mes). Las opciones de lista y orden están en el recuadro sobre la tabla."
                           />
                           <th className="py-2.5 pr-3 text-right font-semibold tabular-nums">Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rankingDim === 'vehicle'
-                          ? vehicleRankingRows.map((row) => (
-                              <tr
-                                key={row.vehicleId}
-                                className="border-b border-slate-50 transition-colors hover:bg-emerald-50/50"
-                              >
-                                <td className="py-2.5 pl-3 pr-1 font-mono text-xs font-bold tabular-nums text-slate-500">
-                                  #{row.vehicleId}
-                                </td>
-                                <td className="py-2.5 pl-0 pr-2 font-medium leading-snug text-slate-900">
-                                  {getVehicleLabel(row.vehicleId)}
-                                </td>
-                                <td className="py-2.5 pr-2 text-right tabular-nums text-slate-600">{row.count}</td>
-                                <td className="py-2.5 pr-3 text-right text-sm font-semibold tabular-nums text-slate-900">
-                                  {formatCurrency(row.total)}
-                                </td>
-                              </tr>
-                            ))
-                          : tipoRankingRows.map((row) => (
-                              <tr
-                                key={row.nombre}
-                                className="border-b border-slate-50 transition-colors hover:bg-emerald-50/50"
-                              >
-                                <td className="py-2.5 pl-3 pr-2 font-medium leading-snug text-slate-900">{row.nombre}</td>
-                                <td className="py-2.5 pr-2 text-right tabular-nums text-slate-600">{row.count}</td>
-                                <td className="py-2.5 pr-3 text-right text-sm font-semibold tabular-nums text-slate-900">
-                                  {formatCurrency(row.total)}
-                                </td>
-                              </tr>
-                            ))}
+                        {displayedVehicleRows.map((row) => (
+                          <tr
+                            key={row.vehicleId}
+                            className="border-b border-slate-50 transition-colors hover:bg-emerald-50/50"
+                          >
+                            <td className="py-2.5 pl-3 pr-1 font-mono text-xs font-bold tabular-nums text-slate-500">
+                              #{row.vehicleId}
+                            </td>
+                            <td className="py-2.5 pl-0 pr-2 font-medium leading-snug text-slate-900">
+                              {getVehicleLabel(row.vehicleId)}
+                            </td>
+                            <td className="py-2.5 pr-2 text-right tabular-nums text-slate-600">{row.count}</td>
+                            <td className="py-2.5 pr-3 text-right text-sm font-semibold tabular-nums text-slate-900">
+                              {formatCurrency(row.total)}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                       <tfoot className="sticky bottom-0 border-t border-slate-200 bg-slate-100/95 backdrop-blur-sm">
                         <tr>
-                          {rankingDim === 'vehicle' ? (
-                            <td className="py-2.5 pl-3 pr-1" aria-hidden />
-                          ) : null}
-                          <td
-                            className={`py-2.5 pr-2 text-sm font-bold text-slate-900 ${rankingDim === 'vehicle' ? 'pl-0' : 'pl-3'}`}
-                          >
-                            Total
-                          </td>
+                          <td className="py-2.5 pl-3 pr-1" aria-hidden />
+                          <td className="py-2.5 pl-0 pr-2 text-sm font-bold text-slate-900">Total</td>
                           <td className="py-2.5 pr-2 text-right text-sm font-bold tabular-nums text-slate-800">
-                            {rankingGrand.count}
+                            {displayedVehicleGrand.count}
                           </td>
                           <td className="py-2.5 pr-3 text-right text-sm font-bold tabular-nums text-emerald-900">
-                            {formatCurrency(rankingGrand.total)}
+                            {formatCurrency(displayedVehicleGrand.total)}
                           </td>
                         </tr>
                       </tfoot>
@@ -618,25 +821,38 @@ const Ingresos: React.FC = () => {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">Historial de ingresos</h2>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
-              El año aquí solo afecta la tabla; el gráfico y el ranking usan «Año del gráfico y ranking» y «Mes (gráfico y ranking)».
+              Los filtros de año y mes solo aplican a la tabla inferior. El gráfico y el ranking usan «Año del gráfico
+              y ranking» y «Mes (gráfico y ranking)».
             </p>
           </div>
-          <div className="w-full sm:w-48 [&_.label]:mb-1 [&_.label]:text-xs [&_.label]:font-semibold [&_.label]:text-slate-600">
+          <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 [&_.label]:mb-0.5 [&_.label]:text-xs [&_.label]:font-semibold [&_.label]:text-slate-600">
             <Select
-              label="Filtrar historial por año"
+              label="Año (tabla)"
               options={historyYearOptions}
               value={historyYear}
               onChange={setHistoryYear}
             />
+            <Select
+              label="Mes (tabla)"
+              options={historyMonthOptions}
+              value={historyMonth}
+              onChange={setHistoryMonth}
+            />
           </div>
         </div>
-        <RegistrosTable
-          mode="ingresos"
-          ingresos={ingresosHistorialFiltrados}
-          vehicles={vehicles}
-          onDeleteIngreso={deleteIngreso}
-          initialEstadoPago={cobroPendiente ? 'PENDIENTE' : ''}
-        />
+        {ingresosHistorialFiltrados.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-12 text-center text-sm text-slate-600">
+            {historialEmptyHint}
+          </div>
+        ) : (
+          <RegistrosTable
+            mode="ingresos"
+            ingresos={ingresosHistorialFiltrados}
+            vehicles={vehicles}
+            onDeleteIngreso={deleteIngreso}
+            initialEstadoPago={cobroPendiente ? 'PENDIENTE' : ''}
+          />
+        )}
       </div>
 
       <Modal

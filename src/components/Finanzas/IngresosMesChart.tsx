@@ -6,8 +6,8 @@ export interface IngresosMesChartProps {
   chartData: Array<{ mes: string; total: number }>;
   barFrom?: string;
   barTo?: string;
-  /** `month`: eje por nombre de mes. `day`: eje por día (1…31) dentro del mes filtrado. */
-  bucket?: 'month' | 'day';
+  /** `month`: eje por nombre de mes. `day`: eje por día (1…31) dentro del mes filtrado. `year`: total por año calendario. */
+  bucket?: 'month' | 'day' | 'year';
 }
 
 const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
@@ -23,7 +23,12 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={chartData}
-        margin={{ top: 6, right: 8, left: -12, bottom: bucket === 'day' ? 18 : 2 }}
+        margin={{
+          top: 6,
+          right: 8,
+          left: -12,
+          bottom: bucket === 'day' ? 18 : bucket === 'year' ? 10 : 2,
+        }}
       >
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -34,14 +39,14 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" strokeOpacity={0.85} vertical={false} />
         <XAxis
           dataKey="mes"
-          tick={{ fontSize: bucket === 'day' ? 10 : 12, fill: '#64748B', fontWeight: 500 }}
+          tick={{ fontSize: bucket === 'day' ? 10 : bucket === 'year' ? 10 : 12, fill: '#64748B', fontWeight: 500 }}
           axisLine={false}
           tickLine={false}
           dy={4}
-          interval={bucket === 'day' ? 'preserveStartEnd' : 0}
-          angle={bucket === 'day' ? -32 : 0}
-          textAnchor={bucket === 'day' ? 'end' : 'middle'}
-          height={bucket === 'day' ? 36 : undefined}
+          interval={bucket === 'day' ? 'preserveStartEnd' : bucket === 'year' ? 'preserveStartEnd' : 0}
+          angle={bucket === 'day' ? -32 : bucket === 'year' ? -28 : 0}
+          textAnchor={bucket === 'day' ? 'end' : bucket === 'year' ? 'end' : 'middle'}
+          height={bucket === 'day' ? 36 : bucket === 'year' ? 32 : undefined}
         />
         <YAxis
           tick={{ fontSize: 11, fill: '#94A3B8' }}
@@ -53,9 +58,10 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
           cursor={{ fill: 'rgba(236, 253, 245, 0.9)', radius: 8 }}
           formatter={(v) => [
             formatCurrency(Number(v)),
-            bucket === 'day' ? 'Total del día' : 'Ingresos del mes',
+            bucket === 'day' ? 'Total del día' : bucket === 'year' ? 'Total del año' : 'Ingresos del mes',
           ]}
-          labelFormatter={(label) => (bucket === 'day' ? `Día ${label}` : `Mes: ${label}`)}
+          labelFormatter={(label) =>
+            bucket === 'day' ? `Día ${label}` : bucket === 'year' ? `Año ${label}` : `Mes: ${label}`}
           contentStyle={{
             borderRadius: '14px',
             border: '1px solid rgba(209, 250, 229, 0.95)',
@@ -68,7 +74,7 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
           dataKey="total"
           fill={`url(#${gradId})`}
           radius={[8, 8, 0, 0]}
-          maxBarSize={bucket === 'day' ? 14 : 36}
+          maxBarSize={bucket === 'day' ? 14 : bucket === 'year' ? 28 : 36}
         />
       </BarChart>
     </ResponsiveContainer>

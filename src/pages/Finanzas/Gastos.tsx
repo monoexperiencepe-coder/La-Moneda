@@ -11,6 +11,7 @@ import Button from '../../components/Common/Button';
 import type { Gasto } from '../../data/types';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
+import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { useAuth } from '../../context/AuthContext';
@@ -177,12 +178,20 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const [chartYear, setChartYear] = useState<string>('');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
+  const [historyMonth, setHistoryMonth] = useState<string>('ALL');
   const [animatedTotal, setAnimatedTotal] = useState(0);
   const prevTotalRef = useRef(0);
   const [subtipoPeriod, setSubtipoPeriod] = useState<'ALL' | 'YEAR' | 'MONTH'>('ALL');
   const [subtipoAggMonth, setSubtipoAggMonth] = useState(() =>
     String(new Date().getMonth() + 1).padStart(2, '0'),
   );
+  const [filterSubtipoGasto, setFilterSubtipoGasto] = useState('');
+  const [moveTarget, setMoveTarget] = useState<Gasto | null>(null);
+  const [moveTipo, setMoveTipo] = useState('');
+  const [moveSubtipo, setMoveSubtipo] = useState('');
+  const [moveVehicleId, setMoveVehicleId] = useState<string>('');
+  const [moveMotivo, setMoveMotivo] = useState('');
+  const [moveSaving, setMoveSaving] = useState(false);
 
   useEffect(() => {
     if (availableYears.length === 0) {
@@ -382,19 +391,33 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [yearOptions],
   );
 
-  const gastosHistorialFiltrados = useMemo(() => {
-    if (historyYear === 'ALL') return gastosTab;
-    const prefix = `${historyYear}-`;
-    return gastosTab.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastosTab, historyYear]);
+  const historyMonthOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'Todos los meses' },
+      ...MESES.map((m) => ({
+        value: String(m.value).padStart(2, '0'),
+        label: m.label,
+      })),
+    ],
+    [],
+  );
 
-  const [filterSubtipoGasto, setFilterSubtipoGasto] = useState('');
-  const [moveTarget, setMoveTarget] = useState<Gasto | null>(null);
-  const [moveTipo, setMoveTipo] = useState('');
-  const [moveSubtipo, setMoveSubtipo] = useState('');
-  const [moveVehicleId, setMoveVehicleId] = useState<string>('');
-  const [moveMotivo, setMoveMotivo] = useState('');
-  const [moveSaving, setMoveSaving] = useState(false);
+  const gastosHistorialFiltrados = useMemo(
+    () => filterRowsByYearMonth(gastosTab, historyYear, historyMonth),
+    [gastosTab, historyYear, historyMonth],
+  );
+
+  const gastosHistorialEmptyHint = useMemo(() => {
+    if (gastosTab.length === 0) return 'No hay gastos en esta categoría.';
+    const parts: string[] = [];
+    if (historyYear !== 'ALL') parts.push(`año ${historyYear}`);
+    if (historyMonth !== 'ALL') {
+      const lab = MESES.find((m) => String(m.value).padStart(2, '0') === historyMonth)?.label ?? 'mes';
+      parts.push(lab);
+    }
+    if (parts.length === 0) return '';
+    return `No hay gastos para ${parts.join(' · ')}. Cambie año o mes, o use «Todos».`;
+  }, [gastosTab.length, historyYear, historyMonth]);
 
   useEffect(() => {
     if (filterSubtipoGasto === SUBTIPO_FILTRO_PRESTAMO_FUSION && tab?.tipo_gasto !== 'financiero_prestamo') {
@@ -906,16 +929,24 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
             <h2 className="text-base font-semibold tracking-tight text-slate-900">Historial · {tab.label}</h2>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end [&_.label]:mb-0.5 [&_.label]:text-[10px] [&_.label]:font-semibold [&_.label]:text-slate-600">
-            <div className="w-full sm:w-44">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-end [&_.label]:mb-0.5 [&_.label]:text-[10px] [&_.label]:font-semibold [&_.label]:text-slate-600">
+            <div className="w-full min-w-0 sm:w-[7.5rem]">
               <Select
-                label="Filtrar por año"
+                label="Historial — año"
                 options={historyYearOptions}
                 value={historyYear}
                 onChange={setHistoryYear}
               />
             </div>
-            <div className="w-full sm:w-56">
+            <div className="w-full min-w-0 sm:w-[7.5rem]">
+              <Select
+                label="Historial — mes"
+                options={historyMonthOptions}
+                value={historyMonth}
+                onChange={setHistoryMonth}
+              />
+            </div>
+            <div className="w-full min-w-0 sm:w-52">
               <Select
                 label="Filtrar por subtipo"
                 options={subtipoGastoOptions}
@@ -925,14 +956,22 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             </div>
           </div>
         </div>
-        <RegistrosTable
-          mode="gastos"
-          gastos={gastosParaTabla}
-          vehicles={vehicles}
-          onDeleteGasto={deleteGasto}
-          showClasificacionFinanciera
-          onMoveCategoriaGasto={canEditFinances ? openMoveModal : undefined}
-        />
+        {gastosParaTabla.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-10 text-center text-xs text-slate-600">
+            {gastosHistorialFiltrados.length === 0
+              ? gastosHistorialEmptyHint
+              : 'No hay gastos con el subtipo seleccionado en este período (año / mes). Pruebe «Todos subtipo».'}
+          </div>
+        ) : (
+          <RegistrosTable
+            mode="gastos"
+            gastos={gastosParaTabla}
+            vehicles={vehicles}
+            onDeleteGasto={deleteGasto}
+            showClasificacionFinanciera
+            onMoveCategoriaGasto={canEditFinances ? openMoveModal : undefined}
+          />
+        )}
       </div>
         </>
       )}
