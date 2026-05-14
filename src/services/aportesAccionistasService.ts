@@ -2,6 +2,16 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import type { AporteAccionista, Moneda } from '../data/types';
 
+/** Movimiento contable de salida de capital (resta en totales). */
+export const APORTE_TIPO_RETIRO = 'retiro_accionista';
+
+export function aporteMontoNeto(r: Pick<AporteAccionista, 'tipo' | 'monto'>): number {
+  const m = Number(r.monto);
+  if (!Number.isFinite(m)) return 0;
+  if (String(r.tipo ?? '').trim() === APORTE_TIPO_RETIRO) return -Math.abs(m);
+  return m;
+}
+
 function mapRow(r: Record<string, unknown>): AporteAccionista {
   const veh = r.vehiculo_referencia;
   return {
@@ -19,6 +29,9 @@ function mapRow(r: Record<string, unknown>): AporteAccionista {
     createdAt: String(r.created_at ?? ''),
   };
 }
+
+const APORTE_SELECT =
+  'id, empresa_id, accionista, vehiculo_referencia, monto, moneda, fecha_aporte, genera_interes, tipo, observaciones, created_at';
 
 export type AportesAccionistasFetchResult = {
   rows: AporteAccionista[];
@@ -43,9 +56,7 @@ export async function fetchAportesAccionistas(): Promise<AportesAccionistasFetch
 
   const { data, error } = await supabase
     .from('aportes_accionistas')
-    .select(
-      'id, empresa_id, accionista, vehiculo_referencia, monto, moneda, fecha_aporte, genera_interes, tipo, observaciones, created_at',
-    )
+    .select(APORTE_SELECT)
     .eq('empresa_id', EMPRESA_ID)
     .order('fecha_aporte', { ascending: false })
     .order('id', { ascending: false });
@@ -84,12 +95,12 @@ export type AporteAccionistaInsertInput = {
   observaciones: string;
 };
 
-/** Alta de un aporte (dedupe_key único generado en cliente). */
+/** Alta de un aporte o retiro (dedupe_key único en cliente). Devuelve la fila creada para actualizar UI al instante. */
 export async function insertAporteAccionista(
   input: AporteAccionistaInsertInput,
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; row: AporteAccionista | null }> {
   if (!EMPRESA_ID) {
-    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+    return { error: 'Falta VITE_EMPRESA_ID en el entorno.', row: null };
   }
   const row = {
     empresa_id: EMPRESA_ID,
@@ -106,6 +117,22 @@ export async function insertAporteAccionista(
     observaciones: input.observaciones.trim(),
     dedupe_key: randomDedupeKeyManual(),
   };
-  const { error } = await supabase.from('aportes_accionistas').insert(row);
+  const { data, error } = await supabase.from('aportes_accionistas').insert(row).select(APORTE_SELECT).single();
+  if (error) {
+    return { error: error.message, row: null };
+  }
+  return { error: null, row: data ? mapRow(data as Record<string, unknown>) : null };
+}
+
+/** Elimina un aporte o retiro por id (respeta empresa_id y RLS). */
+export async function deleteAporteAccionista(id: string): Promise<{ error: string | null }> {
+  if (!EMPRESA_ID) {
+    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  }
+  const { error } = await supabase
+    .from('aportes_accionistas')
+    .delete()
+    .eq('id', id)
+    .eq('empresa_id', EMPRESA_ID);
   return { error: error?.message ?? null };
 }

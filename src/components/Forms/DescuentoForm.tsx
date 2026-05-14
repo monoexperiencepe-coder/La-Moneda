@@ -10,7 +10,7 @@ import { todayStr } from '../../utils/formatting';
 
 interface DescuentoFormProps {
   vehicles: Vehicle[];
-  onSubmit: (row: Omit<Descuento, 'id' | 'createdAt'>) => void;
+  onSubmit: (row: Omit<Descuento, 'id' | 'createdAt'>) => void | Promise<void>;
 }
 
 interface FormState {
@@ -55,19 +55,23 @@ const DescuentoForm: React.FC<DescuentoFormProps> = ({ vehicles, onSubmit }) => 
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const rawM = Number(Number(form.monto).toFixed(2));
-    onSubmit({
-      fecha: form.fecha,
-      fechaRegistro: form.fechaRegistro,
-      vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
-      categoria: form.categoria,
-      monto: -Math.abs(rawM),
-      comentarios: form.comentarios.trim(),
-    });
-    setForm(emptyForm());
-    setErrors({});
-    setLoading(false);
+    try {
+      const rawM = Number(Number(form.monto).toFixed(2));
+      await Promise.resolve(
+        onSubmit({
+          fecha: form.fecha,
+          fechaRegistro: form.fechaRegistro,
+          vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
+          categoria: form.categoria,
+          monto: -Math.abs(rawM),
+          comentarios: form.comentarios.trim(),
+        }),
+      );
+      setForm(emptyForm());
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

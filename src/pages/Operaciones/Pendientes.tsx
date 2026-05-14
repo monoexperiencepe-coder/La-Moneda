@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Trash2 } from 'lucide-react';
+import { ChevronLeft, Trash2, Loader2 } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
@@ -55,6 +55,9 @@ const PendientesPage: React.FC = () => {
     fecha: todayStr(),
     prioridad: 'MEDIA' as PrioridadPendiente,
   });
+  const [savingNuevo, setSavingNuevo] = useState(false);
+  const [rowMutatingId, setRowMutatingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     const v = searchParams.get('vehicle');
@@ -165,29 +168,37 @@ const PendientesPage: React.FC = () => {
         <div className="mt-3 flex justify-end">
           <button
             type="button"
-            className="px-4 py-2 rounded-xl bg-violet-700 hover:bg-violet-800 text-white text-sm font-semibold"
+            disabled={savingNuevo}
+            className="px-4 py-2 rounded-xl bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white text-sm font-semibold inline-flex items-center gap-2 min-w-[10rem] justify-center"
             onClick={() => {
               const d = pendienteForm.descripcion.trim();
-              if (!d) return;
-              void addPendiente({
-                vehicleId: pendienteForm.vehicleId ? Number(pendienteForm.vehicleId) : null,
-                descripcion: d,
-                estado: pendienteForm.estado,
-                fecha: pendienteForm.fecha,
-                prioridad: pendienteForm.prioridad,
-              }).then((res) => {
-                if (!res) return;
-                setPendienteForm({
-                  vehicleId: '',
-                  descripcion: '',
-                  estado: 'ABIERTO',
-                  fecha: todayStr(),
-                  prioridad: 'MEDIA',
-                });
-              });
+              if (!d || savingNuevo) return;
+              void (async () => {
+                setSavingNuevo(true);
+                try {
+                  const res = await addPendiente({
+                    vehicleId: pendienteForm.vehicleId ? Number(pendienteForm.vehicleId) : null,
+                    descripcion: d,
+                    estado: pendienteForm.estado,
+                    fecha: pendienteForm.fecha,
+                    prioridad: pendienteForm.prioridad,
+                  });
+                  if (!res) return;
+                  setPendienteForm({
+                    vehicleId: '',
+                    descripcion: '',
+                    estado: 'ABIERTO',
+                    fecha: todayStr(),
+                    prioridad: 'MEDIA',
+                  });
+                } finally {
+                  setSavingNuevo(false);
+                }
+              })();
             }}
           >
-            Guardar pendiente
+            {savingNuevo ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden /> : null}
+            {savingNuevo ? 'Guardando…' : 'Guardar pendiente'}
           </button>
         </div>
       </Card>
@@ -230,10 +241,18 @@ const PendientesPage: React.FC = () => {
                     <td className="py-2 px-3">
                       <select
                         value={p.prioridad}
-                        onChange={(e) =>
-                          void updatePendiente(p.id, { prioridad: e.target.value as PrioridadPendiente })
-                        }
-                        className="input-field text-xs py-1.5 w-full font-semibold"
+                        disabled={rowMutatingId === p.id || deletingId === p.id}
+                        onChange={(e) => {
+                          void (async () => {
+                            setRowMutatingId(p.id);
+                            try {
+                              await updatePendiente(p.id, { prioridad: e.target.value as PrioridadPendiente });
+                            } finally {
+                              setRowMutatingId((cur) => (cur === p.id ? null : cur));
+                            }
+                          })();
+                        }}
+                        className="input-field text-xs py-1.5 w-full font-semibold disabled:opacity-50"
                       >
                         {PRIORIDADES_PENDIENTE.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -252,8 +271,18 @@ const PendientesPage: React.FC = () => {
                     <td className="py-2 px-3">
                       <select
                         value={p.estado}
-                        onChange={(e) => void updatePendiente(p.id, { estado: e.target.value as EstadoPendiente })}
-                        className="input-field text-xs py-1.5 w-full"
+                        disabled={rowMutatingId === p.id || deletingId === p.id}
+                        onChange={(e) => {
+                          void (async () => {
+                            setRowMutatingId(p.id);
+                            try {
+                              await updatePendiente(p.id, { estado: e.target.value as EstadoPendiente });
+                            } finally {
+                              setRowMutatingId((cur) => (cur === p.id ? null : cur));
+                            }
+                          })();
+                        }}
+                        className="input-field text-xs py-1.5 w-full disabled:opacity-50"
                       >
                         {ESTADOS_PENDIENTE.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -265,11 +294,25 @@ const PendientesPage: React.FC = () => {
                     <td className="py-2 px-3 text-right">
                       <button
                         type="button"
-                        onClick={() => void deletePendiente(p.id)}
-                        className="text-gray-400 hover:text-red-500 p-1"
+                        disabled={deletingId === p.id || rowMutatingId === p.id}
+                        onClick={() => {
+                          void (async () => {
+                            setDeletingId(p.id);
+                            try {
+                              await deletePendiente(p.id);
+                            } finally {
+                              setDeletingId((cur) => (cur === p.id ? null : cur));
+                            }
+                          })();
+                        }}
+                        className="text-gray-400 hover:text-red-500 p-1 disabled:opacity-40 inline-flex"
                         title="Eliminar"
                       >
-                        <Trash2 size={14} />
+                        {deletingId === p.id ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
                       </button>
                     </td>
                   </tr>

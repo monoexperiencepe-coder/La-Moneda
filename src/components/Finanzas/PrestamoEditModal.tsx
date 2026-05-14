@@ -12,6 +12,7 @@ import {
   updatePrestamoFinanciero,
   updatePrestamoTramo,
 } from '../../services/prestamosFinancierosService';
+import { cuotaMensualDesdeCapitalYTasaAnual } from '../../utils/prestamosFinancierosCalc';
 
 type TramoForm = {
   id: number;
@@ -41,6 +42,15 @@ function parseNumRequired(s: string, fallback: number): number {
   return n != null ? n : fallback;
 }
 
+/** Cuota mensual (interés) si capital y tasa % son válidos; si no, null. */
+function calcCuotaTasaAnualStr(capitalStr: string, tasaPctStr: string): string | null {
+  const cap = parseNum(capitalStr);
+  const pct = parseNum(tasaPctStr);
+  if (cap == null || pct == null) return null;
+  if (cap < 0 || pct < 0) return null;
+  return String(cuotaMensualDesdeCapitalYTasaAnual(cap, pct / 100));
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -62,7 +72,7 @@ interface PrestamoEditModalProps {
   onClose: () => void;
   mode: 'create' | 'edit';
   detalle: PrestamoFinancieroDetalle | null;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 }
 
 const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, mode, detalle, onSaved }) => {
@@ -196,6 +206,55 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
       resetFromDetalle();
     }
   }, [isOpen, isCreate, detalle, resetDefaults, resetFromDetalle]);
+
+  const recalcTramosCuotaPorCapitalCabecera = useCallback((nuevoCapitalStr: string) => {
+    setTramosForm((rows) =>
+      rows.map((r) => {
+        if (r.modalidadPago !== 'tasa_anual') return r;
+        const pct = parseNum(r.tasaPct);
+        const capRef = parseNum(r.capitalReferencial);
+        const loanCap = parseNum(nuevoCapitalStr);
+        const cap = capRef != null && capRef >= 0 ? capRef : loanCap;
+        if (pct == null || cap == null || pct < 0 || cap < 0) return r;
+        const next = String(cuotaMensualDesdeCapitalYTasaAnual(cap, pct / 100));
+        return next === r.interesMensual ? r : { ...r, interesMensual: next };
+      }),
+    );
+  }, []);
+
+  const onCapitalCabeceraChange = (value: string) => {
+    setCapitalActual(value);
+    if (modalidadPago === 'tasa_anual') {
+      const cuota = calcCuotaTasaAnualStr(value, tasaPct);
+      if (cuota != null) setInteresMensualActual(cuota);
+      recalcTramosCuotaPorCapitalCabecera(value);
+    }
+  };
+
+  const onTasaCabeceraChange = (value: string) => {
+    setTasaPct(value);
+    if (modalidadPago === 'tasa_anual') {
+      const cuota = calcCuotaTasaAnualStr(capitalActual, value);
+      if (cuota != null) setInteresMensualActual(cuota);
+    }
+  };
+
+  const applyDraftTramoPatch = useCallback(
+    (patch: Partial<DraftTramoInicial>) => {
+      setDraftTramo((d) => {
+        let next = { ...d, ...patch };
+        if (next.modalidadPago === 'tasa_anual') {
+          const cuota = calcCuotaTasaAnualStr(
+            next.capitalReferencial.trim() !== '' ? next.capitalReferencial : capitalActual,
+            next.tasaPct,
+          );
+          if (cuota != null) next = { ...next, interesMensual: cuota };
+        }
+        return next;
+      });
+    },
+    [capitalActual],
+  );
 
   const title = useMemo(() => {
     if (isCreate) return 'Nuevo préstamo';
@@ -333,7 +392,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
             setFormError(`Préstamo creado (id ${newId}), pero el tramo inicial falló: ${eTr}`);
             return;
           }
-          onSaved();
+          await Promise.resolve(onSaved());
           onClose();
           return;
         }
@@ -347,7 +406,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           setFormError('No se obtuvo el id del préstamo creado.');
           return;
         }
-        onSaved();
+        await Promise.resolve(onSaved());
         onClose();
         return;
       }
@@ -387,16 +446,34 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
         }
       }
 
-      onSaved();
+      await Promise.resolve(onSaved());
       onClose();
     } finally {
       setSaving(false);
     }
   };
 
-  const updateTramo = (id: number, patch: Partial<TramoForm>) => {
-    setTramosForm((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  };
+  const updateTramo = useCallback(
+    (id: number, patch: Partial<TramoForm>) => {
+      setTramosForm((rows) =>
+        rows.map((r) => {
+          if (r.id !== id) return r;
+          const next = { ...r, ...patch };
+          if (next.modalidadPago === 'tasa_anual') {
+            const capRef = parseNum(next.capitalReferencial);
+            const loanCap = parseNum(capitalActual);
+            const cap = capRef != null && capRef >= 0 ? capRef : loanCap;
+            const pct = parseNum(next.tasaPct);
+            if (pct != null && cap != null && pct >= 0 && cap >= 0) {
+              next.interesMensual = String(cuotaMensualDesdeCapitalYTasaAnual(cap, pct / 100));
+            }
+          }
+          return next;
+        }),
+      );
+    },
+    [capitalActual],
+  );
 
   if (!isOpen) return null;
   if (!isCreate && (!detalle || !p)) return null;
@@ -492,7 +569,15 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
             <select
               className={inputClass}
               value={modalidadPago}
-              onChange={(e) => setModalidadPago(e.target.value as ModalidadPagoPrestamo)}
+              onChange={(e) => {
+                const next = e.target.value as ModalidadPagoPrestamo;
+                setModalidadPago(next);
+                if (next === 'tasa_anual') {
+                  const cuota = calcCuotaTasaAnualStr(capitalActual, tasaPct);
+                  if (cuota != null) setInteresMensualActual(cuota);
+                  recalcTramosCuotaPorCapitalCabecera(capitalActual);
+                }
+              }}
             >
               <option value="tasa_anual">Tasa anual (cuota ≈ capital × tasa / 12)</option>
               <option value="cuota_fija">Cuota fija mensual</option>
@@ -504,7 +589,12 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           </div>
           <div>
             <label className={labelClass}>Capital actual estimado</label>
-            <input className={inputClass} inputMode="decimal" value={capitalActual} onChange={(e) => setCapitalActual(e.target.value)} />
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={capitalActual}
+              onChange={(e) => onCapitalCabeceraChange(e.target.value)}
+            />
           </div>
           {modalidadPago === 'tasa_anual' ? (
             <div>
@@ -513,7 +603,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
                 className={inputClass}
                 inputMode="decimal"
                 value={tasaPct}
-                onChange={(e) => setTasaPct(e.target.value)}
+                onChange={(e) => onTasaCabeceraChange(e.target.value)}
                 placeholder="ej. 12"
               />
             </div>
@@ -536,7 +626,10 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
               value={interesMensualActual}
               onChange={(e) => setInteresMensualActual(e.target.value)}
             />
-            <p className="mt-0.5 text-[10px] text-slate-400">Valor que muestra la tarjeta como «valor cuota».</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              Con modalidad «Tasa anual», se recalcula al instante como capital × (tasa % / 100) / 12. Puedes ajustar el valor a mano si
+              necesitas una excepción.
+            </p>
           </div>
           <div>
             <label className={labelClass}>Estado</label>
@@ -594,11 +687,20 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
                   const on = e.target.checked;
                   setIncluirTramoInicial(on);
                   if (on) {
-                    setDraftTramo((d) => ({
-                      ...d,
-                      desde: fechaInicio.trim().slice(0, 10) || d.desde,
-                      modalidadPago: modalidadPago,
-                    }));
+                    setDraftTramo((d) => {
+                      const base = {
+                        ...d,
+                        desde: fechaInicio.trim().slice(0, 10) || d.desde,
+                        modalidadPago: modalidadPago,
+                      };
+                      if (base.modalidadPago === 'tasa_anual') {
+                        const capStr =
+                          base.capitalReferencial.trim() !== '' ? base.capitalReferencial : capitalActual;
+                        const cuota = calcCuotaTasaAnualStr(capStr, base.tasaPct);
+                        return cuota != null ? { ...base, interesMensual: cuota } : base;
+                      }
+                      return base;
+                    });
                   }
                 }}
                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
@@ -633,10 +735,9 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
                     className={inputClass}
                     value={draftTramo.modalidadPago}
                     onChange={(e) =>
-                      setDraftTramo((d) => ({
-                        ...d,
+                      applyDraftTramoPatch({
                         modalidadPago: e.target.value as ModalidadPagoPrestamo,
-                      }))
+                      })
                     }
                   >
                     <option value="tasa_anual">Tasa anual</option>
@@ -649,7 +750,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
                     className={inputClass}
                     inputMode="decimal"
                     value={draftTramo.capitalReferencial}
-                    onChange={(e) => setDraftTramo((d) => ({ ...d, capitalReferencial: e.target.value }))}
+                    onChange={(e) => applyDraftTramoPatch({ capitalReferencial: e.target.value })}
                   />
                 </div>
                 {draftTramo.modalidadPago === 'tasa_anual' ? (
@@ -659,7 +760,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
                       className={inputClass}
                       inputMode="decimal"
                       value={draftTramo.tasaPct}
-                      onChange={(e) => setDraftTramo((d) => ({ ...d, tasaPct: e.target.value }))}
+                      onChange={(e) => applyDraftTramoPatch({ tasaPct: e.target.value })}
                     />
                   </div>
                 ) : (

@@ -34,7 +34,7 @@ import { todayStr } from '../../utils/formatting';
 interface ExpenseFormProps {
   vehicles: Vehicle[];
   gastos?: Gasto[];
-  onSubmit: (gasto: Omit<Gasto, 'id' | 'createdAt'>) => void;
+  onSubmit: (gasto: Omit<Gasto, 'id' | 'createdAt'>) => void | Promise<void>;
   noCard?: boolean;
   prefillVehicleId?: number | null;
   /** Solo inversión con utilidad: categoría fija `inversion_compra` (Finanzas → Inversiones). */
@@ -189,46 +189,50 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
-    const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
-    const esGlobal = catFin === 'gastos_globales';
-    const esRep = catFin === 'representacion_interna';
-    const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
-    const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
-    const subtipoFin = esRep ? form.subtipoRepresentacion.trim() : (form.subTipo || null) ? form.subTipo.trim() : null;
-    const motivoFin = esRep
-      ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
-      : (form.subTipo || form.tipo);
-    const rawM = Number(Number(form.monto).toFixed(2));
-    onSubmit({
-      fecha: form.fecha,
-      fechaRegistro: todayStr(),
-      vehicleId: esGlobal ? null : form.vehicleId.trim() ? Number(form.vehicleId) : null,
-      tipo: factTipo,
-      subTipo: factSub,
-      fechaDesde: form.fechaDesde.trim() || null,
-      fechaHasta: form.fechaHasta.trim() || null,
-      metodoPago: form.metodoPago,
-      metodoPagoDetalle: form.metodoPagoDetalle.trim(),
-      celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
-      categoria: inferCategoriaFromTipoGasto(factTipo),
-      motivo: motivoFin,
-      signo: '-',
-      monto: rawM,
-      pagadoA: form.pagadoA.trim(),
-      comentarios: form.comentarios,
-      tipo_gasto: catFin,
-      subtipo_gasto: subtipoFin,
-      es_global_flota: esGlobal,
-      origen_clasificacion: 'registro_ui',
-      clasificacion_manual: true,
-      clasificacion_confianza: 1,
-      requiere_revision: false,
-    });
-    setForm(initialExpenseForm(finanzaPreset));
-    setErrors({});
-    setLoading(false);
+    try {
+      const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
+      const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
+      const esGlobal = catFin === 'gastos_globales';
+      const esRep = catFin === 'representacion_interna';
+      const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
+      const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
+      const subtipoFin = esRep ? form.subtipoRepresentacion.trim() : (form.subTipo || null) ? form.subTipo.trim() : null;
+      const motivoFin = esRep
+        ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
+        : (form.subTipo || form.tipo);
+      const rawM = Number(Number(form.monto).toFixed(2));
+      await Promise.resolve(
+        onSubmit({
+          fecha: form.fecha,
+          fechaRegistro: todayStr(),
+          vehicleId: esGlobal ? null : form.vehicleId.trim() ? Number(form.vehicleId) : null,
+          tipo: factTipo,
+          subTipo: factSub,
+          fechaDesde: form.fechaDesde.trim() || null,
+          fechaHasta: form.fechaHasta.trim() || null,
+          metodoPago: form.metodoPago,
+          metodoPagoDetalle: form.metodoPagoDetalle.trim(),
+          celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
+          categoria: inferCategoriaFromTipoGasto(factTipo),
+          motivo: motivoFin,
+          signo: '-',
+          monto: rawM,
+          pagadoA: form.pagadoA.trim(),
+          comentarios: form.comentarios,
+          tipo_gasto: catFin,
+          subtipo_gasto: subtipoFin,
+          es_global_flota: esGlobal,
+          origen_clasificacion: 'registro_ui',
+          clasificacion_manual: true,
+          clasificacion_confianza: 1,
+          requiere_revision: false,
+        }),
+      );
+      setForm(initialExpenseForm(finanzaPreset));
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const periodoLabel =

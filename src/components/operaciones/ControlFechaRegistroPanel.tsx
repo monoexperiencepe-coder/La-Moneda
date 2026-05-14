@@ -9,7 +9,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import type { TipoControlFecha } from '../../data/types';
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
 
 const emptyHistFilters = (): ControlFechasHistoryFilters => ({});
 
@@ -53,6 +53,8 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
   const [histHasta, setHistHasta] = useState('');
   const [openRegistroCard, setOpenRegistroCard] = useState(false);
   const [openHistFilters, setOpenHistFilters] = useState(false);
+  const [savingRegistro, setSavingRegistro] = useState(false);
+  const [deletingControlId, setDeletingControlId] = useState<number | null>(null);
 
   useEffect(() => {
     void loadControlFechasHistory(emptyHistFilters(), 0);
@@ -103,19 +105,23 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
   const totalPages =
     controlFechasHistoryTotal != null ? Math.max(1, Math.ceil(controlFechasHistoryTotal / controlFechasHistoryPageSize)) : 1;
 
-  const guardar = () => {
+  const guardar = async () => {
     if (!vehicleId) return;
-    void addControlFecha({
-      vehicleId: Number(vehicleId),
-      tipo,
-      fechaVencimiento,
-      fechaRegistro: todayStr(),
-      comentarios: comentarios.trim(),
-    }).then((created) => {
+    setSavingRegistro(true);
+    try {
+      const created = await addControlFecha({
+        vehicleId: Number(vehicleId),
+        tipo,
+        fechaVencimiento,
+        fechaRegistro: todayStr(),
+        comentarios: comentarios.trim(),
+      });
       if (!created) return;
       setComentarios('');
       setBusquedaPagina(String(created.id));
-    });
+    } finally {
+      setSavingRegistro(false);
+    }
   };
 
   const histTipoOpts = [{ value: '', label: 'Todos los tipos' }, ...TIPOS_CONTROL_FECHA_OPTIONS];
@@ -145,11 +151,12 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
           <div className="mt-3 flex justify-end">
             <button
               type="button"
-              disabled={!vehicleId}
-              onClick={guardar}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold"
+              disabled={!vehicleId || savingRegistro}
+              onClick={() => void guardar()}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 min-w-[11rem]"
             >
-              Guardar en Supabase
+              {savingRegistro ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden /> : null}
+              {savingRegistro ? 'Guardando…' : 'Guardar en Supabase'}
             </button>
           </div>
         </Card>
@@ -245,10 +252,24 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
                     <button
                       type="button"
                       title="Eliminar"
-                      onClick={() => void deleteControlFecha(c.id)}
-                      className="text-gray-400 hover:text-red-600 p-1"
+                      disabled={deletingControlId === c.id || savingRegistro}
+                      onClick={() => {
+                        void (async () => {
+                          setDeletingControlId(c.id);
+                          try {
+                            await deleteControlFecha(c.id);
+                          } finally {
+                            setDeletingControlId((cur) => (cur === c.id ? null : cur));
+                          }
+                        })();
+                      }}
+                      className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-40 inline-flex"
                     >
-                      <Trash2 size={14} />
+                      {deletingControlId === c.id ? (
+                        <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
                     </button>
                   </div>
                 </div>

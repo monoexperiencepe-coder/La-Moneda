@@ -9,7 +9,7 @@ import { todayStr } from '../../utils/formatting';
 
 interface DocumentationFormProps {
   vehicles: Vehicle[];
-  onSubmit: (doc: Omit<Documentacion, 'id' | 'createdAt'>) => void;
+  onSubmit: (doc: Omit<Documentacion, 'id' | 'createdAt'>) => void | Promise<void>;
 }
 
 const initialState = {
@@ -42,22 +42,26 @@ const DocumentationForm: React.FC<DocumentationFormProps> = ({ vehicles, onSubmi
     ev.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    onSubmit({
-      fecha: form.fecha,
-      vehicleId: Number(form.vehicleId),
-      motivo: form.motivo,
-      descripcion: form.descripcion,
-      valorTiempo: form.valorTiempo,
-      soat: form.soat,
-      rtParticular: form.rtParticular,
-      rtDetaxi: form.rtDetaxi,
-      afocatTaxi: form.afocatTaxi,
-      notas: form.notas,
-    });
-    setForm({ ...initialState, fecha: todayStr() });
-    setErrors({});
-    setLoading(false);
+    try {
+      await Promise.resolve(
+        onSubmit({
+          fecha: form.fecha,
+          vehicleId: Number(form.vehicleId),
+          motivo: form.motivo,
+          descripcion: form.descripcion,
+          valorTiempo: form.valorTiempo,
+          soat: form.soat,
+          rtParticular: form.rtParticular,
+          rtDetaxi: form.rtDetaxi,
+          afocatTaxi: form.afocatTaxi,
+          notas: form.notas,
+        }),
+      );
+      setForm({ ...initialState, fecha: todayStr() });
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));

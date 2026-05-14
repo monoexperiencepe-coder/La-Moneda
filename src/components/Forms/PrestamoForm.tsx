@@ -9,7 +9,7 @@ import { todayStr } from '../../utils/formatting';
 
 interface PrestamoFormProps {
   vehicles: Vehicle[];
-  onSubmit: (row: Omit<Prestamo, 'id' | 'createdAt'>) => void;
+  onSubmit: (row: Omit<Prestamo, 'id' | 'createdAt'>) => void | Promise<void>;
 }
 
 interface FormState {
@@ -68,31 +68,35 @@ const PrestamoForm: React.FC<PrestamoFormProps> = ({ vehicles, onSubmit }) => {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const monto = Number(Number(form.monto).toFixed(2));
-    const tasa = Number(Number(form.tasaInteresAnualPct).toFixed(2));
-    const tipoCambio =
-      form.moneda === 'USD'
-        ? Number(Number(form.tipoCambio).toFixed(4))
-        : form.tipoCambio.trim()
+    try {
+      const monto = Number(Number(form.monto).toFixed(2));
+      const tasa = Number(Number(form.tasaInteresAnualPct).toFixed(2));
+      const tipoCambio =
+        form.moneda === 'USD'
           ? Number(Number(form.tipoCambio).toFixed(4))
-          : null;
-    onSubmit({
-      fecha: form.fecha,
-      fechaRegistro: form.fechaRegistro,
-      vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
-      moneda: form.moneda,
-      monto,
-      tasaInteresAnualPct: tasa,
-      tipoCambio,
-      acreedor: form.acreedor.trim(),
-      saldoPendiente: monto,
-      estado: 'ACTIVO',
-      comentarios: form.comentarios.trim(),
-    });
-    setForm(emptyForm());
-    setErrors({});
-    setLoading(false);
+          : form.tipoCambio.trim()
+            ? Number(Number(form.tipoCambio).toFixed(4))
+            : null;
+      await Promise.resolve(
+        onSubmit({
+          fecha: form.fecha,
+          fechaRegistro: form.fechaRegistro,
+          vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
+          moneda: form.moneda,
+          monto,
+          tasaInteresAnualPct: tasa,
+          tipoCambio,
+          acreedor: form.acreedor.trim(),
+          saldoPendiente: monto,
+          estado: 'ACTIVO',
+          comentarios: form.comentarios.trim(),
+        }),
+      );
+      setForm(emptyForm());
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

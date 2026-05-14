@@ -91,7 +91,7 @@ type Draft = { tipo: string; subtipo: string };
 
 const RevisionClasificacion: React.FC = () => {
   const navigate = useNavigate();
-  const { gastosPendientesRevision, vehicles, toast, refreshFromSupabase } =
+  const { gastosPendientesRevision, vehicles, toast, upsertGasto } =
     useRegistrosContext();
   const { canEditFinances } = useAuth();
 
@@ -148,12 +148,12 @@ const RevisionClasificacion: React.FC = () => {
           return;
         }
         toast.success('Clasificación aprobada', `Gasto #${gastoId}`);
-        await refreshFromSupabase();
+        upsertGasto(updated);
       } finally {
         setPending(null);
       }
     },
-    [refreshFromSupabase, toast],
+    [toast, upsertGasto],
   );
 
   const handleSaveTipoSubtipo = useCallback(
@@ -178,12 +178,12 @@ const RevisionClasificacion: React.FC = () => {
           return;
         }
         toast.success('Tipo y subtipo guardados', `Gasto #${gastoId}`);
-        await refreshFromSupabase();
+        upsertGasto(updated);
       } finally {
         setPending(null);
       }
     },
-    [drafts, refreshFromSupabase, toast],
+    [drafts, toast, upsertGasto],
   );
 
   const colCount = 9;

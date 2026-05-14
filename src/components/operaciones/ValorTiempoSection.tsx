@@ -6,7 +6,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import type { RegistroTiempo as RT } from '../../data/types';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
-import { Trash2, Pencil } from 'lucide-react';
+import { Trash2, Pencil, Loader2 } from 'lucide-react';
 
 function isoToDatetimeLocal(iso: string): string {
   const d = new Date(iso);
@@ -47,6 +47,8 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
   const [filterHasta, setFilterHasta] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const activeVehicles = vehicles.filter((v) => v.activo);
 
@@ -101,6 +103,7 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     const fechaRegistro = datetimeLocalToIso(form.fechaRegistroLocal);
     const vid = form.vehicleId ? Number(form.vehicleId) : null;
     const vt =
@@ -117,23 +120,28 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
       valorTiempo: vt,
     };
 
-    if (editingId != null) {
-      const ok = await updateRegistroTiempo(editingId, payload);
-      if (ok) cancelEdit();
-      return;
-    }
-    const ok = await addRegistroTiempo(payload);
-    if (ok) {
-      if (scopeVehicleId != null) {
-        const sid = String(scopeVehicleId);
-        setForm({
-          ...emptyForm(),
-          vehicleId: sid,
-          detalleAuto: fillDetalleFromVehicle(sid),
-        });
-      } else {
-        setForm(emptyForm());
+    setSubmitting(true);
+    try {
+      if (editingId != null) {
+        const ok = await updateRegistroTiempo(editingId, payload);
+        if (ok) cancelEdit();
+        return;
       }
+      const ok = await addRegistroTiempo(payload);
+      if (ok) {
+        if (scopeVehicleId != null) {
+          const sid = String(scopeVehicleId);
+          setForm({
+            ...emptyForm(),
+            vehicleId: sid,
+            detalleAuto: fillDetalleFromVehicle(sid),
+          });
+        } else {
+          setForm(emptyForm());
+        }
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -216,11 +224,21 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
             placeholder="Horas, índice o monto según tu criterio"
           />
           <div className="flex items-end gap-2 sm:col-span-2">
-            <button type="submit" className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">
-              {editingId ? 'Guardar cambios' : 'Crear registro'}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold inline-flex items-center gap-2"
+            >
+              {submitting ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden /> : null}
+              {submitting ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Crear registro'}
             </button>
             {editingId != null && (
-              <button type="button" onClick={cancelEdit} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={cancelEdit}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 disabled:opacity-50"
+              >
                 Cancelar edición
               </button>
             )}
@@ -291,22 +309,35 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
                     <td className="py-2 px-3 text-right whitespace-nowrap">
                       <button
                         type="button"
+                        disabled={deletingId === r.id || submitting}
                         onClick={() => startEdit(r)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 inline-flex"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 inline-flex disabled:opacity-40"
                         title="Editar"
                       >
                         <Pencil size={15} />
                       </button>
                       <button
                         type="button"
+                        disabled={deletingId === r.id || submitting}
                         onClick={() => {
                           if (!window.confirm('¿Eliminar este registro de tiempo?')) return;
-                          void deleteRegistroTiempo(r.id);
+                          void (async () => {
+                            setDeletingId(r.id);
+                            try {
+                              await deleteRegistroTiempo(r.id);
+                            } finally {
+                              setDeletingId((cur) => (cur === r.id ? null : cur));
+                            }
+                          })();
                         }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 inline-flex"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 inline-flex disabled:opacity-40"
                         title="Eliminar"
                       >
-                        <Trash2 size={15} />
+                        {deletingId === r.id ? (
+                          <Loader2 size={15} className="animate-spin text-red-500" aria-hidden />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
                       </button>
                     </td>
                   </tr>

@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
   Loader2,
@@ -7,10 +8,15 @@ import Badge from '../Common/Badge';
 import Button from '../Common/Button';
 import Select from '../Common/Select';
 import Modal from '../Common/Modal';
-import { Ingreso, Gasto, Vehicle } from '../../data/types';
+import { Ingreso, Gasto, Vehicle, type CategoriaGasto } from '../../data/types';
 import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
+import { TIPOS_GASTO_FACT, getSubtiposGasto, getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
+import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
+import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
+import { useRegistrosContext } from '../../context/RegistrosContext';
+import Input from '../Common/Input';
 import {
   confianzaTier,
   confianzaBadgeVariant,
@@ -37,6 +43,8 @@ interface RegistrosTableProps {
   showClasificacionFinanciera?: boolean;
   /** Acción opcional para mover un gasto de categoría desde UI. */
   onMoveCategoriaGasto?: (gasto: Gasto) => void;
+  /** Tras guardar edición manual en el modal de detalle (solo gastos); p. ej. `upsertGasto`. */
+  onGastoDetalleSaved?: (gasto: Gasto) => void;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -101,6 +109,96 @@ function cleanGastoComentario(text: string | null | undefined): string {
     .trim();
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function sanitizeComentariosPatch(s: string): string {
+  return s.replace(/\u0000/g, '').trim();
+}
+
+type GastoEditDraft = {
+  fecha: string;
+  fechaRegistro: string;
+  vehicleIdStr: string;
+  tipo: string;
+  subTipo: string;
+  categoria: CategoriaGasto;
+  motivo: string;
+  metodoPago: string;
+  metodoPagoDetalle: string;
+  montoStr: string;
+  comentarios: string;
+};
+
+function gastoToEditDraft(g: Gasto): GastoEditDraft {
+  return {
+    fecha: g.fecha.slice(0, 10),
+    fechaRegistro: g.fechaRegistro.slice(0, 10),
+    vehicleIdStr: g.vehicleId != null ? String(g.vehicleId) : '',
+    tipo: g.tipo,
+    subTipo: g.subTipo ?? '',
+    categoria: g.categoria,
+    motivo: g.motivo,
+    metodoPago: g.metodoPago,
+    metodoPagoDetalle: g.metodoPagoDetalle,
+    montoStr: String(g.monto),
+    comentarios: g.comentarios ?? '',
+  };
+}
+
+function buildGastoDetallePatch(
+  baseline: Gasto,
+  draft: GastoEditDraft,
+): { patch: GastoDetalleManualPatch; error: string | null } {
+  const patch: GastoDetalleManualPatch = {};
+  const f = draft.fecha.trim().slice(0, 10);
+  const fr = draft.fechaRegistro.trim().slice(0, 10);
+  if (!ISO_DATE_RE.test(f)) return { patch: {}, error: 'Fecha movimiento no válida (AAAA-MM-DD).' };
+  if (!ISO_DATE_RE.test(fr)) return { patch: {}, error: 'Fecha registro no válida (AAAA-MM-DD).' };
+  if (f !== baseline.fecha.slice(0, 10)) patch.fecha = f;
+  if (fr !== baseline.fechaRegistro.slice(0, 10)) patch.fechaRegistro = fr;
+
+  const vidStr = draft.vehicleIdStr.trim();
+  let vid: number | null = null;
+  if (vidStr !== '') {
+    const n = Number(vidStr);
+    if (!Number.isFinite(n) || n <= 0) return { patch: {}, error: 'Vehículo inválido (elige unidad o General).' };
+    vid = Math.round(n);
+  }
+  if ((baseline.vehicleId ?? null) !== vid) patch.vehicleId = vid;
+
+  const tipoTrim = draft.tipo.trim();
+  if (!tipoTrim) return { patch: {}, error: 'Indica el tipo Fact.' };
+  if (tipoTrim !== baseline.tipo) patch.tipo = tipoTrim;
+  const subNorm = draft.subTipo.trim() === '' ? null : draft.subTipo.trim();
+  const baseSub = baseline.subTipo ?? null;
+  if (subNorm !== baseSub) patch.subTipo = subNorm;
+
+  const subs = getSubtiposGasto(tipoTrim);
+  if (subs.length > 0 && subNorm != null && !subs.includes(subNorm)) {
+    return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
+  }
+
+  if (draft.categoria !== baseline.categoria) patch.categoria = draft.categoria;
+  if (draft.motivo.trim() !== baseline.motivo.trim()) patch.motivo = draft.motivo.trim();
+
+  if (draft.metodoPago !== baseline.metodoPago || draft.metodoPagoDetalle.trim() !== baseline.metodoPagoDetalle.trim()) {
+    patch.metodoPago = draft.metodoPago;
+    patch.metodoPagoDetalle = draft.metodoPagoDetalle.trim();
+  }
+
+  const m = Number(String(draft.montoStr).replace(',', '.'));
+  if (!Number.isFinite(m)) return { patch: {}, error: 'Monto inválido.' };
+  if (baseline.monto >= 0 && m < 0) {
+    return { patch: {}, error: 'El monto debe ser mayor o igual a 0.' };
+  }
+  if (m !== baseline.monto) patch.monto = m;
+
+  const com = sanitizeComentariosPatch(draft.comentarios);
+  if (com !== sanitizeComentariosPatch(baseline.comentarios ?? '')) patch.comentarios = com;
+
+  return { patch, error: null };
+}
+
 /** Texto para línea «Cubre» en listados de ingresos; null si no hay rango. */
 function ingresoCubreLabel(i: Ingreso): string | null {
   const d = i.fechaDesde?.trim();
@@ -119,8 +217,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   initialEstadoPago = '',
   showClasificacionFinanciera = false,
   onMoveCategoriaGasto,
+  onGastoDetalleSaved,
 }) => {
   const { role } = useAuth();
+  const { toast } = useRegistrosContext();
   const showDeleteIngreso = mode !== 'ingresos' || canMutateIngresos(role);
   const colCount = 5;
   const [query, setQuery] = useState('');
@@ -138,6 +238,42 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   >(null);
   const [deletingIngresoId, setDeletingIngresoId] = useState<string | null>(null);
   const [viewItem, setViewItem] = useState<Ingreso | Gasto | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const openingDetailRef = useRef(false);
+  const [gastoDetailEditing, setGastoDetailEditing] = useState(false);
+  const [gastoEditBaseline, setGastoEditBaseline] = useState<Gasto | null>(null);
+  const [gastoEditDraft, setGastoEditDraft] = useState<GastoEditDraft | null>(null);
+  const [gastoSaveBusy, setGastoSaveBusy] = useState(false);
+  const gastoEditInitialSerialized = useRef('');
+
+  const closeDetail = useCallback(() => {
+    setViewItem(null);
+    setDetailLoading(false);
+    setGastoDetailEditing(false);
+    setGastoEditBaseline(null);
+    setGastoEditDraft(null);
+    setGastoSaveBusy(false);
+    gastoEditInitialSerialized.current = '';
+  }, []);
+
+  const beginOpenDetail = useCallback((item: Ingreso | Gasto) => {
+    if (openingDetailRef.current) return;
+    openingDetailRef.current = true;
+    try {
+      flushSync(() => setDetailLoading(true));
+      flushSync(() => {
+        setGastoDetailEditing(false);
+        setGastoEditBaseline(null);
+        setGastoEditDraft(null);
+        setGastoSaveBusy(false);
+        gastoEditInitialSerialized.current = '';
+        setViewItem(item);
+        setDetailLoading(false);
+      });
+    } finally {
+      openingDetailRef.current = false;
+    }
+  }, []);
 
   const getVehicleLabel = useCallback((vehicleId: number | null) => {
     if (!vehicleId) return 'General';
@@ -151,6 +287,116 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     if (!v) return `#${vehicleId}`;
     return `#${v.id} · ${v.placa}`;
   };
+
+  const gastoDetalleEditable = mode === 'gastos' && Boolean(onGastoDetalleSaved);
+
+  const gastoEditDirty =
+    Boolean(gastoEditDraft) &&
+    gastoEditInitialSerialized.current !== '' &&
+    JSON.stringify(gastoEditDraft) !== gastoEditInitialSerialized.current;
+
+  const categoriaKpiOptions = useMemo(
+    () =>
+      (Object.keys(CATEGORIAS_GASTO_LABELS) as CategoriaGasto[]).map((k) => ({
+        value: k,
+        label: CATEGORIAS_GASTO_LABELS[k],
+      })),
+    [],
+  );
+
+  const tipoFactOptions = useMemo(
+    () => TIPOS_GASTO_FACT.map((t) => ({ value: t, label: t })),
+    [],
+  );
+
+  const vehicleSelectOptions = useMemo(
+    () => [
+      { value: '', label: 'General / sin vehículo' },
+      ...vehicles.map((v) => ({
+        value: String(v.id),
+        label: `${v.marca} ${v.modelo} (${v.placa})`,
+      })),
+    ],
+    [vehicles],
+  );
+
+  const metodoPagoOptions = useMemo(
+    () => METODOS_PAGO.map((m) => ({ value: m, label: m })),
+    [],
+  );
+
+  const metodoDetalleOptions = useMemo(() => {
+    if (!gastoEditDraft) return [];
+    const rows = getDetallesMetodoPago(gastoEditDraft.metodoPago).map((r) => ({
+      value: r.detalle,
+      label: r.detalle,
+    }));
+    const cur = gastoEditDraft.metodoPagoDetalle.trim();
+    if (cur && !rows.some((r) => r.value === cur)) {
+      return [{ value: cur, label: `${cur} (actual)` }, ...rows];
+    }
+    return rows;
+  }, [gastoEditDraft]);
+
+  const subtipoFactOptions = useMemo(() => {
+    if (!gastoEditDraft) return [];
+    const fromCat = getSubtiposGasto(gastoEditDraft.tipo).map((s) => ({ value: s, label: s }));
+    const cur = gastoEditDraft.subTipo.trim();
+    if (cur && !fromCat.some((o) => o.value === cur)) {
+      return [{ value: cur, label: `${cur} (actual)` }, ...fromCat];
+    }
+    return fromCat;
+  }, [gastoEditDraft]);
+
+  const startGastoEdit = useCallback(() => {
+    if (mode !== 'gastos' || !viewItem || !onGastoDetalleSaved || !('signo' in viewItem)) return;
+    const g = viewItem as Gasto;
+    const d = gastoToEditDraft(g);
+    setGastoEditBaseline(g);
+    setGastoEditDraft(d);
+    gastoEditInitialSerialized.current = JSON.stringify(d);
+    setGastoDetailEditing(true);
+  }, [mode, viewItem, onGastoDetalleSaved]);
+
+  const cancelGastoEdit = useCallback(() => {
+    setGastoDetailEditing(false);
+    setGastoEditBaseline(null);
+    setGastoEditDraft(null);
+    gastoEditInitialSerialized.current = '';
+  }, []);
+
+  const handleSaveGastoDetail = useCallback(async () => {
+    if (!gastoEditBaseline || !gastoEditDraft || !onGastoDetalleSaved || gastoSaveBusy) return;
+    const { patch, error: buildErr } = buildGastoDetallePatch(gastoEditBaseline, gastoEditDraft);
+    if (buildErr) {
+      toast.error('Revisa el formulario', buildErr);
+      return;
+    }
+    if (Object.keys(patch).length === 0) return;
+    setGastoSaveBusy(true);
+    try {
+      const res = await updateGastoDetalleManual(gastoEditBaseline.id, patch);
+      if (!res.ok) {
+        console.error('[Detalle gasto] updateGastoDetalleManual', res.supabase ?? res.error);
+        const msg =
+          res.supabase?.hint?.trim() ||
+          res.supabase?.details?.trim() ||
+          res.error ||
+          'Error desconocido.';
+        toast.error('No se pudo guardar', msg.length > 200 ? `${msg.slice(0, 197)}…` : msg);
+        return;
+      }
+      toast.success('Registro actualizado', 'Los cambios se guardaron en Supabase.');
+      onGastoDetalleSaved(res.gasto);
+      setViewItem(res.gasto);
+      setGastoDetailEditing(false);
+      setGastoEditBaseline(null);
+      setGastoEditDraft(null);
+      gastoEditInitialSerialized.current = '';
+    } finally {
+      setGastoSaveBusy(false);
+    }
+  }, [gastoEditBaseline, gastoEditDraft, gastoSaveBusy, onGastoDetalleSaved, toast]);
 
   const rawData = mode === 'ingresos' ? ingresos : gastos;
 
@@ -374,7 +620,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <button
               key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
               type="button"
-              onClick={() => setViewItem(item)}
+              onClick={() => beginOpenDetail(item)}
               className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-transform"
             >
               <div className="flex items-start justify-between gap-3">
@@ -478,7 +724,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   )}
                   <button
                     type="button"
-                    onClick={() => setViewItem(item)}
+                    onClick={() => beginOpenDetail(item)}
                     className="p-1.5 rounded-lg hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-colors"
                     title="Ver detalles"
                   >
@@ -564,7 +810,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
                   className="hover:bg-gray-50 transition-colors cursor-pointer"
                   title="Clic en la fila para ver detalles"
-                  onClick={() => setViewItem(item)}
+                  onClick={() => beginOpenDetail(item)}
                 >
                   {/* Fecha */}
                   <td className="px-2 py-3 text-sm text-gray-600 align-top whitespace-nowrap max-w-[140px]">
@@ -653,7 +899,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       )}
                       <button
                         type="button"
-                        onClick={() => setViewItem(item)}
+                        onClick={() => beginOpenDetail(item)}
                         className="p-1.5 rounded-lg hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-colors"
                         title="Ver detalles"
                       >
@@ -757,15 +1003,160 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         </p>
       </Modal>
 
-      {/* ── Modal: ver detalles ── */}
-      {viewItem && (
-        <Modal
-          isOpen={!!viewItem}
-          onClose={() => setViewItem(null)}
-          title="Detalles del registro"
-          size="sm"
-          footer={<Button onClick={() => setViewItem(null)}>Cerrar</Button>}
-        >
+      {/* ── Modal: ver detalles (spinner inmediato para evitar doble clic) ── */}
+      <Modal
+        isOpen={detailLoading || viewItem !== null}
+        onClose={closeDetail}
+        title={
+          viewItem
+            ? mode === 'gastos' && gastoDetailEditing
+              ? 'Editar registro'
+              : 'Detalles del registro'
+            : 'Abriendo registro'
+        }
+        size={mode === 'gastos' && gastoDetailEditing ? 'lg' : 'sm'}
+        footer={
+          viewItem && mode === 'gastos' && gastoDetalleEditable ? (
+            gastoDetailEditing ? (
+              <>
+                <Button variant="ghost" onClick={cancelGastoEdit} disabled={gastoSaveBusy}>
+                  Cancelar edición
+                </Button>
+                <Button
+                  onClick={() => void handleSaveGastoDetail()}
+                  loading={gastoSaveBusy}
+                  disabled={!gastoEditDirty || gastoSaveBusy}
+                >
+                  Guardar cambios
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={closeDetail}>
+                  Cerrar
+                </Button>
+                <Button onClick={startGastoEdit}>Editar</Button>
+              </>
+            )
+          ) : (
+            <Button onClick={closeDetail}>Cerrar</Button>
+          )
+        }
+      >
+        {detailLoading && !viewItem ? (
+          <div className="flex flex-col items-center justify-center py-14 gap-3 text-gray-600" role="status" aria-live="polite">
+            <Loader2 className="h-10 w-10 animate-spin text-primary-500" aria-hidden />
+            <p className="text-sm font-medium">Cargando…</p>
+          </div>
+        ) : viewItem && mode === 'gastos' && gastoDetailEditing && gastoEditDraft ? (
+          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-0.5">
+            <p className="text-[10px] text-slate-500 leading-snug">
+              Para cambiar la categoría financiera (capa tipo gasto / subtipo financiero) usa el botón «Mover categoría» en la fila del listado.
+            </p>
+            <Input
+              label="Fecha movimiento"
+              type="date"
+              value={gastoEditDraft.fecha}
+              onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
+            />
+            <Select
+              label="Vehículo"
+              options={vehicleSelectOptions}
+              value={gastoEditDraft.vehicleIdStr}
+              onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, vehicleIdStr: v } : d))}
+            />
+            <Select
+              label="Tipo (Fact)"
+              options={tipoFactOptions}
+              value={gastoEditDraft.tipo}
+              onChange={(v) =>
+                setGastoEditDraft((d) => {
+                  if (!d) return d;
+                  const subs = getSubtiposGasto(v);
+                  const nextSub = subs.length > 0 ? (subs.includes(d.subTipo) ? d.subTipo : subs[0] ?? '') : d.subTipo;
+                  return { ...d, tipo: v, subTipo: nextSub, categoria: inferCategoriaFromTipoGasto(v) };
+                })
+              }
+            />
+            {subtipoFactOptions.length > 0 ? (
+              <Select
+                label="Sub tipo (Fact)"
+                options={subtipoFactOptions}
+                value={gastoEditDraft.subTipo}
+                onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, subTipo: v } : d))}
+              />
+            ) : (
+              <Input
+                label="Sub tipo (Fact)"
+                value={gastoEditDraft.subTipo}
+                onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, subTipo: e.target.value } : d))}
+              />
+            )}
+            <Select
+              label="Categoría KPI"
+              options={categoriaKpiOptions}
+              value={gastoEditDraft.categoria}
+              onChange={(v) =>
+                setGastoEditDraft((d) => (d ? { ...d, categoria: v as CategoriaGasto } : d))
+              }
+            />
+            <Input
+              label="Motivo"
+              value={gastoEditDraft.motivo}
+              onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, motivo: e.target.value } : d))}
+            />
+            <Input
+              label="Fecha registro"
+              type="date"
+              value={gastoEditDraft.fechaRegistro}
+              onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, fechaRegistro: e.target.value } : d))}
+            />
+            <Select
+              label="Método de pago"
+              options={metodoPagoOptions}
+              value={gastoEditDraft.metodoPago}
+              onChange={(v) =>
+                setGastoEditDraft((d) => {
+                  if (!d) return d;
+                  const first = getDetallesMetodoPago(v)[0];
+                  return { ...d, metodoPago: v, metodoPagoDetalle: first?.detalle ?? '' };
+                })
+              }
+            />
+            {metodoDetalleOptions.length > 0 ? (
+              <Select
+                label="Cuenta / detalle de pago"
+                options={metodoDetalleOptions}
+                value={gastoEditDraft.metodoPagoDetalle}
+                onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, metodoPagoDetalle: v } : d))}
+              />
+            ) : (
+              <Input
+                label="Cuenta / detalle de pago"
+                value={gastoEditDraft.metodoPagoDetalle}
+                onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, metodoPagoDetalle: e.target.value } : d))}
+              />
+            )}
+            <Input
+              label="Monto (PEN)"
+              inputMode="decimal"
+              value={gastoEditDraft.montoStr}
+              onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, montoStr: e.target.value } : d))}
+            />
+            <div className="w-full">
+              <label htmlFor="gasto-edit-comentarios" className="label">
+                Observaciones
+              </label>
+              <textarea
+                id="gasto-edit-comentarios"
+                rows={3}
+                value={gastoEditDraft.comentarios}
+                onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, comentarios: e.target.value } : d))}
+                className="input-field w-full text-sm resize-y min-h-[4rem]"
+              />
+            </div>
+          </div>
+        ) : viewItem ? (
           <dl className="space-y-3">
             {mode === 'gastos' && (
               <div className="flex justify-between">
@@ -989,8 +1380,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               </div>
             )}
           </dl>
-        </Modal>
-      )}
+        ) : null}
+      </Modal>
     </div>
   );
 };

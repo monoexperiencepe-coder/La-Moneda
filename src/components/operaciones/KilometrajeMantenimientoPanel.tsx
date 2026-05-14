@@ -11,7 +11,7 @@ import {
   tipoMantenimientoDesdeRegistro,
   variacionSuperaUmbralAlerta,
 } from '../../utils/kmMantenimientoControl';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 
 interface Props {
   vehicles: Vehicle[];
@@ -43,6 +43,8 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     descripcion: '',
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (restrictVehicleId == null) return;
@@ -93,24 +95,29 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
       return;
     }
 
-    const created = await addKilometraje({
-      vehicleId: Number(km.vehicleId),
-      fecha: km.fecha,
-      fechaRegistro: todayStr(),
-      kmMantenimiento: kmMant,
-      kilometraje: kmAct,
-      descripcion: km.descripcion.trim(),
-      costo: null,
-    });
+    setSaving(true);
+    try {
+      const created = await addKilometraje({
+        vehicleId: Number(km.vehicleId),
+        fecha: km.fecha,
+        fechaRegistro: todayStr(),
+        kmMantenimiento: kmMant,
+        kilometraje: kmAct,
+        descripcion: km.descripcion.trim(),
+        costo: null,
+      });
 
-    if (created) {
-      setKm((p) => ({
-        ...p,
-        kmMantenimiento: '',
-        kilometraje: '',
-        descripcion: '',
-        fecha: todayStr(),
-      }));
+      if (created) {
+        setKm((p) => ({
+          ...p,
+          kmMantenimiento: '',
+          kilometraje: '',
+          descripcion: '',
+          fecha: todayStr(),
+        }));
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -157,11 +164,12 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
         <div className="mt-3 flex justify-end">
           <button
             type="button"
-            disabled={!km.vehicleId}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold"
+            disabled={!km.vehicleId || saving}
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 min-w-[10rem]"
             onClick={() => void guardar()}
           >
-            Guardar kilometraje
+            {saving ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden /> : null}
+            {saving ? 'Guardando…' : 'Guardar kilometraje'}
           </button>
         </div>
       </Card>
@@ -250,11 +258,25 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                     <td className="py-2 text-right">
                       <button
                         type="button"
-                        onClick={() => void deleteKilometraje(r.id)}
-                        className="text-gray-400 hover:text-red-500"
+                        disabled={deletingId === r.id || saving}
+                        onClick={() => {
+                          void (async () => {
+                            setDeletingId(r.id);
+                            try {
+                              await deleteKilometraje(r.id);
+                            } finally {
+                              setDeletingId((cur) => (cur === r.id ? null : cur));
+                            }
+                          })();
+                        }}
+                        className="text-gray-400 hover:text-red-500 disabled:opacity-40 inline-flex"
                         title="Eliminar registro"
                       >
-                        <Trash2 size={14} />
+                        {deletingId === r.id ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
                       </button>
                     </td>
                   </tr>

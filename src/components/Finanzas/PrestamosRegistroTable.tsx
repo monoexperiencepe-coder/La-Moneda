@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import Modal from '../Common/Modal';
 import type {
   ModalidadPagoPrestamo,
@@ -8,6 +9,7 @@ import type {
 } from '../../data/types';
 import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { Loader2 } from 'lucide-react';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -148,6 +150,8 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
   const [moneda, setMoneda] = useState<FiltroMoneda>('todos');
   const [modalidad, setModalidad] = useState<FiltroModalidad>('todos');
   const [tramosModal, setTramosModal] = useState<PrestamoFinancieroDetalle | null>(null);
+  const [tramosModalLoading, setTramosModalLoading] = useState(false);
+  const tramosOpenLockRef = useRef(false);
   const [sortKey, setSortKey] = useState<SortKey>('fechaInicio');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -159,6 +163,29 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
       setSortDir('asc');
     }
   }, [sortKey]);
+
+  const closeTramosModal = useCallback(() => {
+    setTramosModal(null);
+    setTramosModalLoading(false);
+  }, []);
+
+  const beginOpenTramosModal = useCallback((row: PrestamoFinancieroDetalle) => {
+    if (row.tramos.length === 0) return;
+    if (tramosOpenLockRef.current) return;
+    tramosOpenLockRef.current = true;
+    try {
+      flushSync(() => {
+        setTramosModal(null);
+        setTramosModalLoading(true);
+      });
+      flushSync(() => {
+        setTramosModal(row);
+        setTramosModalLoading(false);
+      });
+    } finally {
+      tramosOpenLockRef.current = false;
+    }
+  }, []);
 
   const calcTramosModal = useMemo(() => {
     if (!tramosModal) return null;
@@ -424,7 +451,7 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
                         <button
                           type="button"
                           disabled={!tieneTramos}
-                          onClick={() => tieneTramos && setTramosModal({ prestamo: p, tramos })}
+                          onClick={() => tieneTramos && beginOpenTramosModal(row)}
                           title={!tieneTramos ? 'Sin filas de tramos cargadas' : undefined}
                           className="text-left rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
                         >
@@ -447,25 +474,30 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
       ) : null}
 
       <Modal
-        isOpen={tramosModal != null}
-        onClose={() => setTramosModal(null)}
+        isOpen={tramosModalLoading || tramosModal !== null}
+        onClose={closeTramosModal}
         title={
           tramosModal
             ? `Tramos · ${tramosModal.prestamo.prestamista || `Préstamo #${tramosModal.prestamo.id}`}`
-            : 'Tramos'
+            : 'Abriendo tramos…'
         }
         size="lg"
         footer={
           <button
             type="button"
-            onClick={() => setTramosModal(null)}
+            onClick={closeTramosModal}
             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cerrar
           </button>
         }
       >
-        {tramosModal && tramosOrdenadosModal.length === 0 ? (
+        {tramosModalLoading && !tramosModal ? (
+          <div className="flex flex-col items-center justify-center py-14 gap-3 text-slate-600" role="status">
+            <Loader2 className="h-10 w-10 animate-spin text-indigo-600" aria-hidden />
+            <p className="text-sm font-medium">Cargando…</p>
+          </div>
+        ) : tramosModal && tramosOrdenadosModal.length === 0 ? (
           <p className="text-sm text-slate-600">
             Este préstamo está marcado con tramos pero no hay filas en <code className="text-xs bg-slate-100 px-1 rounded">prestamos_tramos</code> (import o RLS).
           </p>

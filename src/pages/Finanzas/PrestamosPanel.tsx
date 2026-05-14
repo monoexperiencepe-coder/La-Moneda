@@ -10,7 +10,7 @@ import type {
   PrestamoFinancieroDetalle,
   PrestamoFinancieroTramo,
 } from '../../data/types';
-import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
+import { calcularPrestamoFinancieroInfo, interesMensualEfectivoTramo } from '../../utils/prestamosFinancierosCalc';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
@@ -327,7 +327,11 @@ function TramosTimeline({
         {tramos.map((t, idx) => {
           const linea = calc.porTramo.find((x) => x.tramoId === t.id);
           const monedaCuota = t.monedaPago;
-          const cuota = linea != null ? montoFmt(linea.interesMensualEfectivo, monedaCuota) : '—';
+          const imEfectivo =
+            linea != null
+              ? linea.interesMensualEfectivo
+              : interesMensualEfectivoTramo(t, calc.capitalActualEstimado);
+          const cuota = montoFmt(imEfectivo, monedaCuota);
           const periodo = timelinePeriodLabel(t.desde, t.hasta);
           const siguiente = tramos[idx + 1];
           const mostrarPuente = idx < tramos.length - 1;
@@ -335,7 +339,8 @@ function TramosTimeline({
             t.capitalReferencial != null && Number.isFinite(t.capitalReferencial)
               ? montoFmt(t.capitalReferencial, t.monedaCapital)
               : null;
-          const mesesTxt = linea != null && linea.meses > 0 ? `~${linea.meses} meses` : null;
+          const mesesTxt =
+            linea != null && linea.meses > 0 ? `~${linea.meses} meses` : null;
           const tooltipDetalle = [refCap ? `Capital ref.: ${refCap}` : null, mesesTxt].filter(Boolean).join(' · ') || undefined;
 
           const menosOriginal =
@@ -662,7 +667,9 @@ const PrestamosPanel: React.FC = () => {
         mode={prestamoModal.open ? prestamoModal.mode : 'create'}
         detalle={prestamoModal.open && prestamoModal.mode === 'edit' ? prestamoModal.detalle : null}
         onClose={() => setPrestamoModal({ open: false })}
-        onSaved={() => void reload({ background: true })}
+        onSaved={async () => {
+          await reload({ background: true });
+        }}
       />
 
     </div>

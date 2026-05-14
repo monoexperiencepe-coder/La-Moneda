@@ -10,7 +10,7 @@ import { todayStr } from '../../utils/formatting';
 
 interface MaintenanceFormProps {
   vehicles: Vehicle[];
-  onSubmit: (mant: Omit<Mantenimiento, 'id' | 'createdAt'>) => void;
+  onSubmit: (mant: Omit<Mantenimiento, 'id' | 'createdAt'>) => void | Promise<void>;
 }
 
 const initialState = {
@@ -54,29 +54,33 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({ vehicles, onSubmit })
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    onSubmit({
-      fechaRegistro: form.fechaRegistro,
-      vehicleId: Number(form.vehicleId),
-      documentoResponsable: (form.documentoResponsable || 'DNI') as Mantenimiento['documentoResponsable'],
-      numeroDocumento: form.numeroDocumento,
-      nombres: form.nombres,
-      apellidos: form.apellidos,
-      celular: form.celular,
-      domicilio: (form.domicilio || 'PROPIO') as Mantenimiento['domicilio'],
-      cochera: form.cochera,
-      direccion: form.direccion,
-      referencia: form.referencia,
-      documentoFirmado: form.documentoFirmado === 'true',
-      fechaVencimientoContrato: form.fechaVencimientoContrato,
-      mantenimientoRealizado: form.mantenimientoRealizado === 'true',
-      compraBateriaNueva: form.compraBateriaNueva === 'true',
-      kilometraje: Number(form.kilometraje),
-      costo: Number(form.costo),
-    });
-    setForm({ ...initialState, fechaRegistro: todayStr() });
-    setErrors({});
-    setLoading(false);
+    try {
+      await Promise.resolve(
+        onSubmit({
+          fechaRegistro: form.fechaRegistro,
+          vehicleId: Number(form.vehicleId),
+          documentoResponsable: (form.documentoResponsable || 'DNI') as Mantenimiento['documentoResponsable'],
+          numeroDocumento: form.numeroDocumento,
+          nombres: form.nombres,
+          apellidos: form.apellidos,
+          celular: form.celular,
+          domicilio: (form.domicilio || 'PROPIO') as Mantenimiento['domicilio'],
+          cochera: form.cochera,
+          direccion: form.direccion,
+          referencia: form.referencia,
+          documentoFirmado: form.documentoFirmado === 'true',
+          fechaVencimientoContrato: form.fechaVencimientoContrato,
+          mantenimientoRealizado: form.mantenimientoRealizado === 'true',
+          compraBateriaNueva: form.compraBateriaNueva === 'true',
+          kilometraje: Number(form.kilometraje),
+          costo: Number(form.costo),
+        }),
+      );
+      setForm({ ...initialState, fechaRegistro: todayStr() });
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut } from 'lucide-react';
+import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut, Undo2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useUndoAction } from '../../context/UndoActionContext';
+import { useRegistrosContext } from '../../context/RegistrosContext';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Admin',
@@ -31,6 +33,25 @@ const Header: React.FC = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { executeUndo, pendingLabel, sessionUndoConsumed, undoRunning } = useUndoAction();
+  const { toast } = useRegistrosContext();
+
+  const undoDisabled = sessionUndoConsumed || !pendingLabel || undoRunning;
+  const undoTitle = sessionUndoConsumed
+    ? 'Ya usaste deshacer en esta sesión. Recarga la página para volver a tenerlo.'
+    : !pendingLabel
+      ? 'No hay acción reciente para deshacer (eliminar, mover categoría, etc.).'
+      : `Deshacer una vez: ${pendingLabel}`;
+
+  const handleGlobalUndo = async () => {
+    const label = pendingLabel;
+    const res = await executeUndo();
+    if (res === 'ok') {
+      toast.success('Cambios revertidos', label ? `Se revirtió: ${label}` : 'Última acción deshecha.');
+    } else if (res === 'fail') {
+      toast.error('No se pudo deshacer', 'Revisa conexión, permisos o intenta de nuevo.');
+    }
+  };
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -90,6 +111,20 @@ const Header: React.FC = () => {
           <div className="relative z-20 ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 pl-2 max-w-[calc(50%-7rem)] lg:max-w-[calc(50%-9rem)] sm:gap-2 sm:pl-3">
             <button
               type="button"
+              onClick={() => void handleGlobalUndo()}
+              disabled={undoDisabled}
+              className={`relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
+                undoDisabled
+                  ? 'cursor-not-allowed text-gray-300 bg-gray-50/80'
+                  : 'text-indigo-600 hover:bg-indigo-50 border border-indigo-100'
+              }`}
+              aria-label="Deshacer última acción"
+              title={undoTitle}
+            >
+              <Undo2 size={18} className={undoRunning ? 'animate-pulse' : ''} />
+            </button>
+            <button
+              type="button"
               className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-50"
               aria-label="Notificaciones"
             >
@@ -142,6 +177,23 @@ const Header: React.FC = () => {
 
       {mobileOpen && (
         <div className="border-t border-gray-100 bg-white px-4 py-3 animate-scale-in lg:hidden">
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                void handleGlobalUndo();
+                setMobileOpen(false);
+              }}
+              disabled={undoDisabled}
+              className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                undoDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-50 text-indigo-800 border border-indigo-100'
+              }`}
+              title={undoTitle}
+            >
+              <Undo2 size={16} />
+              Deshacer
+            </button>
+          </div>
           <nav className="grid grid-cols-3 gap-2">
             {navItems.map(item => (
               <button

@@ -18,7 +18,7 @@ import { todayStr } from '../../utils/formatting';
 interface IncomeFormProps {
   vehicles: Vehicle[];
   ingresos?: Ingreso[];
-  onSubmit: (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => void;
+  onSubmit: (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => void | Promise<void>;
   /** Sin tarjeta exterior (p. ej. dentro de un modal con título propio). */
   noCard?: boolean;
   /** Preselecciona N° vehículo al montar o al cambiar el id. */
@@ -104,41 +104,45 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
-    const moneda = form.moneda;
-    const rawM = Number(Number(form.monto).toFixed(2));
-    const tipoCambio =
-      moneda === 'USD'
-        ? Number(Number(form.tipoCambio).toFixed(4))
-        : form.tipoCambio.trim()
+    try {
+      const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
+      const moneda = form.moneda;
+      const rawM = Number(Number(form.monto).toFixed(2));
+      const tipoCambio =
+        moneda === 'USD'
           ? Number(Number(form.tipoCambio).toFixed(4))
-          : null;
-    const montoPENReferencia =
-      moneda === 'USD' && tipoCambio != null && tipoCambio > 0
-        ? Number((rawM * tipoCambio).toFixed(2))
-        : rawM;
-    onSubmit({
-      fecha: form.fecha,
-      fechaRegistro: todayStr(),
-      vehicleId: Number(form.vehicleId),
-      tipo: form.tipo,
-      subTipo: form.subTipo || null,
-      fechaDesde: form.fechaDesde.trim() || null,
-      fechaHasta: form.fechaHasta.trim() || null,
-      metodoPago: form.metodoPago,
-      metodoPagoDetalle: form.metodoPagoDetalle.trim(),
-      celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
-      signo: '+',
-      monto: rawM,
-      moneda,
-      tipoCambio,
-      montoPENReferencia,
-      comentarios: form.comentarios,
-    });
-    setForm(emptyForm());
-    setErrors({});
-    setLoading(false);
+          : form.tipoCambio.trim()
+            ? Number(Number(form.tipoCambio).toFixed(4))
+            : null;
+      const montoPENReferencia =
+        moneda === 'USD' && tipoCambio != null && tipoCambio > 0
+          ? Number((rawM * tipoCambio).toFixed(2))
+          : rawM;
+      await Promise.resolve(
+        onSubmit({
+          fecha: form.fecha,
+          fechaRegistro: todayStr(),
+          vehicleId: Number(form.vehicleId),
+          tipo: form.tipo,
+          subTipo: form.subTipo || null,
+          fechaDesde: form.fechaDesde.trim() || null,
+          fechaHasta: form.fechaHasta.trim() || null,
+          metodoPago: form.metodoPago,
+          metodoPagoDetalle: form.metodoPagoDetalle.trim(),
+          celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
+          signo: '+',
+          monto: rawM,
+          moneda,
+          tipoCambio,
+          montoPENReferencia,
+          comentarios: form.comentarios,
+        }),
+      );
+      setForm(emptyForm());
+      setErrors({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getVehicleDetail = (vehicleId: string) => {

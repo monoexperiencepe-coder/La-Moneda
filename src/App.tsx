@@ -4,6 +4,7 @@ import Preloader from './components/Preloader/Preloader';
 import MainLayout from './components/Layout/MainLayout';
 import { ToastContainer } from './components/Common/Toast';
 import { RegistrosProvider, useRegistrosContext } from './context/RegistrosContext';
+import { UndoActionProvider } from './context/UndoActionContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Auth
@@ -182,9 +183,11 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
-      <RegistrosProvider>
-        <AppContent />
-      </RegistrosProvider>
+      <UndoActionProvider>
+        <RegistrosProvider>
+          <AppContent />
+        </RegistrosProvider>
+      </UndoActionProvider>
     </AuthProvider>
   );
 };

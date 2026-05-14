@@ -15,6 +15,7 @@ import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { useAuth } from '../../context/AuthContext';
+import { useUndoAction } from '../../context/UndoActionContext';
 import { gastoMatchesTipoGasto, tipoGastoUiCanonical } from '../../utils/gastosTipoGasto';
 import {
   getSubtipoFinancieroLabel,
@@ -111,7 +112,8 @@ interface GastosProps {
 const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = false }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { gastos, vehicles, deleteGasto, refreshFromSupabase, toast, addGasto } = useRegistrosContext();
+  const { gastos, vehicles, deleteGasto, upsertGasto, toast, addGasto } = useRegistrosContext();
+  const { registerUndoable } = useUndoAction();
   const { canEditFinances } = useAuth();
 
   const isInversionesPage = mode === 'inversiones';
@@ -560,16 +562,45 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       || moveSubtipo !== currentSubtipo
       || effectiveMoveVehicle !== effectiveCurrentVehicle
     );
+  const moveVehicleNum = moveVehicleId.trim() === '' ? NaN : Number(moveVehicleId);
+  const vehicleOkForTarget =
+    !targetNeedsVehicle || (Number.isFinite(moveVehicleNum) && moveVehicleNum > 0);
   const moveDisabled = !moveTarget
     || moveSaving
     || !hasAnyChange
-    || (targetNeedsVehicle && !moveVehicleId);
+    || !vehicleOkForTarget;
 
   const handleConfirmMoveCategoria = async () => {
     if (!moveTarget) return;
     if (moveDisabled) return;
-    const toVehicleId = targetNeedsVehicle ? Number(moveVehicleId) : null;
-    if (targetNeedsVehicle && !Number.isFinite(toVehicleId)) return;
+    const gastoId = moveTarget.id;
+    let excelExtraBefore: Record<string, unknown> = {};
+    try {
+      excelExtraBefore = JSON.parse(JSON.stringify(moveTarget.excelExtra ?? {})) as Record<string, unknown>;
+    } catch {
+      excelExtraBefore = {};
+    }
+    const prevTipo = moveTarget.tipo_gasto ?? null;
+    const prevSub = moveTarget.subtipo_gasto ?? null;
+    const prevVeh = moveTarget.vehicleId ?? null;
+    const prevEsGlobalFlota =
+      moveTarget.es_global_flota !== undefined && moveTarget.es_global_flota !== null
+        ? Boolean(moveTarget.es_global_flota)
+        : moveTarget.vehicleId == null;
+    const prevClasManual = moveTarget.clasificacion_manual ?? null;
+    const prevReqRev = moveTarget.requiere_revision ?? null;
+    const prevRevisadoAt = moveTarget.revisado_at ?? null;
+    const prevRevisadoPor = moveTarget.revisado_por ?? null;
+    const prevOrigen = moveTarget.origen_clasificacion ?? null;
+    let toVehicleId: number | null = null;
+    if (targetNeedsVehicle) {
+      const n = Number(moveVehicleId);
+      if (!Number.isFinite(n) || n <= 0) {
+        toast.error('Falta vehículo', 'Selecciona un N° de unidad válido (operativo o inversión requieren vehículo).');
+        return;
+      }
+      toVehicleId = n;
+    }
     const changedAt = new Date().toISOString();
     const prevExtra = (moveTarget.excelExtra && typeof moveTarget.excelExtra === 'object')
       ? moveTarget.excelExtra
@@ -593,7 +624,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
     setMoveSaving(true);
     try {
-      const updated = await updateGastoCategoriaManual(moveTarget.id, {
+      const result = await updateGastoCategoriaManual(moveTarget.id, {
         tipo_gasto: moveTipo,
         subtipo_gasto: moveSubtipo || null,
         vehicle_id: targetNeedsVehicle ? toVehicleId : null,
@@ -607,14 +638,53 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       }, {
         reason: moveMotivo.trim() || 'Mover gasto de categoría desde UI',
       });
-      if (!updated) {
-        toast.error('No se pudo mover la categoría', 'No se logró actualizar el gasto en Supabase.');
+      if (!result.ok) {
+        console.error('[Mover categoría] Detalle técnico', {
+          message: result.message,
+          gastoId: result.gastoId,
+          empresaIdFrontend: result.empresaIdFrontend,
+          empresaIdRow: result.empresaIdRow,
+          supabase: result.supabase,
+          updatePayload: result.updatePayload,
+          patchSummary: result.patchSummary,
+        });
+        const short =
+          result.supabase?.hint?.trim() ||
+          result.supabase?.details?.trim() ||
+          result.message;
+        toast.error('No se pudo mover la categoría', short.length > 180 ? `${short.slice(0, 177)}…` : short);
         return;
       }
       toast.success('Categoría actualizada', 'El gasto se movió correctamente.');
-      await refreshFromSupabase();
+      upsertGasto(result.gasto);
+      registerUndoable({
+        id: `undo-move-gasto-${gastoId}-${Date.now()}`,
+        label: 'Revertir mover categoría de gasto',
+        undo: async () => {
+          const rev = await updateGastoCategoriaManual(
+            gastoId,
+            {
+              tipo_gasto: prevTipo,
+              subtipo_gasto: prevSub,
+              vehicle_id: prevVeh,
+              es_global_flota: prevEsGlobalFlota,
+              clasificacion_manual: prevClasManual,
+              requiere_revision: prevReqRev,
+              revisado_at: prevRevisadoAt,
+              revisado_por: prevRevisadoPor,
+              origen_clasificacion: prevOrigen,
+              excel_extra: Object.keys(excelExtraBefore).length > 0 ? excelExtraBefore : null,
+            },
+            { reason: 'Deshacer desde barra superior' },
+          );
+          if (!rev.ok) return false;
+          upsertGasto(rev.gasto);
+          return true;
+        },
+      });
       closeMoveModal();
     } catch (e) {
+      console.error('[Mover categoría] Excepción no controlada', e);
       toast.error('Error al mover categoría', e instanceof Error ? e.message : 'Error inesperado.');
     } finally {
       setMoveSaving(false);
@@ -970,6 +1040,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             onDeleteGasto={deleteGasto}
             showClasificacionFinanciera
             onMoveCategoriaGasto={canEditFinances ? openMoveModal : undefined}
+            onGastoDetalleSaved={canEditFinances ? upsertGasto : undefined}
           />
         )}
       </div>

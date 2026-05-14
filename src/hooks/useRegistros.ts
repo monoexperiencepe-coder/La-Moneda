@@ -90,6 +90,54 @@ function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
   return next;
 }
 
+/** Mismo orden que fetchUnidades: id desc (string / uuid). */
+function mergeUnidadSorted(prev: UnidadRegistro[], row: UnidadRegistro): UnidadRegistro[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => String(b.id).localeCompare(String(a.id), undefined, { numeric: true }));
+  return next;
+}
+
+function mergeConductorSorted(prev: Conductor[], row: Conductor): Conductor[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => b.id - a.id);
+  return next;
+}
+
+function mergeKilometrajeSorted(prev: KilometrajeRegistro[], row: KilometrajeRegistro): KilometrajeRegistro[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
+function mergePendienteSorted(prev: Pendiente[], row: Pendiente): Pendiente[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
+function mergeRegistroTiempoSorted(prev: RegistroTiempo[], row: RegistroTiempo): RegistroTiempo[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
 export const useRegistros = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
@@ -137,6 +185,14 @@ export const useRegistros = () => {
       setControlFechasHistoryLoading(false);
     }
   }, [historyPageSize]);
+
+  /** RPC resumen + re-paginar historial si el usuario lo tenía abierto (sin refresh global). */
+  const refreshControlFechasViews = useCallback(async () => {
+    const latest = await fetchLatestControlFechasByVehicle();
+    setControlFechas(latest);
+    const q = historyQueryRef.current;
+    if (q) await loadControlFechasHistory(q.filters, q.page);
+  }, [loadControlFechasHistory]);
 
   const refreshFromSupabase = useCallback(async () => {
     if (refreshInFlightRef.current) {
@@ -281,98 +337,112 @@ export const useRegistros = () => {
     async (row: Omit<UnidadRegistro, 'id' | 'createdAt'>) => {
       const created = await insertUnidad(row);
       if (!created) throw new Error('No se pudo guardar la unidad en Supabase.');
-      await refreshFromSupabase();
+      setUnidades((prev) => mergeUnidadSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const addConductor = useCallback(
     async (row: Omit<Conductor, 'id' | 'createdAt'>) => {
       const created = await insertConductor(row);
       if (!created) throw new Error('No se pudo guardar el conductor en Supabase.');
-      await refreshFromSupabase();
+      setConductores((prev) => mergeConductorSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const addControlFecha = useCallback(
     async (row: Omit<ControlFecha, 'id' | 'createdAt'>) => {
       const created = await insertControlFecha(row);
       if (!created) throw new Error('No se pudo guardar el control de fecha en Supabase.');
-      await refreshFromSupabase();
+      await refreshControlFechasViews();
       return created;
     },
-    [refreshFromSupabase],
+    [refreshControlFechasViews],
   );
 
   const addKilometraje = useCallback(
     async (row: Omit<KilometrajeRegistro, 'id' | 'createdAt'>) => {
       const created = await insertKilometraje(row);
       if (!created) throw new Error('No se pudo guardar el kilometraje en Supabase.');
-      await refreshFromSupabase();
+      setKilometrajes((prev) => mergeKilometrajeSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const addPendiente = useCallback(
     async (row: Omit<Pendiente, 'id' | 'createdAt'>) => {
       const created = await insertPendiente(row);
       if (!created) throw new Error('No se pudo guardar el pendiente en Supabase.');
-      await refreshFromSupabase();
+      setPendientes((prev) => mergePendienteSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const updatePendiente = useCallback(
     async (id: number, patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>): Promise<Pendiente | null> => {
       const updated = await patchPendiente(id, patch);
       if (!updated) return null;
-      await refreshFromSupabase();
+      setPendientes((prev) => mergePendienteSorted(prev, updated));
       return updated;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const deletePendiente = useCallback(
     async (id: number) => {
+      let prevSnapshot: Pendiente[] = [];
+      setPendientes((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((p) => p.id !== id);
+      });
       const ok = await removePendiente(id);
-      if (!ok) throw new Error('No se pudo eliminar el pendiente.');
-      await refreshFromSupabase();
+      if (!ok) {
+        setPendientes(prevSnapshot);
+        throw new Error('No se pudo eliminar el pendiente.');
+      }
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const addRegistroTiempo = useCallback(
     async (row: Omit<RegistroTiempo, 'id' | 'createdAt'>) => {
       const created = await insertRegistroTiempo(row);
       if (!created) throw new Error('No se pudo guardar el registro de tiempo en Supabase.');
-      await refreshFromSupabase();
+      setRegistrosTiempo((prev) => mergeRegistroTiempoSorted(prev, created));
       return created;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const updateRegistroTiempo = useCallback(
     async (id: number, patch: Partial<Omit<RegistroTiempo, 'id' | 'createdAt'>>): Promise<RegistroTiempo | null> => {
       const updated = await patchRegistroTiempo(id, patch);
       if (!updated) return null;
-      await refreshFromSupabase();
+      setRegistrosTiempo((prev) => mergeRegistroTiempoSorted(prev, updated));
       return updated;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const deleteRegistroTiempo = useCallback(
     async (id: number) => {
+      let prevSnapshot: RegistroTiempo[] = [];
+      setRegistrosTiempo((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((r) => r.id !== id);
+      });
       const ok = await removeRegistroTiempo(id);
-      if (!ok) throw new Error('No se pudo eliminar el registro de tiempo.');
-      await refreshFromSupabase();
+      if (!ok) {
+        setRegistrosTiempo(prevSnapshot);
+        throw new Error('No se pudo eliminar el registro de tiempo.');
+      }
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const addPrestamoAbono = useCallback((abono: Omit<PrestamoAbono, 'id' | 'createdAt'>) => {
@@ -418,14 +488,22 @@ export const useRegistros = () => {
     }
   }, []);
 
-  const deleteGasto = useCallback(
-    async (id: number) => {
-      const ok = await removeGasto(id);
-      if (!ok) throw new Error('No se pudo eliminar el gasto.');
-      await refreshFromSupabase();
-    },
-    [refreshFromSupabase],
-  );
+  const deleteGasto = useCallback(async (id: number) => {
+    let prevSnapshot: Gasto[] = [];
+    setGastos((prev) => {
+      prevSnapshot = prev;
+      return prev.filter((g) => g.id !== id);
+    });
+    const ok = await removeGasto(id);
+    if (!ok) {
+      setGastos(prevSnapshot);
+      throw new Error('No se pudo eliminar el gasto.');
+    }
+  }, []);
+
+  const upsertGasto = useCallback((row: Gasto) => {
+    setGastos((prev) => mergeGastoSorted(prev, row));
+  }, []);
 
   const deleteDescuento = useCallback((id: number) => {
     setDescuentos((prev) => prev.filter((d) => d.id !== id));
@@ -438,48 +516,69 @@ export const useRegistros = () => {
 
   const deleteUnidad = useCallback(
     async (id: string) => {
+      let prevSnapshot: UnidadRegistro[] = [];
+      setUnidades((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((u) => u.id !== id);
+      });
       const ok = await removeUnidad(id);
-      if (!ok) throw new Error('No se pudo eliminar la unidad.');
-      await refreshFromSupabase();
+      if (!ok) {
+        setUnidades(prevSnapshot);
+        throw new Error('No se pudo eliminar la unidad.');
+      }
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const deleteConductor = useCallback(
     async (id: number) => {
+      let prevSnapshot: Conductor[] = [];
+      setConductores((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((c) => c.id !== id);
+      });
       const ok = await removeConductor(id);
-      if (!ok) throw new Error('No se pudo eliminar el conductor.');
-      await refreshFromSupabase();
+      if (!ok) {
+        setConductores(prevSnapshot);
+        throw new Error('No se pudo eliminar el conductor.');
+      }
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const updateConductor = useCallback(
     async (id: number, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>): Promise<Conductor | null> => {
       const updated = await patchConductor(id, patch);
       if (!updated) return null;
-      await refreshFromSupabase();
+      setConductores((prev) => mergeConductorSorted(prev, updated));
       return updated;
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const deleteControlFecha = useCallback(
     async (id: number) => {
       const ok = await removeControlFecha(id);
       if (!ok) throw new Error('No se pudo eliminar el control de fecha.');
-      await refreshFromSupabase();
+      await refreshControlFechasViews();
     },
-    [refreshFromSupabase],
+    [refreshControlFechasViews],
   );
 
   const deleteKilometraje = useCallback(
     async (id: number) => {
+      let prevSnapshot: KilometrajeRegistro[] = [];
+      setKilometrajes((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((k) => k.id !== id);
+      });
       const ok = await removeKilometraje(id);
-      if (!ok) throw new Error('No se pudo eliminar el registro de kilometraje.');
-      await refreshFromSupabase();
+      if (!ok) {
+        setKilometrajes(prevSnapshot);
+        throw new Error('No se pudo eliminar el registro de kilometraje.');
+      }
     },
-    [refreshFromSupabase],
+    [],
   );
 
   const getVehicleLabel = useCallback(
@@ -548,6 +647,7 @@ export const useRegistros = () => {
     deleteRegistroTiempo,
     deleteIngreso,
     deleteGasto,
+    upsertGasto,
     deleteDescuento,
     deletePrestamo,
     deleteUnidad,

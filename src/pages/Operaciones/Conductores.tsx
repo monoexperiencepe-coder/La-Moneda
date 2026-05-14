@@ -17,6 +17,7 @@ import {
   Filter,
   X,
   Save,
+  Loader2,
 } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
@@ -167,6 +168,8 @@ const Conductores: React.FC = () => {
   const [nuevoForm, setNuevoForm] = useState(emptyNuevoConductorForm);
   const [nuevoError, setNuevoError] = useState('');
   const [nuevoBusy, setNuevoBusy] = useState(false);
+  const [editSaveBusyId, setEditSaveBusyId] = useState<number | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<number | null>(null);
 
   const hasActiveFilters = estadoFilter !== 'TODOS' || fechaDesde || fechaHasta || mesFiltro || anioFiltro || q;
 
@@ -262,26 +265,31 @@ const Conductores: React.FC = () => {
 
   const handleSaveConductor = useCallback(
     async (id: number, d: ConductorEditDraft) => {
-      const docFirm: boolean | null =
-        d.documentoFirmado === 'unset' ? null : d.documentoFirmado === 'true';
-      await updateConductor(id, {
-        nombres: d.nombres.trim(),
-        apellidos: d.apellidos.trim(),
-        tipoDocumento: d.tipoDocumento,
-        numeroDocumento: d.numeroDocumento.trim(),
-        domicilio: d.domicilio,
-        vehicleId: d.vehicleId.trim() === '' ? null : Number(d.vehicleId),
-        estadoContrato: d.estadoContrato,
-        celular: d.celular.trim(),
-        cochera: d.cochera.trim() || null,
-        direccion: d.direccion.trim() || null,
-        numeroEmergencia: d.numeroEmergencia.trim() || null,
-        fechaVencimientoContrato: d.fechaVencimientoContrato.trim() || null,
-        documentoFirmado: docFirm,
-        comentarios: d.comentarios.trim(),
-        estado: d.estado,
-        statusOriginal: d.statusOriginal.trim() || null,
-      });
+      setEditSaveBusyId(id);
+      try {
+        const docFirm: boolean | null =
+          d.documentoFirmado === 'unset' ? null : d.documentoFirmado === 'true';
+        await updateConductor(id, {
+          nombres: d.nombres.trim(),
+          apellidos: d.apellidos.trim(),
+          tipoDocumento: d.tipoDocumento,
+          numeroDocumento: d.numeroDocumento.trim(),
+          domicilio: d.domicilio,
+          vehicleId: d.vehicleId.trim() === '' ? null : Number(d.vehicleId),
+          estadoContrato: d.estadoContrato,
+          celular: d.celular.trim(),
+          cochera: d.cochera.trim() || null,
+          direccion: d.direccion.trim() || null,
+          numeroEmergencia: d.numeroEmergencia.trim() || null,
+          fechaVencimientoContrato: d.fechaVencimientoContrato.trim() || null,
+          documentoFirmado: docFirm,
+          comentarios: d.comentarios.trim(),
+          estado: d.estado,
+          statusOriginal: d.statusOriginal.trim() || null,
+        });
+      } finally {
+        setEditSaveBusyId((cur) => (cur === id ? null : cur));
+      }
     },
     [updateConductor],
   );
@@ -1023,10 +1031,16 @@ const Conductores: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-primary-100/60">
                           <button
                             type="button"
+                            disabled={editSaveBusyId === c.id || deleteBusyId === c.id}
                             onClick={() => void handleSaveConductor(c.id, draft)}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft disabled:opacity-50"
                           >
-                            <Save size={14} /> Guardar cambios
+                            {editSaveBusyId === c.id ? (
+                              <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
+                            ) : (
+                              <Save size={14} />
+                            )}
+                            {editSaveBusyId === c.id ? 'Guardando…' : 'Guardar cambios'}
                           </button>
                           <button
                             type="button"
@@ -1051,15 +1065,26 @@ const Conductores: React.FC = () => {
                           </a>
                           <button
                             type="button"
+                            disabled={deleteBusyId === c.id || editSaveBusyId === c.id}
                             onClick={() => {
                               void (async () => {
-                                const ok = await deleteConductor(c.id);
-                                if (ok) setExpandedId(null);
+                                setDeleteBusyId(c.id);
+                                try {
+                                  const ok = await deleteConductor(c.id);
+                                  if (ok) setExpandedId(null);
+                                } finally {
+                                  setDeleteBusyId((cur) => (cur === c.id ? null : cur));
+                                }
                               })();
                             }}
-                            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 border border-red-100 transition-colors"
+                            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 border border-red-100 transition-colors disabled:opacity-50"
                           >
-                            <Trash2 size={12} /> Eliminar
+                            {deleteBusyId === c.id ? (
+                              <Loader2 size={12} className="animate-spin shrink-0" aria-hidden />
+                            ) : (
+                              <Trash2 size={12} />
+                            )}
+                            Eliminar
                           </button>
                         </div>
                       </td>

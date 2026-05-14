@@ -74,6 +74,17 @@ function clipSegment(
 }
 
 /**
+ * Cuota mensual por interés simple: capital × tasa_anual / 12.
+ * `tasaAnualDecimal` es fracción anual (0.12 = 12 %).
+ */
+export function cuotaMensualDesdeCapitalYTasaAnual(capital: number, tasaAnualDecimal: number): number {
+  if (!Number.isFinite(capital) || !Number.isFinite(tasaAnualDecimal) || capital < 0 || tasaAnualDecimal < 0) {
+    return 0;
+  }
+  return Math.round(((capital * tasaAnualDecimal) / 12) * 100) / 100;
+}
+
+/**
  * Cuota mensual estimada según modalidad (montos coherentes con moneda de pago en UI).
  * - cuota_fija: cuota_fija_mensual o interes_mensual_actual.
  * - tasa_anual: capital × tasa / 12, o interes_mensual_actual si no hay tasa.
@@ -86,12 +97,12 @@ export function interesMensualEstimadoPrestamo(p: PrestamoFinanciero): number {
   }
   const rate = p.tasaAnual;
   if (rate != null && Number.isFinite(rate)) {
-    return (p.capitalActualEstimado * rate) / 12;
+    return cuotaMensualDesdeCapitalYTasaAnual(p.capitalActualEstimado, rate);
   }
   return p.interesMensualActual;
 }
 
-function interesMensualEfectivoTramo(t: PrestamoFinancieroTramo, fallbackCapital: number): number {
+export function interesMensualEfectivoTramo(t: PrestamoFinancieroTramo, fallbackCapital: number): number {
   if (t.modalidadPago === 'cuota_fija') {
     if (t.interesMensual != null && Number.isFinite(t.interesMensual)) return t.interesMensual;
     if (t.cuotaFijaMensual != null && Number.isFinite(t.cuotaFijaMensual)) return t.cuotaFijaMensual;
@@ -100,7 +111,7 @@ function interesMensualEfectivoTramo(t: PrestamoFinancieroTramo, fallbackCapital
   if (t.interesMensual != null && Number.isFinite(t.interesMensual)) return t.interesMensual;
   const cap = t.capitalReferencial ?? fallbackCapital;
   const rate = t.tasaAnual;
-  if (rate != null && Number.isFinite(rate)) return (cap * rate) / 12;
+  if (rate != null && Number.isFinite(rate)) return cuotaMensualDesdeCapitalYTasaAnual(cap, rate);
   return 0;
 }
 

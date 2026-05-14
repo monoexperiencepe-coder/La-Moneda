@@ -25,6 +25,10 @@ import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
 import { useAuth } from './AuthContext';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
+import { useUndoAction } from './UndoActionContext';
+import { insertGasto } from '../services/gastosService';
+import { insertIngreso } from '../services/ingresosService';
+import { omitGastoIds, omitIngresoIds } from '../utils/entityReinsertPayloads';
 
 interface RegistrosContextValue {
   vehicles: Vehicle[];
@@ -81,6 +85,8 @@ interface RegistrosContextValue {
   addDocumentacion: (data: Omit<Documentacion, 'id' | 'createdAt'>) => Documentacion;
   deleteIngreso: (id: string) => Promise<boolean>;
   deleteGasto: (id: number) => Promise<boolean>;
+  /** Actualiza o inserta un gasto en el estado local (misma orden que fetch). */
+  upsertGasto: (g: Gasto) => void;
   deleteDescuento: (id: number) => void;
   deletePrestamo: (id: number) => void;
   deleteUnidad: (id: string) => Promise<boolean>;
@@ -106,6 +112,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const registros = useRegistros();
   const toastHook = useToast();
   const { role } = useAuth();
+  const { registerUndoable } = useUndoAction();
 
   const handleAddIngreso = async (data: Omit<Ingreso, 'id' | 'createdAt'>) => {
     if (!canCreateIngresos(role)) {
@@ -228,9 +235,26 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       toastHook.error('No tienes permiso para eliminar ingresos');
       return false;
     }
+    const snapshot = registros.ingresos.find((i) => i.id === id);
     try {
       await registros.deleteIngreso(id);
       toastHook.success('Ingreso eliminado correctamente');
+      if (snapshot) {
+        registerUndoable({
+          id: `undo-ingreso-${id}-${Date.now()}`,
+          label: `Restaurar ingreso eliminado`,
+          undo: async () => {
+            try {
+              const restored = await insertIngreso(omitIngresoIds(snapshot));
+              if (!restored) return false;
+              await registros.refreshFromSupabase();
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar el ingreso', e instanceof Error ? e.message : '');
@@ -239,8 +263,25 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const handleDeleteGasto = async (id: number): Promise<boolean> => {
+    const snapshot = registros.gastos.find((g) => g.id === id);
     try {
       await registros.deleteGasto(id);
+      if (snapshot) {
+        registerUndoable({
+          id: `undo-gasto-${id}-${Date.now()}`,
+          label: `Restaurar gasto eliminado (#${id})`,
+          undo: async () => {
+            try {
+              const restored = await insertGasto(omitGastoIds(snapshot));
+              if (!restored) return false;
+              registros.upsertGasto(restored);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar el gasto', e instanceof Error ? e.message : '');
@@ -444,6 +485,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       addDocumentacion: handleAddDocumentacion,
       deleteIngreso: handleDeleteIngreso,
       deleteGasto: handleDeleteGasto,
+      upsertGasto: registros.upsertGasto,
       deleteDescuento: registros.deleteDescuento,
       deletePrestamo: registros.deletePrestamo,
       deleteUnidad: handleDeleteUnidad,
