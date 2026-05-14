@@ -171,11 +171,11 @@ const Ingresos: React.FC = () => {
     }
     if (chartMonth === 'ALL') {
       return MESES.map((mes) => {
-        const month = String(mes.value).padStart(2, '0');
+      const month = String(mes.value).padStart(2, '0');
         const total = ingresosChartBase
           .filter((i) => i.fecha.slice(5, 7) === month)
           .reduce((s, i) => s + ingresoMontoPEN(i), 0);
-        return { mes: mes.label.slice(0, 3), total };
+      return { mes: mes.label.slice(0, 3), total };
       });
     }
     if (!Number.isFinite(chartYearNum) || chartMonth.length !== 2) return [];
@@ -486,7 +486,7 @@ const Ingresos: React.FC = () => {
             className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-emerald-700"
           >
             + Registrar ingreso
-          </button>
+        </button>
         </div>
       </div>
 
@@ -745,9 +745,9 @@ const Ingresos: React.FC = () => {
                           Mayor monto
                         </button>
                       </div>
-                  </div>
-                </div>
-              </div>
+        </div>
+        </div>
+      </div>
 
               {displayedVehicleRows.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 py-8 text-center text-sm text-slate-500">
@@ -817,7 +817,7 @@ const Ingresos: React.FC = () => {
 
       <div className="border-t border-slate-200/80 pt-8">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">Historial de ingresos</h2>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">

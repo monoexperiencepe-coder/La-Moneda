@@ -60,10 +60,11 @@ const Header: React.FC = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-soft">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
-        <div className="relative flex h-16 items-center">
-          {/* Izquierda: inicio compacto + nav desktop (no invade el centro) */}
-          <div className="relative z-20 flex min-w-0 flex-1 items-center gap-1 sm:gap-2 pr-2 max-w-[calc(50%-7rem)] lg:max-w-[calc(50%-9rem)]">
+      <div className="mx-auto max-w-screen-2xl px-3 sm:px-6">
+        {/* Rejilla 3 columnas: el título ya no usa absolute (evita solapamiento en móvil) */}
+        <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
+          {/* Izquierda: inicio compacto + nav desktop */}
+          <div className="relative z-20 flex min-w-0 items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={() => navigate('/')}
@@ -90,38 +91,38 @@ const Header: React.FC = () => {
             </nav>
           </div>
 
-          {/* Centro: título fijo (no choca: capas + ancho reservado arriba) */}
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-16 sm:px-20">
+          {/* Centro: título acotado al hueco real (truncate en pantallas estrechas) */}
+          <div className="relative z-10 flex min-w-0 justify-center px-1 sm:px-2">
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="pointer-events-auto flex items-center gap-2 rounded-xl px-2 py-1 transition-colors hover:bg-gray-50/90 active:scale-[0.98]"
+              className="flex min-w-0 max-w-full items-center gap-1.5 rounded-xl px-1.5 py-1 transition-colors hover:bg-gray-50/90 active:scale-[0.98] sm:gap-2 sm:px-2"
               aria-label="La Moneda — Ir al inicio"
             >
-              <span className="text-lg leading-none select-none sm:text-xl" aria-hidden>
+              <span className="flex-shrink-0 text-base leading-none select-none sm:text-lg" aria-hidden>
                 🪙
               </span>
-              <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-base font-bold tracking-tight text-transparent sm:text-lg">
+              <span className="truncate bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-sm font-bold tracking-tight text-transparent sm:text-base md:text-lg">
                 LA MONEDA
               </span>
             </button>
           </div>
 
-          {/* Derecha: acciones */}
-          <div className="relative z-20 ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 pl-2 max-w-[calc(50%-7rem)] lg:max-w-[calc(50%-9rem)] sm:gap-2 sm:pl-3">
+          {/* Derecha: acciones (orden fijo; en móvil el deshacer lleva más contraste si hay acción pendiente) */}
+          <div className="relative z-20 flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5">
             <button
               type="button"
               onClick={() => void handleGlobalUndo()}
               disabled={undoDisabled}
               className={`relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
                 undoDisabled
-                  ? 'cursor-not-allowed text-gray-300 bg-gray-50/80'
-                  : 'text-indigo-600 hover:bg-indigo-50 border border-indigo-100'
+                  ? 'cursor-not-allowed text-gray-300 bg-gray-50/90'
+                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-100/80 hover:bg-indigo-100/90 hover:ring-indigo-200'
               }`}
               aria-label="Deshacer última acción"
               title={undoTitle}
             >
-              <Undo2 size={18} className={undoRunning ? 'animate-pulse' : ''} />
+              <Undo2 size={18} strokeWidth={2.25} className={undoRunning ? 'animate-pulse' : ''} />
             </button>
             <button
               type="button"

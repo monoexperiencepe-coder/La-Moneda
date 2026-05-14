@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   Ingreso,
   Gasto,
@@ -53,6 +53,7 @@ import { fetchInversionesVehiculo } from '../services/inversionesVehiculoService
 import { fetchGastosCaja } from '../services/gastosCajaService';
 import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
+import { useAuth } from '../context/AuthContext';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -164,6 +165,14 @@ export const useRegistros = () => {
   const [gastosCaja, setGastosCaja] = useState<GastoCaja[]>([]);
   const [cajaNegocioVehiculo, setCajaNegocioVehiculo] = useState<CajaNegocioVehiculo[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const { isAuthenticated } = useAuth();
+  /**
+   * Tras login / sesión restaurada: `false` hasta terminar refresh + margen mínimo UI.
+   * Con sesión cerrada: `true` (no bloquea overlay).
+   */
+  const [registrosBootstrapComplete, setRegistrosBootstrapComplete] = useState(true);
+  const [registrosBootstrapLoading, setRegistrosBootstrapLoading] = useState(false);
+  const [registrosBootstrapStarted, setRegistrosBootstrapStarted] = useState(false);
 
   const loadControlFechasHistory = useCallback(async (filters: ControlFechasHistoryFilters, page: number) => {
     historyQueryRef.current = { filters, page };
@@ -245,9 +254,60 @@ export const useRegistros = () => {
     }
   }, [loadControlFechasHistory]);
 
+  /**
+   * Sin sesión: listo (no overlay). Con sesión: incompleto antes de pintar el dashboard,
+   * para evitar un frame sin overlay tras login.
+   */
+  useLayoutEffect(() => {
+    if (!isAuthenticated) {
+      setRegistrosBootstrapComplete(true);
+      setRegistrosBootstrapLoading(false);
+      setRegistrosBootstrapStarted(false);
+    } else {
+      setRegistrosBootstrapComplete(false);
+      setRegistrosBootstrapLoading(true);
+      setRegistrosBootstrapStarted(true);
+    }
+  }, [isAuthenticated]);
+
+  /** Con sesión: refresh + mínimo 1200 ms desde inicio de este ciclo; tope MAX_MS. */
   useEffect(() => {
-    void refreshFromSupabase();
-  }, [refreshFromSupabase]);
+    if (!isAuthenticated) return;
+
+    let canceled = false;
+    const t0 = performance.now();
+    const MIN_MS = 1200;
+    const MAX_MS = 24000;
+
+    const forceDone = window.setTimeout(() => {
+      if (!canceled) {
+        setRegistrosBootstrapLoading(false);
+        setRegistrosBootstrapComplete(true);
+        setRegistrosBootstrapStarted(false);
+      }
+    }, MAX_MS);
+
+    void refreshFromSupabase()
+      .catch(() => {
+        /* errores ya logueados en servicios */
+      })
+      .finally(() => {
+        if (canceled) return;
+        window.clearTimeout(forceDone);
+        const wait = Math.max(0, MIN_MS - (performance.now() - t0));
+        window.setTimeout(() => {
+          if (canceled) return;
+          setRegistrosBootstrapLoading(false);
+          setRegistrosBootstrapComplete(true);
+          setRegistrosBootstrapStarted(false);
+        }, wait);
+      });
+
+    return () => {
+      canceled = true;
+      window.clearTimeout(forceDone);
+    };
+  }, [isAuthenticated, refreshFromSupabase]);
 
   const addIngreso = useCallback(
     async (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => {
@@ -659,5 +719,8 @@ export const useRegistros = () => {
     setVehicles,
     setUnidades,
     refreshFromSupabase,
+    registrosBootstrapComplete,
+    registrosBootstrapLoading,
+    registrosBootstrapStarted,
   };
 };

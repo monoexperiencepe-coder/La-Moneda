@@ -694,12 +694,12 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   return (
     <div className="space-y-4 animate-fade-in">
       {!hidePageChrome ? (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/finanzas')} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
-              <ChevronLeft size={20} />
-            </button>
-            <div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/finanzas')} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+            <ChevronLeft size={20} />
+          </button>
+          <div>
               <h1 className="text-xl font-bold text-gray-900">
                 {isInversionesPage ? '🚗 Inversiones' : '💸 Gastos'}
               </h1>
@@ -737,8 +737,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow-soft transition-all"
           >
             + Registrar inversión
-          </button>
-        </div>
+        </button>
+      </div>
       ) : null}
 
       {tab == null && !isInversionesPage && (
@@ -1120,9 +1120,9 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             )}
             {isInversionTarget && !moveVehicleId && (
               <p className="text-xs text-amber-700">Debes seleccionar un vehículo para inversión con utilidad.</p>
-            )}
+      )}
 
-            <div>
+      <div>
               <label htmlFor="motivo-cambio-categoria" className="label">Motivo del cambio (opcional)</label>
               <textarea
                 id="motivo-cambio-categoria"
@@ -1136,7 +1136,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             {!hasAnyChange && (
               <p className="text-xs text-gray-500">No hay cambios para guardar.</p>
             )}
-          </div>
+      </div>
         )}
       </Modal>
 

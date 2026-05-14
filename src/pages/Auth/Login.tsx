@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const C = 2 * Math.PI * 44;
 
-/** Tiempo de intro antes de mostrar marca + formulario (ms). */
-const LOGIN_INTRO_MS = 4000;
+/** Tras el preloader global: mensaje dentro del card antes del formulario (ms). */
+const LOGIN_CARD_INTRO_MS = 3000;
 
 /** Panal hexagonal (tile); combine con la rejilla y el violeta del login. */
 const HEX_TILE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="60" viewBox="0 0 52 60"><path fill="none" stroke="#6366f1" stroke-width="0.45" d="M26 1.5 L49.5 15.25 L49.5 42.75 L26 56.5 L2.5 42.75 L2.5 15.25 Z"/></svg>`;
@@ -31,28 +31,58 @@ const LOGIN_BG_CSS = `
 .lm-aurora-layer {
   animation: lmAuroraDrift 52s ease-in-out infinite;
 }
-@keyframes lmLoginIntroBar {
+/* Fase “cargando sistema” dentro del card */
+@keyframes lmLoginCardIntroBar {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
 }
-@keyframes lmLoginIntroPulse {
-  0%, 100% { opacity: 0.65; filter: drop-shadow(0 0 12px rgba(139, 92, 246, 0.35)); }
-  50% { opacity: 1; filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.55)); }
-}
-.lm-login-intro-bar-fill {
+.lm-login-card-intro-bar-fill {
   transform-origin: left center;
   transform: scaleX(0);
-  animation: lmLoginIntroBar var(--login-intro, 4s) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: lmLoginCardIntroBar var(--login-card-intro, 3s) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-.lm-login-intro-icon {
-  animation: lmLoginIntroPulse 2.2s ease-in-out infinite;
+@keyframes lmLoginCardIntroShimmer {
+  0% { transform: translateX(-120%) skewX(-8deg); opacity: 0; }
+  14% { opacity: 0.2; }
+  100% { transform: translateX(120%) skewX(-8deg); opacity: 0; }
+}
+.lm-login-card-intro-shimmer {
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.05) 42%,
+    rgba(34, 211, 238, 0.035) 50%,
+    rgba(139, 92, 246, 0.05) 58%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: lmLoginCardIntroShimmer 11s ease-in-out infinite;
+}
+/* Revelado del contenido del card (una vez al terminar la fase intro) */
+@keyframes lmLoginRevealIn {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.lm-login-reveal {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+}
+.lm-login-reveal--on {
+  animation: lmLoginRevealIn 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--reveal-d, 0ms);
 }
 @media (prefers-reduced-motion: reduce) {
   .lm-aurora-layer { animation: none; opacity: 0.92; }
   .lm-hex-layer { animation: none !important; }
   .lm-scan-layer { animation: none !important; opacity: 0; }
-  .lm-login-intro-bar-fill { animation: none; transform: scaleX(1); }
-  .lm-login-intro-icon { animation: none; opacity: 1; }
+  .lm-login-card-intro-bar-fill { animation: none; transform: scaleX(1); }
+  .lm-login-card-intro-shimmer { animation: none !important; opacity: 0; }
+  .lm-login-reveal,
+  .lm-login-reveal--on {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 `;
 
@@ -65,8 +95,10 @@ const Login: React.FC = () => {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Tras el preloader: intro dentro del card antes de marca + formulario */
-  const [loginUiReady, setLoginUiReady] = useState(false);
+  const [loginCardReady, setLoginCardReady] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
 
   /* ambient spin ring — purely decorative */
   const [ring, setRing] = useState(0);
@@ -87,15 +119,10 @@ const Login: React.FC = () => {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
-    const reduceMotion = typeof window !== 'undefined'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      setLoginUiReady(true);
-      return;
-    }
-    const id = window.setTimeout(() => setLoginUiReady(true), LOGIN_INTRO_MS);
+    if (loginCardReady) return;
+    const id = window.setTimeout(() => setLoginCardReady(true), LOGIN_CARD_INTRO_MS);
     return () => window.clearTimeout(id);
-  }, []);
+  }, [loginCardReady]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +140,9 @@ const Login: React.FC = () => {
   };
 
   const arcOffset = C * ring;
+  const reveal = () => `lm-login-reveal ${loginCardReady ? 'lm-login-reveal--on' : ''}`;
+  const revealStyle = (delayMs: number): React.CSSProperties =>
+    ({ ['--reveal-d' as string]: `${delayMs}ms` });
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950 overflow-hidden">
@@ -213,72 +243,75 @@ const Login: React.FC = () => {
             border: '1px solid rgba(99,102,241,0.18)',
             boxShadow: '0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)',
             backdropFilter: 'blur(24px)',
-            ['--login-intro' as string]: `${LOGIN_INTRO_MS}ms`,
+            ['--login-card-intro' as string]: `${LOGIN_CARD_INTRO_MS}ms`,
           }}
-          aria-busy={!loginUiReady}
+          aria-busy={!loginCardReady}
         >
-          {/* Intro: cargando sistema (misma estética índigo/violeta) */}
+          {/* Fase post-preloader: solo texto + barra + barrido suave */}
           <div
-            className={`absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl px-8 transition-opacity duration-700 ease-out ${
-              loginUiReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            className={`absolute inset-0 z-20 flex flex-col items-center justify-center overflow-hidden rounded-2xl transition-opacity duration-500 ease-out ${
+              loginCardReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
             }`}
             style={{
-              background: 'linear-gradient(165deg, rgba(15,23,42,0.97) 0%, rgba(30,27,75,0.55) 100%)',
+              background: 'linear-gradient(165deg, rgba(15,23,42,0.98) 0%, rgba(30,27,75,0.52) 100%)',
             }}
-            aria-hidden={loginUiReady}
+            aria-hidden={loginCardReady}
           >
-            <div className="lm-login-intro-icon mb-6 flex h-16 w-16 items-center justify-center rounded-2xl"
-              style={{
-                background: 'linear-gradient(145deg, rgba(99,102,241,0.35), rgba(139,92,246,0.2))',
-                border: '1px solid rgba(129,140,248,0.35)',
-                boxShadow: '0 12px 40px rgba(79,70,229,0.25), inset 0 1px 0 rgba(255,255,255,0.08)',
-              }}
-            >
-              <Sparkles className="text-indigo-200" size={30} strokeWidth={1.5} />
-            </div>
-            <p
-              className="text-center text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400 mb-2"
-            >
-              Inicializando
-            </p>
-            <h2
-              className="text-center text-lg sm:text-xl font-bold tracking-tight px-2 mb-8 max-w-[280px]"
-              style={{
-                background: 'linear-gradient(90deg, #fff 0%, #c4b5fd 45%, #818cf8 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              Cargando sistema inteligente
-            </h2>
-            <div className="w-full max-w-[240px]">
+            <div
+              className="lm-login-card-intro-shimmer pointer-events-none absolute inset-0 rounded-2xl opacity-90"
+              aria-hidden
+            />
+            <div className="relative z-10 flex max-w-[280px] flex-col items-center px-6 text-center">
               <div
-                className="h-1.5 w-full rounded-full overflow-hidden"
-                style={{ background: 'rgba(255,255,255,0.06)' }}
+                className="mb-5 h-12 w-12 shrink-0 rounded-full border-[3px] border-indigo-950/70 border-t-indigo-400 border-r-violet-400/50 animate-spin motion-reduce:animate-none motion-reduce:border-t-indigo-400/80"
+                style={{ boxShadow: '0 0 22px rgba(99, 102, 241, 0.35)' }}
+                aria-hidden
+              />
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">
+                Inicializando
+              </p>
+              <h2
+                className="mb-8 text-lg font-bold tracking-tight sm:text-xl"
+                style={{
+                  background: 'linear-gradient(90deg, #fff 0%, #c4b5fd 45%, #818cf8 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
               >
+                Cargando sistema inteligente
+              </h2>
+              <div className="w-full max-w-[240px]">
                 <div
-                  className="lm-login-intro-bar-fill h-full rounded-full"
-                  style={{
-                    background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #22d3ee)',
-                    boxShadow: '0 0 14px rgba(139,92,246,0.45)',
-                  }}
-                />
+                  className="h-1.5 w-full overflow-hidden rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}
+                >
+                  <div
+                    className="lm-login-card-intro-bar-fill h-full rounded-full"
+                    style={{
+                      background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #22d3ee)',
+                      boxShadow: '0 0 12px rgba(139,92,246,0.4)',
+                    }}
+                  />
+                </div>
               </div>
+              <p className="mt-5 text-[10px] tracking-wide text-slate-500">
+                Preparando acceso seguro
+              </p>
             </div>
-            <p className="mt-5 text-[10px] text-slate-500 text-center tracking-wide">
-              Calibrando tu espacio de trabajo
-            </p>
           </div>
 
-          {/* Contenido real del login */}
           <div
-            className={`relative z-10 flex w-full flex-col items-center transition-all duration-700 ease-out ${
-              loginUiReady ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-5 blur-[6px] pointer-events-none select-none'
+            className={`relative z-10 flex w-full flex-col items-center ${
+              loginCardReady ? 'pointer-events-auto' : 'pointer-events-none select-none'
             }`}
+            aria-hidden={!loginCardReady}
           >
           {/* Spinning ring + coin */}
-          <div className="relative mb-6" style={{ width: 80, height: 80 }}>
+          <div
+            className={`relative mb-6 ${reveal()}`}
+            style={{ ...revealStyle(0), width: 80, height: 80 }}
+          >
             <div
               aria-hidden
               style={{
@@ -318,8 +351,9 @@ const Login: React.FC = () => {
 
           {/* Brand */}
           <h1
-            className="mb-0.5 font-black tracking-tight whitespace-nowrap"
+            className={`mb-0.5 font-black tracking-tight whitespace-nowrap ${reveal()}`}
             style={{
+              ...revealStyle(55),
               fontSize: '2rem',
               background: 'linear-gradient(90deg,#fff 0%,#C4B5FD 50%,#818CF8 100%)',
               WebkitBackgroundClip: 'text',
@@ -329,19 +363,23 @@ const Login: React.FC = () => {
           >
             LA MONEDA
           </h1>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 mb-1">
+          <p
+            className={`mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 ${reveal()}`}
+            style={revealStyle(110)}
+          >
             Gestión Financiera
           </p>
           <p
-            className="text-[10px] uppercase tracking-[0.16em] mb-7 text-white/95 font-medium [text-shadow:0_0_18px_rgba(255,255,255,0.35),0_0_10px_rgba(196,181,253,0.5)]"
+            className={`mb-7 text-[10px] font-medium uppercase tracking-[0.16em] text-white/95 [text-shadow:0_0_18px_rgba(255,255,255,0.35),0_0_10px_rgba(196,181,253,0.5)] ${reveal()}`}
+            style={revealStyle(165)}
           >
             Flota · Taxis · InDrive
           </p>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="w-full space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
+            <div className={reveal()} style={revealStyle(220)}>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Email
               </label>
               <input
@@ -362,8 +400,8 @@ const Login: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
+            <div className={reveal()} style={revealStyle(285)}>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Contraseña
               </label>
               <div className="relative">
@@ -395,17 +433,21 @@ const Login: React.FC = () => {
             </div>
 
             {error && (
-              <div className="rounded-xl px-4 py-2.5 text-sm font-medium text-red-300"
-                style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <div
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-red-300 transition-opacity duration-300"
+                style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.2)' }}
+              >
                 {error}
               </div>
             )}
 
+            {loginCardReady && (
             <button
               type="submit"
-              disabled={loading || !email || !password}
-              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${reveal()}`}
               style={{
+                ...revealStyle(350),
                 background: loading
                   ? 'rgba(99,102,241,0.5)'
                   : 'linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)',
@@ -413,15 +455,19 @@ const Login: React.FC = () => {
               }}
             >
               {loading ? (
-                <span className="inline-block w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               ) : (
                 <LogIn size={16} />
               )}
-              {loading ? 'Verificando…' : 'Ingresar'}
+              <span>{loading ? 'Verificando…' : 'Ingresar'}</span>
             </button>
+            )}
           </form>
 
-          <p className="mt-6 text-[11px] text-slate-600 text-center">
+          <p
+            className={`mt-6 text-center text-[11px] text-slate-600 ${reveal()}`}
+            style={revealStyle(415)}
+          >
             La Moneda · Sistema privado de gestión
           </p>
           </div>

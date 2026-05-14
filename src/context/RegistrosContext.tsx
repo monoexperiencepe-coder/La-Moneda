@@ -104,6 +104,12 @@ interface RegistrosContextValue {
     info: (title: string, message?: string) => void;
   };
   refreshFromSupabase: () => Promise<void>;
+  /** Con sesión: `false` hasta terminar la primera carga post-auth (+ mín. 1,2 s). Sin sesión: `true`. */
+  registrosBootstrapComplete: boolean;
+  /** `true` mientras corre el refresh del ciclo post-autenticación. */
+  registrosBootstrapLoading: boolean;
+  /** `true` desde que arranca el ciclo post-auth hasta marcar complete. */
+  registrosBootstrapStarted: boolean;
 }
 
 const RegistrosContext = createContext<RegistrosContextValue | null>(null);
@@ -503,6 +509,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
         info: toastHook.info,
       },
       refreshFromSupabase: registros.refreshFromSupabase,
+      registrosBootstrapComplete: registros.registrosBootstrapComplete,
+      registrosBootstrapLoading: registros.registrosBootstrapLoading,
+      registrosBootstrapStarted: registros.registrosBootstrapStarted,
     }}>
       {children}
     </RegistrosContext.Provider>
