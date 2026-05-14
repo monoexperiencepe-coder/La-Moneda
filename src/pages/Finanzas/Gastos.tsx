@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -29,6 +29,12 @@ import {
   normalizeRepresentacionInternaSubtipo,
 } from '../../utils/representacionInternaSubtipoLabel';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
+import {
+  getDefaultSubtipoForTipoGasto,
+  getValidSubtiposForTipoGastoFinanza,
+  normalizeSubtipoForTipoGasto,
+  tipoGastoRequiereVehiculo,
+} from '../../utils/gastoMoveCategoriaDefaults';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
 
@@ -491,37 +497,24 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   );
 
   const subtipoOptionsForMove = useMemo(() => {
-    const set = new Set<string>();
-    if (moveTipo === 'representacion_interna') {
-      for (const c of SUBTIPOS_REPRESENTACION_INTERNA) set.add(c);
-    }
+    const base = new Set<string>(getValidSubtiposForTipoGastoFinanza(moveTipo));
+    const def = getDefaultSubtipoForTipoGasto(moveTipo);
+    if (def) base.add(def);
     for (const g of gastos) {
       if (!gastoMatchesTipoGasto(g, moveTipo)) continue;
       const s = g.subtipo_gasto?.trim();
       if (!s) continue;
-      if (moveTipo === 'representacion_interna') {
-        const c = normalizeRepresentacionInternaSubtipo(s);
-        if (c) set.add(c);
-        else set.add(s);
-      } else {
-        set.add(s);
-      }
+      base.add(normalizeSubtipoForTipoGasto(moveTipo, s));
     }
     if (moveTarget?.subtipo_gasto?.trim()) {
-      const s = moveTarget.subtipo_gasto.trim();
-      if (moveTipo === 'representacion_interna') {
-        const c = normalizeRepresentacionInternaSubtipo(s);
-        if (c) set.add(c);
-        else set.add(s);
-      } else {
-        set.add(s);
-      }
+      base.add(normalizeSubtipoForTipoGasto(moveTipo, moveTarget.subtipo_gasto));
     }
     const labelFor = (v: string) =>
       moveTipo === 'representacion_interna'
         ? getRepresentacionInternaSubtipoLabel(v)
         : getSubtipoFinancieroLabel(v);
-    return [{ value: '', label: 'Sin subtipo' }, ...[...set].sort().map((s) => ({ value: s, label: labelFor(s) }))];
+    const sorted = [...base].filter((s) => s.length > 0).sort((a, b) => a.localeCompare(b, 'es'));
+    return sorted.map((s) => ({ value: s, label: labelFor(s) }));
   }, [gastos, moveTipo, moveTarget]);
 
   const vehicleOptions = useMemo(
@@ -534,11 +527,37 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const openMoveModal = (g: Gasto) => {
     setMoveTarget(g);
-    setMoveTipo(tipoGastoUiCanonical(g) ?? 'gastos_globales');
-    setMoveSubtipo(g.subtipo_gasto?.trim() ?? '');
-    setMoveVehicleId(g.vehicleId != null ? String(g.vehicleId) : '');
+    const canon = tipoGastoUiCanonical(g) ?? 'gastos_globales';
+    setMoveTipo(canon);
+    setMoveSubtipo(normalizeSubtipoForTipoGasto(canon, g.subtipo_gasto?.trim() ?? ''));
+    const vid = g.vehicleId;
+    const okVid =
+      vid != null &&
+      Number.isFinite(Number(vid)) &&
+      Number(vid) > 0 &&
+      vehicles.some((v) => v.id === vid);
+    setMoveVehicleId(okVid ? String(vid) : '');
     setMoveMotivo('');
   };
+
+  const handleMoveTipoChange = useCallback(
+    (newTipo: string) => {
+      setMoveTipo(newTipo);
+      setMoveSubtipo(getDefaultSubtipoForTipoGasto(newTipo));
+      if (!tipoGastoRequiereVehiculo(newTipo)) {
+        setMoveVehicleId('');
+      } else {
+        const cur = moveTarget?.vehicleId;
+        const ok =
+          cur != null &&
+          Number.isFinite(Number(cur)) &&
+          Number(cur) > 0 &&
+          vehicles.some((v) => v.id === cur);
+        setMoveVehicleId(ok ? String(cur) : '');
+      }
+    },
+    [moveTarget?.vehicleId, vehicles],
+  );
 
   const closeMoveModal = () => {
     if (moveSaving) return;
@@ -548,23 +567,36 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const isOperativoTarget = moveTipo === 'operativo_vehiculo';
   const isInversionTarget = moveTipo === 'inversion_compra';
-  const targetNeedsVehicle = isOperativoTarget || isInversionTarget;
+  const targetNeedsVehicle = tipoGastoRequiereVehiculo(moveTipo);
   const currentEffectiveTipo = moveTarget ? (tipoGastoUiCanonical(moveTarget) ?? 'gastos_globales') : '';
   const currentSubtipo = moveTarget?.subtipo_gasto?.trim() ?? '';
   const currentVehicle = moveTarget?.vehicleId != null ? String(moveTarget.vehicleId) : '';
   const sourceHadVehicle =
-    currentEffectiveTipo === 'operativo_vehiculo' || currentEffectiveTipo === 'inversion_compra';
+    tipoGastoRequiereVehiculo(currentEffectiveTipo);
   const effectiveMoveVehicle = targetNeedsVehicle ? moveVehicleId : '';
   const effectiveCurrentVehicle = sourceHadVehicle ? currentVehicle : '';
+  const normalizedDestSubtipo = normalizeSubtipoForTipoGasto(moveTipo, moveSubtipo);
+  const normalizedSourceSubtipo = normalizeSubtipoForTipoGasto(currentEffectiveTipo, currentSubtipo);
   const hasAnyChange = moveTarget != null
     && (
       moveTipo !== currentEffectiveTipo
-      || moveSubtipo !== currentSubtipo
+      || normalizedDestSubtipo !== normalizedSourceSubtipo
       || effectiveMoveVehicle !== effectiveCurrentVehicle
     );
   const moveVehicleNum = moveVehicleId.trim() === '' ? NaN : Number(moveVehicleId);
   const vehicleOkForTarget =
-    !targetNeedsVehicle || (Number.isFinite(moveVehicleNum) && moveVehicleNum > 0);
+    !targetNeedsVehicle
+    || (Number.isFinite(moveVehicleNum)
+      && moveVehicleNum > 0
+      && vehicles.some((v) => v.id === moveVehicleNum));
+  useEffect(() => {
+    if (!moveTarget) return;
+    if (subtipoOptionsForMove.length === 0) return;
+    if (!subtipoOptionsForMove.some((o) => o.value === moveSubtipo)) {
+      setMoveSubtipo(getDefaultSubtipoForTipoGasto(moveTipo));
+    }
+  }, [moveTarget, moveTipo, moveSubtipo, subtipoOptionsForMove]);
+
   const moveDisabled = !moveTarget
     || moveSaving
     || !hasAnyChange
@@ -595,12 +627,19 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     let toVehicleId: number | null = null;
     if (targetNeedsVehicle) {
       const n = Number(moveVehicleId);
-      if (!Number.isFinite(n) || n <= 0) {
-        toast.error('Falta vehículo', 'Selecciona un N° de unidad válido (operativo o inversión requieren vehículo).');
+      if (!Number.isFinite(n) || n <= 0 || !vehicles.some((v) => v.id === n)) {
+        toast.error(
+          'Falta vehículo',
+          'Selecciona un N° de unidad válido de la lista (operativo e inversión requieren vehículo).',
+        );
         return;
       }
       toVehicleId = n;
     }
+    const subtipoFinal =
+      normalizeSubtipoForTipoGasto(moveTipo, moveSubtipo).trim()
+      || getDefaultSubtipoForTipoGasto(moveTipo)
+      || null;
     const changedAt = new Date().toISOString();
     const prevExtra = (moveTarget.excelExtra && typeof moveTarget.excelExtra === 'object')
       ? moveTarget.excelExtra
@@ -611,7 +650,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       from_tipo_gasto: moveTarget.tipo_gasto ?? null,
       to_tipo_gasto: moveTipo,
       from_subtipo_gasto: moveTarget.subtipo_gasto ?? null,
-      to_subtipo_gasto: moveSubtipo || null,
+      to_subtipo_gasto: subtipoFinal,
       from_vehicle_id: moveTarget.vehicleId ?? null,
       to_vehicle_id: targetNeedsVehicle ? toVehicleId : null,
       motivo: moveMotivo.trim() || null,
@@ -626,7 +665,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     try {
       const result = await updateGastoCategoriaManual(moveTarget.id, {
         tipo_gasto: moveTipo,
-        subtipo_gasto: moveSubtipo || null,
+        subtipo_gasto: subtipoFinal,
         vehicle_id: targetNeedsVehicle ? toVehicleId : null,
         es_global_flota: !targetNeedsVehicle,
         clasificacion_manual: true,
@@ -1090,7 +1129,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               label="Nueva categoría"
               options={categoriaOptions}
               value={moveTipo}
-              onChange={setMoveTipo}
+              onChange={handleMoveTipoChange}
             />
 
             <Select

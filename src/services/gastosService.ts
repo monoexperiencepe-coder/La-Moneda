@@ -21,7 +21,8 @@ export type ClasificacionGastoPatch = Partial<{
 export type GastoCategoriaManualPatch = Partial<{
   tipo_gasto: string | null;
   subtipo_gasto: string | null;
-  vehicle_id: number | null;
+  /** bigint o uuid en BD; nunca 0 / "0" / cadena vacía para categorías sin vehículo. */
+  vehicle_id: number | string | null;
   es_global_flota: boolean | null;
   clasificacion_manual: boolean | null;
   requiere_revision: boolean | null;
@@ -46,7 +47,7 @@ export type UpdateGastoCategoriaManualFailure = {
   patchSummary: {
     tipo_gasto?: string | null;
     subtipo_gasto?: string | null;
-    vehicle_id?: number | null;
+    vehicle_id?: number | string | null;
     es_global_flota?: boolean | null;
   };
 };
@@ -324,12 +325,69 @@ export async function updateGastoDetalleManual(
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }
 
+const TIPO_GASTO_REQUIERE_VEHICULO = new Set(['operativo_vehiculo', 'inversion_compra']);
+
+function isInvalidVehicleSentinel(v: unknown): boolean {
+  return v == null || v === '' || v === 0 || v === '0';
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Valor seguro para columna `vehicle_id` en `public.gastos`.
+ * - Categorías sin vehículo: siempre `null` (no enviar 0 ni "0" a uuid/bigint).
+ * - Operativo / inversión: entero > 0 o uuid válido; sentinels → `null`.
+ */
+function normalizeVehicleIdForGastoRow(
+  tipoGasto: string | null | undefined,
+  raw: unknown,
+): string | number | null {
+  const t = tipoGasto == null ? '' : String(tipoGasto).trim();
+  if (!TIPO_GASTO_REQUIERE_VEHICULO.has(t)) return null;
+  if (isInvalidVehicleSentinel(raw)) return null;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (s === '') return null;
+    if (UUID_RE.test(s)) return s;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null;
+  if (typeof raw === 'bigint') {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
 function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if (patch.tipo_gasto !== undefined) row.tipo_gasto = patch.tipo_gasto;
   if (patch.subtipo_gasto !== undefined) row.subtipo_gasto = patch.subtipo_gasto;
-  if (patch.vehicle_id !== undefined) row.vehicle_id = patch.vehicle_id;
-  if (patch.es_global_flota !== undefined) row.es_global_flota = patch.es_global_flota;
+
+  const touchesVehicle =
+    patch.vehicle_id !== undefined || patch.es_global_flota !== undefined || patch.tipo_gasto !== undefined;
+
+  if (touchesVehicle) {
+    const tipo = patch.tipo_gasto;
+    if (tipo !== undefined) {
+      const t = tipo == null ? '' : String(tipo).trim();
+      if (!TIPO_GASTO_REQUIERE_VEHICULO.has(t)) {
+        row.vehicle_id = null;
+        row.es_global_flota = true;
+      } else {
+        row.vehicle_id = normalizeVehicleIdForGastoRow(t, patch.vehicle_id);
+        row.es_global_flota = patch.es_global_flota ?? false;
+      }
+    } else {
+      if (patch.vehicle_id !== undefined) {
+        const v = patch.vehicle_id;
+        row.vehicle_id = isInvalidVehicleSentinel(v) ? null : v;
+      }
+      if (patch.es_global_flota !== undefined) row.es_global_flota = patch.es_global_flota;
+    }
+  }
+
   if (patch.clasificacion_manual !== undefined) row.clasificacion_manual = patch.clasificacion_manual;
   if (patch.requiere_revision !== undefined) row.requiere_revision = patch.requiere_revision;
   if (patch.revisado_por !== undefined) row.revisado_por = patch.revisado_por;
@@ -427,6 +485,24 @@ export async function updateGastoCategoriaManual(
       updatePayload: {},
       patchSummary,
     });
+  }
+
+  if (patch.tipo_gasto !== undefined && patch.tipo_gasto != null) {
+    const tg = String(patch.tipo_gasto).trim();
+    if (TIPO_GASTO_REQUIERE_VEHICULO.has(tg)) {
+      const nv = normalizeVehicleIdForGastoRow(tg, patch.vehicle_id);
+      if (nv == null) {
+        return fail({
+          message:
+            'Operativo e inversión con utilidad requieren un vehículo válido. Elige un N° de unidad (no uses 0 ni vacío).',
+          gastoId: id,
+          empresaIdFrontend,
+          empresaIdRow: null,
+          updatePayload: {},
+          patchSummary,
+        });
+      }
+    }
   }
 
   const row = categoriaManualPatchToRow(patch);
