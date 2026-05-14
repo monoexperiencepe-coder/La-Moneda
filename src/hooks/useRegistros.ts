@@ -54,6 +54,7 @@ import { fetchGastosCaja } from '../services/gastosCajaService';
 import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
 import { useAuth } from '../context/AuthContext';
+import { EMPRESA_ID } from '../config/app';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -79,14 +80,14 @@ function mergeIngresoSorted(prev: Ingreso[], row: Ingreso): Ingreso[] {
   return next;
 }
 
-/** Mismo criterio que fetchGastos: fecha desc, luego id desc. */
+/** Mismo criterio que fetchGastos: fecha desc, luego id desc (ids como string por bigint/PostgREST). */
 function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
   const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
   const next = [...without, row];
   next.sort((a, b) => {
     const fd = b.fecha.localeCompare(a.fecha);
     if (fd !== 0) return fd;
-    return b.id - a.id;
+    return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
   });
   return next;
 }
@@ -203,6 +204,67 @@ export const useRegistros = () => {
     if (q) await loadControlFechasHistory(q.filters, q.page);
   }, [loadControlFechasHistory]);
 
+  /** Solo `gastos` desde Supabase (sin tocar el resto del árbol de estado). */
+  const reloadGastosOnly = useCallback(async () => {
+    const g = await fetchGastos();
+    setGastos((prev) => {
+      if (g.length === 0 && prev.length > 0) {
+        if (import.meta.env.DEV) {
+          console.warn('[useRegistros reloadGastosOnly] fetch devolvió 0 filas; se mantiene estado local');
+        }
+        return prev;
+      }
+      return g;
+    });
+  }, []);
+
+  /** Solo `ingresos` desde Supabase. */
+  const reloadIngresosOnly = useCallback(async () => {
+    const rows = await fetchIngresos();
+    setIngresos((prev) => {
+      if (rows.length === 0 && prev.length > 0) {
+        if (import.meta.env.DEV) {
+          console.warn('[useRegistros reloadIngresosOnly] fetch devolvió 0 filas; se mantiene estado local');
+        }
+        return prev;
+      }
+      return rows;
+    });
+  }, []);
+
+  /** Solo kilometrajes. */
+  const reloadKilometrajesOnly = useCallback(async () => {
+    const km = await fetchKilometrajes();
+    setKilometrajes((prev) => {
+      if (km.length === 0 && prev.length > 0) {
+        if (import.meta.env.DEV) {
+          console.warn('[useRegistros reloadKilometrajesOnly] fetch devolvió 0 filas; se mantiene estado local');
+        }
+        return prev;
+      }
+      return km;
+    });
+  }, []);
+
+  /** Solo pendientes. */
+  const reloadPendientesOnly = useCallback(async () => {
+    const pen = await fetchPendientes();
+    setPendientes((prev) => {
+      if (pen.length === 0 && prev.length > 0) {
+        if (import.meta.env.DEV) {
+          console.warn('[useRegistros reloadPendientesOnly] fetch devolvió 0 filas; se mantiene estado local');
+        }
+        return prev;
+      }
+      return pen;
+    });
+  }, []);
+
+  /** Resumen RPC de controles + historial si estaba abierto (sin refresh global). */
+  const reloadControlFechasLatest = useCallback(async () => {
+    await refreshControlFechasViews();
+  }, [refreshControlFechasViews]);
+
   const refreshFromSupabase = useCallback(async () => {
     if (refreshInFlightRef.current) {
       await refreshInFlightRef.current;
@@ -225,8 +287,30 @@ export const useRegistros = () => {
       setVehicles(v);
       setUnidades(u);
       setConductores(c);
-      setIngresos(i);
-      setGastos(g);
+      setIngresos((prev) => {
+        if (i.length === 0 && prev.length > 0) {
+          if (import.meta.env.DEV) {
+            console.warn('[useRegistros refreshFromSupabase] fetchIngresos devolvió 0 filas con lista previa no vacía; se mantiene estado local', {
+              prevLen: prev.length,
+              empresaIdConfigured: Boolean(EMPRESA_ID),
+            });
+          }
+          return prev;
+        }
+        return i;
+      });
+      setGastos((prev) => {
+        if (g.length === 0 && prev.length > 0) {
+          if (import.meta.env.DEV) {
+            console.warn('[useRegistros refreshFromSupabase] fetchGastos devolvió 0 filas con lista previa no vacía; se mantiene estado local', {
+              prevLen: prev.length,
+              empresaIdConfigured: Boolean(EMPRESA_ID),
+            });
+          }
+          return prev;
+        }
+        return g;
+      });
       setControlFechas(latest);
       setKilometrajes(km);
       setPendientes(pen);
@@ -347,7 +431,16 @@ export const useRegistros = () => {
       };
       const created = await insertGasto(row);
       if (!created) throw new Error('No se pudo guardar el gasto en Supabase.');
-      setGastos((prev) => mergeGastoSorted(prev, created));
+      setGastos((prev) => {
+        if (import.meta.env.DEV) {
+          console.debug('[useRegistros addGasto]', { prevLen: prev.length, createdId: created.id, fecha: created.fecha });
+        }
+        const merged = mergeGastoSorted(prev, created);
+        if (import.meta.env.DEV) {
+          console.debug('[useRegistros addGasto] tras merge', { nextLen: merged.length });
+        }
+        return merged;
+      });
       return created;
     },
     [vehicles],
@@ -562,7 +655,16 @@ export const useRegistros = () => {
   }, []);
 
   const upsertGasto = useCallback((row: Gasto) => {
-    setGastos((prev) => mergeGastoSorted(prev, row));
+    setGastos((prev) => {
+      if (import.meta.env.DEV) {
+        console.debug('[useRegistros upsertGasto]', { prevLen: prev.length, id: row.id });
+      }
+      return mergeGastoSorted(prev, row);
+    });
+  }, []);
+
+  const upsertIngreso = useCallback((row: Ingreso) => {
+    setIngresos((prev) => mergeIngresoSorted(prev, row));
   }, []);
 
   const deleteDescuento = useCallback((id: number) => {
@@ -708,6 +810,7 @@ export const useRegistros = () => {
     deleteIngreso,
     deleteGasto,
     upsertGasto,
+    upsertIngreso,
     deleteDescuento,
     deletePrestamo,
     deleteUnidad,
@@ -719,6 +822,11 @@ export const useRegistros = () => {
     setVehicles,
     setUnidades,
     refreshFromSupabase,
+    reloadGastosOnly,
+    reloadIngresosOnly,
+    reloadKilometrajesOnly,
+    reloadPendientesOnly,
+    reloadControlFechasLatest,
     registrosBootstrapComplete,
     registrosBootstrapLoading,
     registrosBootstrapStarted,

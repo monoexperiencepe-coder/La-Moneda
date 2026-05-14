@@ -87,6 +87,8 @@ interface RegistrosContextValue {
   deleteGasto: (id: number) => Promise<boolean>;
   /** Actualiza o inserta un gasto en el estado local (misma orden que fetch). */
   upsertGasto: (g: Gasto) => void;
+  /** Actualiza o inserta un ingreso en el estado local (misma orden que fetch). */
+  upsertIngreso: (i: Ingreso) => void;
   deleteDescuento: (id: number) => void;
   deletePrestamo: (id: number) => void;
   deleteUnidad: (id: string) => Promise<boolean>;
@@ -104,6 +106,16 @@ interface RegistrosContextValue {
     info: (title: string, message?: string) => void;
   };
   refreshFromSupabase: () => Promise<void>;
+  /** Recarga solo la lista de gastos (sin tocar el resto del estado). */
+  reloadGastosOnly: () => Promise<void>;
+  /** Recarga solo ingresos. */
+  reloadIngresosOnly: () => Promise<void>;
+  /** Recarga solo kilometrajes. */
+  reloadKilometrajesOnly: () => Promise<void>;
+  /** Recarga solo pendientes. */
+  reloadPendientesOnly: () => Promise<void>;
+  /** RPC resumen de controles + historial si estaba abierto. */
+  reloadControlFechasLatest: () => Promise<void>;
   /** Con sesión: `false` hasta terminar la primera carga post-auth (+ mín. 1,2 s). Sin sesión: `true`. */
   registrosBootstrapComplete: boolean;
   /** `true` mientras corre el refresh del ciclo post-autenticación. */
@@ -252,10 +264,17 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
           undo: async () => {
             try {
               const restored = await insertIngreso(omitIngresoIds(snapshot));
-              if (!restored) return false;
-              await registros.refreshFromSupabase();
+              if (!restored) {
+                toastHook.error('No se pudo restaurar', 'Supabase no devolvió el ingreso.');
+                return false;
+              }
+              registros.upsertIngreso(restored);
               return true;
-            } catch {
+            } catch (e) {
+              toastHook.error(
+                'No se pudo restaurar el ingreso',
+                e instanceof Error ? e.message : 'Error de red o servidor.',
+              );
               return false;
             }
           },
@@ -492,6 +511,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       deleteIngreso: handleDeleteIngreso,
       deleteGasto: handleDeleteGasto,
       upsertGasto: registros.upsertGasto,
+      upsertIngreso: registros.upsertIngreso,
       deleteDescuento: registros.deleteDescuento,
       deletePrestamo: registros.deletePrestamo,
       deleteUnidad: handleDeleteUnidad,
@@ -509,6 +529,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
         info: toastHook.info,
       },
       refreshFromSupabase: registros.refreshFromSupabase,
+      reloadGastosOnly: registros.reloadGastosOnly,
+      reloadIngresosOnly: registros.reloadIngresosOnly,
+      reloadKilometrajesOnly: registros.reloadKilometrajesOnly,
+      reloadPendientesOnly: registros.reloadPendientesOnly,
+      reloadControlFechasLatest: registros.reloadControlFechasLatest,
       registrosBootstrapComplete: registros.registrosBootstrapComplete,
       registrosBootstrapLoading: registros.registrosBootstrapLoading,
       registrosBootstrapStarted: registros.registrosBootstrapStarted,
