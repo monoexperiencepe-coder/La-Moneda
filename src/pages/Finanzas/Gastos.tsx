@@ -28,6 +28,11 @@ import {
   getRepresentacionInternaSubtipoLabel,
   normalizeRepresentacionInternaSubtipo,
 } from '../../utils/representacionInternaSubtipoLabel';
+import {
+  getOperativoSubtipoLabel,
+  getOperativoSubtipoOptions,
+  resolveOperativoSubtipoGastoCanon,
+} from '../../utils/operativoSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import {
   getDefaultSubtipoForTipoGasto,
@@ -35,6 +40,7 @@ import {
   normalizeSubtipoForTipoGasto,
   tipoGastoRequiereVehiculo,
 } from '../../utils/gastoMoveCategoriaDefaults';
+import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
 
@@ -366,7 +372,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         rowKey = c ? getRepresentacionInternaSubtipoLabel(c) : '(Sin subtipo)';
       } else {
         const raw = g.subtipo_gasto?.trim();
-        rowKey = raw && raw.length > 0 ? getSubtipoFinancieroLabel(raw) : '(Sin subtipo)';
+        rowKey =
+          raw && raw.length > 0 ? getSubtipoFinancieroLabel(raw, g.tipo_gasto) : '(Sin subtipo)';
       }
       const cur = map.get(rowKey) ?? { count: 0, total: 0 };
       cur.count += 1;
@@ -449,6 +456,21 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         ...ordered.map((c) => ({ value: c, label: getRepresentacionInternaSubtipoLabel(c) })),
       ];
     }
+    if (tab?.tipo_gasto === 'operativo_vehiculo') {
+      const fromData = new Set<string>();
+      for (const g of gastosHistorialFiltrados) {
+        const c = resolveOperativoSubtipoGastoCanon(g.subtipo_gasto);
+        if (c) fromData.add(c);
+      }
+      const ordered = getOperativoSubtipoOptions().map((o) => o.value);
+      for (const c of [...fromData].sort((a, b) => a.localeCompare(b, 'es'))) {
+        if (!ordered.includes(c)) ordered.push(c);
+      }
+      return [
+        { value: '', label: 'Todos subtipo' },
+        ...ordered.map((c) => ({ value: c, label: getOperativoSubtipoLabel(c) })),
+      ];
+    }
     const raws = new Set<string>();
     for (const g of gastosHistorialFiltrados) {
       const t = g.subtipo_gasto?.trim();
@@ -461,7 +483,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       const fv = subtipoFinancieroFilterValue(raw, tab?.tipo_gasto);
       if (seen.has(fv)) continue;
       seen.add(fv);
-      out.push({ value: fv, label: getSubtipoFinancieroLabel(raw) });
+      out.push({ value: fv, label: getSubtipoFinancieroLabel(raw, tab?.tipo_gasto) });
     }
     return out;
   }, [gastosHistorialFiltrados, tab?.tipo_gasto]);
@@ -512,7 +534,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     const labelFor = (v: string) =>
       moveTipo === 'representacion_interna'
         ? getRepresentacionInternaSubtipoLabel(v)
-        : getSubtipoFinancieroLabel(v);
+        : getSubtipoFinancieroLabel(v, moveTipo);
     const sorted = [...base].filter((s) => s.length > 0).sort((a, b) => a.localeCompare(b, 'es'));
     return sorted.map((s) => ({ value: s, label: labelFor(s) }));
   }, [gastos, moveTipo, moveTarget]);
@@ -651,8 +673,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       to_tipo_gasto: moveTipo,
       from_subtipo_gasto: moveTarget.subtipo_gasto ?? null,
       to_subtipo_gasto: subtipoFinal,
-      from_vehicle_id: moveTarget.vehicleId ?? null,
-      to_vehicle_id: targetNeedsVehicle ? toVehicleId : null,
+      from_vehicle_id: normalizeGastoVehicleFkForDb(moveTarget.vehicleId),
+      to_vehicle_id: targetNeedsVehicle ? normalizeGastoVehicleFkForDb(toVehicleId) : null,
       motivo: moveMotivo.trim() || null,
       changed_at: changedAt,
     };
@@ -666,7 +688,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       const result = await updateGastoCategoriaManual(moveTarget.id, {
         tipo_gasto: moveTipo,
         subtipo_gasto: subtipoFinal,
-        vehicle_id: targetNeedsVehicle ? toVehicleId : null,
+        vehicle_id: normalizeGastoVehicleFkForDb(targetNeedsVehicle ? toVehicleId : null),
         es_global_flota: !targetNeedsVehicle,
         clasificacion_manual: true,
         requiere_revision: false,
@@ -705,7 +727,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             {
               tipo_gasto: prevTipo,
               subtipo_gasto: prevSub,
-              vehicle_id: prevVeh,
+              vehicle_id: normalizeGastoVehicleFkForDb(prevVeh),
               es_global_flota: prevEsGlobalFlota,
               clasificacion_manual: prevClasManual,
               requiere_revision: prevReqRev,

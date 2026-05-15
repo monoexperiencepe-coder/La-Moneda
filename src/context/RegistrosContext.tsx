@@ -84,7 +84,7 @@ interface RegistrosContextValue {
   addMantenimiento: (data: Omit<Mantenimiento, 'id' | 'createdAt'>) => Mantenimiento;
   addDocumentacion: (data: Omit<Documentacion, 'id' | 'createdAt'>) => Documentacion;
   deleteIngreso: (id: string) => Promise<boolean>;
-  deleteGasto: (id: number) => Promise<boolean>;
+  deleteGasto: (id: string) => Promise<boolean>;
   /** Actualiza o inserta un gasto en el estado local (misma orden que fetch). */
   upsertGasto: (g: Gasto) => void;
   /** Actualiza o inserta un ingreso en el estado local (misma orden que fetch). */
@@ -287,8 +287,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const handleDeleteGasto = async (id: number): Promise<boolean> => {
-    const snapshot = registros.gastos.find((g) => g.id === id);
+  const handleDeleteGasto = async (id: string): Promise<boolean> => {
+    const snapshot = registros.gastos.find((g) => String(g.id) === String(id));
     try {
       await registros.deleteGasto(id);
       if (snapshot) {

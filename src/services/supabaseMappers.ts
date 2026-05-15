@@ -1,5 +1,6 @@
 import { toDateOnlyString } from '../utils/formatting';
-import { ingresoPrimaryKeyFromRow } from '../utils/ingresoRecordId';
+import { UUID_REGEX_FLAT } from '../utils/uuidColumn';
+import { gastoPrimaryKeyFromRow, ingresoPrimaryKeyFromRow } from '../utils/ingresoRecordId';
 import type {
   Vehicle,
   UnidadRegistro,
@@ -277,12 +278,29 @@ export function mapInversionVehiculoRow(r: Record<string, unknown>): InversionVe
   };
 }
 
+function mapGastoVehicleIdFromRow(v: unknown): number | string | null {
+  if (v == null || v === '' || v === 0 || v === '0') return null;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t === '' || t === '0') return null;
+    if (UUID_REGEX_FLAT.test(t)) return t;
+    const n = Number(t);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null;
+  if (typeof v === 'bigint') {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
 export function mapGastoRow(r: Record<string, unknown>): Gasto {
   return {
-    id: num(r.id),
+    id: gastoPrimaryKeyFromRow(r.id),
     fecha: toDateOnlyString(r.fecha),
     fechaRegistro: toDateOnlyString(r.fecha_registro ?? r.fecha),
-    vehicleId: r.vehicle_id != null ? num(r.vehicle_id) : null,
+    vehicleId: mapGastoVehicleIdFromRow(r.vehicle_id),
     tipo: str(r.tipo),
     subTipo: strOrNull(r.sub_tipo),
     fechaDesde: strOrNull(r.fecha_desde),

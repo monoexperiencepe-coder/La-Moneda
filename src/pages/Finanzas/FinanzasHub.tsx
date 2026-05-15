@@ -66,7 +66,7 @@ const FinanzasHub: React.FC = () => {
     },
     {
       title: 'Resumen',
-      desc: 'Por mes/año y vehículo (tipo Excel)',
+      desc: '¿Cómo va el negocio este mes?',
       emoji: '📋',
       path: '/finanzas/resumen',
       gradient: 'from-violet-500/10 to-fuchsia-500/10',
@@ -82,7 +82,7 @@ const FinanzasHub: React.FC = () => {
     },
     {
       title: 'Reportes',
-      desc: 'Análisis y comparativas',
+      desc: 'Centro de análisis e histórico',
       emoji: '📊',
       path: '/finanzas/reportes',
       gradient: 'from-purple-500/10 to-pink-500/10',

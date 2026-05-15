@@ -2,6 +2,7 @@ import { getSubtiposGasto } from '../data/factCatalog';
 import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/finanzaGastoRegistro';
 import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
+import { getOperativoCanonSet, normalizeOperativoSubtipo } from './operativoSubtipo';
 
 const FINANZA_TAB_TIPOS = new Set<string>([
   'operativo_vehiculo',
@@ -21,6 +22,7 @@ export function tipoGastoRequiereVehiculo(tipoGasto: string): boolean {
 
 function catalogSubtiposUnionForFinanza(cat: FinanzaGastoRegistroValue): Set<string> {
   const out = new Set<string>();
+  if (cat === 'operativo_vehiculo') return getOperativoCanonSet();
   for (const factTipo of getFactTiposForFinanza(cat)) {
     for (const s of getSubtiposGasto(factTipo)) {
       if (s.trim()) out.add(s);
@@ -70,6 +72,7 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
     case 'gastos_globales':
       return 'global_no_asignado';
     case 'operativo_vehiculo':
+      return 'motor';
     case 'planilla_laboral': {
       const cat = t as FinanzaGastoRegistroValue;
       const tipos = getFactTiposForFinanza(cat);
@@ -94,6 +97,16 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
   if (tipoGasto.trim() === 'representacion_interna') {
     const n = normalizeRepresentacionInternaSubtipo(trimmed);
     if (n && valid.has(n)) return n;
+    return getDefaultSubtipoForTipoGasto(tipoGasto);
+  }
+
+  if (tipoGasto.trim() === 'operativo_vehiculo') {
+    const n = normalizeOperativoSubtipo(trimmed);
+    if (n && valid.has(n)) return n;
+    const lower = trimmed.toLowerCase();
+    for (const v of valid) {
+      if (v.toLowerCase() === lower) return v;
+    }
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 

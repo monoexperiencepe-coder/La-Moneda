@@ -1,54 +1,43 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { calculateVehicleRentability } from '../../utils/calculations';
-import { ingresoMontoPEN } from '../../utils/moneda';
-import { formatCurrency } from '../../utils/formatting';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line } from 'recharts';
-import { MESES, CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
-import { CategoriaGasto } from '../../data/types';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import { REPORTES_SECTION_CARDS, type ReportesSectionId } from './reportesSections';
+import RendimientoMensualSection from './sections/RendimientoMensualSection';
+import RentabilidadVehiculoSection from './sections/RentabilidadVehiculoSection';
+import GastosOperativosSection from './sections/GastosOperativosSection';
+import IngresosReporteSection from './sections/IngresosReporteSection';
+import PrestamosAportesSection from './sections/PrestamosAportesSection';
+import ExportarSection from './sections/ExportarSection';
 
-/* ── Custom Tooltip (dark) ───────────────────────────────────────────── */
-const PremiumTooltip = ({ active, payload, label }: {
-  active?: boolean;
-  payload?: { dataKey: string; value: number; color: string }[];
-  label?: string;
-}) => {
-  if (!active || !payload?.length) return null;
-  const labels: Record<string, string> = { ingresos: 'Ingresos', gastos: 'Gastos', utilidad: 'Utilidad' };
-  return (
-    <div className="bg-slate-900/95 backdrop-blur border border-slate-700/60 rounded-2xl p-3.5 shadow-2xl min-w-[180px]">
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">{label}</p>
-      {payload.map((entry) => (
-        <div key={entry.dataKey} className="flex items-center justify-between gap-5 py-1 border-b border-slate-800 last:border-0">
-          <span className="flex items-center gap-2 text-[11px] text-slate-400">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-            {labels[entry.dataKey] ?? entry.dataKey}
-          </span>
-          <span
-            className="text-[11px] font-bold tabular-nums"
-            style={{ color: entry.dataKey === 'utilidad' && entry.value < 0 ? '#F87171' : entry.color }}
-          >
-            {formatCurrency(Number(entry.value))}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-};
+const VALID_SECTIONS = new Set<ReportesSectionId>(
+  REPORTES_SECTION_CARDS.map((c) => c.id),
+);
+
+function parseSectionParam(raw: string | null): ReportesSectionId | null {
+  if (!raw || !VALID_SECTIONS.has(raw as ReportesSectionId)) return null;
+  return raw as ReportesSectionId;
+}
 
 const ReportesHub: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const panelRef = useRef<HTMLDivElement>(null);
   const { ingresos, gastos, descuentos, vehicles } = useRegistrosContext();
-  const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
-  const rentability = useMemo(
-    () => calculateVehicleRentability(vehicles, ingresos, gastos, descuentos),
-    [vehicles, ingresos, gastos, descuentos],
+
+  const [activeSection, setActiveSection] = useState<ReportesSectionId | null>(() =>
+    parseSectionParam(searchParams.get('seccion')),
   );
 
-  const availableYears = useMemo(() => {
+  useEffect(() => {
+    const fromUrl = parseSectionParam(searchParams.get('seccion'));
+    if (fromUrl !== activeSection) setActiveSection(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync URL → state only when searchParams change
+  }, [searchParams]);
+
+  const yearOptions = useMemo(() => {
+    const gastosOp = gastosOperativosSolamente(gastos);
     const ys = new Set<number>();
     const touch = (fecha: string) => {
       const y = Number(String(fecha).slice(0, 4));
@@ -57,312 +46,127 @@ const ReportesHub: React.FC = () => {
     for (const i of ingresos) touch(i.fecha);
     for (const g of gastosOp) touch(g.fecha);
     for (const d of descuentos) touch(d.fecha);
-    return [...ys].sort((a, b) => b - a);
-  }, [ingresos, gastosOp, descuentos]);
+    const sorted = [...ys].sort((a, b) => b - a);
+    if (sorted.length === 0) sorted.push(new Date().getFullYear());
+    return sorted;
+  }, [ingresos, gastos, descuentos]);
 
-  const yearOptions = useMemo(
-    () => availableYears.map((y) => ({ value: String(y), label: String(y) })),
-    [availableYears],
-  );
-
-  const [chartYear, setChartYear] = useState<string>('');
-
-  useEffect(() => {
-    if (availableYears.length === 0) {
-      setChartYear('');
-      return;
-    }
-    setChartYear((prev) => {
-      const n = prev ? Number(prev) : NaN;
-      if (prev && Number.isFinite(n) && availableYears.includes(n)) return prev;
-      return String(availableYears[0]);
+  const openSection = (id: ReportesSectionId) => {
+    setActiveSection(id);
+    setSearchParams({ seccion: id }, { replace: true });
+    requestAnimationFrame(() => {
+      const el = panelRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY - 88;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
     });
-  }, [availableYears]);
+  };
 
-  const chartYearNum = chartYear ? Number(chartYear) : NaN;
+  const closeSection = () => {
+    setActiveSection(null);
+    setSearchParams({}, { replace: true });
+  };
 
-  const chartData = useMemo(() => {
-    if (!Number.isFinite(chartYearNum)) {
-      return MESES.map((mes) => ({
-        mes: mes.label.slice(0, 3),
-        ingresos: 0,
-        gastos: 0,
-        rebajes: 0,
-        utilidad: 0,
-        hayMovimiento: false,
-      }));
-    }
-    const prefix = `${chartYearNum}-`;
-    return MESES.map((mes) => {
-      const mm = String(mes.value).padStart(2, '0');
-      const ing = ingresos
-        .filter((i) => i.fecha.startsWith(prefix) && i.fecha.slice(5, 7) === mm)
-        .reduce((s, i) => s + ingresoMontoPEN(i), 0);
-      const gas = gastosOp
-        .filter((g) => g.fecha.startsWith(prefix) && g.fecha.slice(5, 7) === mm)
-        .reduce((s, g) => s + g.monto, 0);
-      const reb = descuentos
-        .filter((d) => d.fecha.startsWith(prefix) && d.fecha.slice(5, 7) === mm)
-        .reduce((s, d) => s + d.monto, 0);
-      const utilidad = ing - gas + reb;
-      return {
-        mes: mes.label.slice(0, 3),
-        ingresos: ing,
-        gastos: gas,
-        rebajes: reb,
-        utilidad,
-        hayMovimiento: ing !== 0 || gas !== 0 || reb !== 0,
-      };
-    });
-  }, [ingresos, gastosOp, descuentos, chartYearNum]);
-
-  const totalesAnioGrafico = useMemo(() => {
-    return chartData.reduce(
-      (acc, row) => ({
-        ingresos: acc.ingresos + row.ingresos,
-        gastos: acc.gastos + row.gastos,
-        utilidad: acc.utilidad + row.utilidad,
-      }),
-      { ingresos: 0, gastos: 0, utilidad: 0 },
-    );
-  }, [chartData]);
-
-  const gastosCat = useMemo(() => {
-    const totals: Record<string, number> = {};
-    gastosOp.forEach(g => { totals[g.categoria] = (totals[g.categoria] ?? 0) + g.monto; });
-    return Object.entries(totals).map(([cat, total]) => ({
-      cat: CATEGORIAS_GASTO_LABELS[cat as CategoriaGasto]?.replace('Gastos ', '') ?? cat,
-      Total: total,
-    }));
-  }, [gastosOp]);
+  const activeCard = REPORTES_SECTION_CARDS.find((c) => c.id === activeSection);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-8 animate-fade-in">
-      <div className="flex items-start gap-3">
+    <div className="mx-auto max-w-5xl space-y-6 pb-10 animate-fade-in">
+      <header className="flex items-start gap-3">
         <button
           type="button"
           onClick={() => navigate('/finanzas')}
-          className="mt-0.5 shrink-0 rounded-xl p-2 text-gray-500 hover:bg-gray-100"
+          className="mt-0.5 shrink-0 rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100"
           aria-label="Volver a Finanzas"
         >
           <ChevronLeft size={20} />
         </button>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600/90">Finanzas</p>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Reportes</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Tendencia <span className="font-semibold text-gray-800">mes a mes por año</span> y ranking de flota. Los totales por
-            período flexible y alertas están en{' '}
-            <Link to="/finanzas/resumen" className="font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-600/90">Finanzas</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Centro de análisis</h1>
+          <p className="mt-1 max-w-xl text-sm text-slate-600">
+            Explora el comportamiento financiero del negocio. Para el estado actual del período, usa{' '}
+            <Link
+              to="/finanzas/resumen"
+              className="font-semibold text-violet-700 underline decoration-violet-300 underline-offset-2"
+            >
               Resumen
-            </Link>
-            ; el detalle de cobros en{' '}
-            <Link to="/finanzas/ingresos" className="font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2">
-              Ingresos
             </Link>
             .
           </p>
         </div>
-      </div>
+      </header>
 
-      {/* ── Gráfico premium – dark glass ───────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-slate-700/40 shadow-2xl">
-        {/* subtle grid texture overlay */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(99,102,241,0.08)_0%,_transparent_60%)]" />
-
-        {/* Header */}
-        <div className="relative px-6 pt-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 className="text-base font-bold text-white tracking-tight">
-                Rendimiento mensual {chartYear ? `· ${chartYear}` : ''}
-              </h3>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
-                Solo el año seleccionado. Gastos = operativos. Utilidad del mes = ingresos − esos gastos + rebajes del mes.
-              </p>
-            </div>
-            {/* Year pills */}
-            <div className="flex gap-1.5 flex-wrap shrink-0">
-              {yearOptions.length > 0 ? yearOptions.map((y) => (
-                <button
-                  key={y.value}
-                  type="button"
-                  onClick={() => setChartYear(y.value)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    chartYear === y.value
-                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40'
-                      : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/80 hover:text-white'
-                  }`}
-                >
-                  {y.label}
-                </button>
-              )) : <p className="text-xs text-slate-500">Sin datos</p>}
-            </div>
-          </div>
-
-          {/* KPI pills del año elegido */}
-          {chartYear && (
-            <div className="flex flex-wrap gap-2 mt-4">
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <span className="text-[11px] text-emerald-300 font-medium">Ingresos</span>
-                <span className="text-sm font-bold text-emerald-300 tabular-nums">{formatCurrency(totalesAnioGrafico.ingresos)}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/25 rounded-xl px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
-                <span className="text-[11px] text-rose-300 font-medium">Gastos</span>
-                <span className="text-sm font-bold text-rose-300 tabular-nums">{formatCurrency(totalesAnioGrafico.gastos)}</span>
-              </div>
-              <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${totalesAnioGrafico.utilidad >= 0 ? 'bg-violet-500/10 border border-violet-500/25' : 'bg-red-500/10 border border-red-500/25'}`}>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${totalesAnioGrafico.utilidad >= 0 ? 'bg-violet-400' : 'bg-red-400'}`} />
-                <span className={`text-[11px] font-medium ${totalesAnioGrafico.utilidad >= 0 ? 'text-violet-300' : 'text-red-300'}`}>Utilidad</span>
-                <span className={`text-sm font-bold tabular-nums ${totalesAnioGrafico.utilidad >= 0 ? 'text-violet-300' : 'text-red-300'}`}>{formatCurrency(totalesAnioGrafico.utilidad)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Chart */}
-        <div className="relative h-[300px] sm:h-[320px] mt-4 px-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 4 }} barCategoryGap="16%">
-              <defs>
-                <linearGradient id="gradIng" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34D399" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#059669" stopOpacity={0.7} />
-                </linearGradient>
-                <linearGradient id="gradGas" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#FB7185" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#E11D48" stopOpacity={0.7} />
-                </linearGradient>
-                <filter id="glowLine" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                  <feMerge>
-                    <feMergeNode in="coloredBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <CartesianGrid strokeDasharray="2 6" stroke="#1E293B" vertical={false} />
-              <XAxis
-                dataKey="mes"
-                tick={{ fontSize: 11, fill: '#64748B', fontWeight: 600 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#475569' }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`}
-                width={44}
-              />
-              <Tooltip content={<PremiumTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)', radius: 6 }} />
-              <Bar dataKey="ingresos" fill="url(#gradIng)" radius={[6, 6, 0, 0]} maxBarSize={26} />
-              <Bar dataKey="gastos" fill="url(#gradGas)" radius={[6, 6, 0, 0]} maxBarSize={26} />
-              <Line
-                type="monotone"
-                dataKey="utilidad"
-                stroke="#A78BFA"
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: '#A78BFA', strokeWidth: 0 }}
-                activeDot={{ r: 5, fill: '#A78BFA', stroke: '#1E1B4B', strokeWidth: 2 }}
-                filter="url(#glowLine)"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Leyenda */}
-        <div className="flex flex-wrap items-center gap-4 border-t border-slate-700/40 px-6 py-4">
-          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
-            <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: 'linear-gradient(#34D399,#059669)' }} />
-            Ingresos
-          </span>
-          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
-            <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: 'linear-gradient(#FB7185,#E11D48)' }} />
-            Gastos operativos
-          </span>
-          <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
-            <span className="h-0.5 w-8 shrink-0 rounded-full bg-violet-400" />
-            Utilidad del mes
-          </span>
-          <span className="text-[10px] text-slate-500">Pasa el cursor sobre un mes para ver montos exactos.</span>
-        </div>
-      </div>
-
-      {/* Gastos por categoría (legacy) — no compite con el gráfico principal */}
-      {gastosCat.length > 0 && (
-        <details className="rounded-2xl border border-gray-200 bg-gray-50/80 shadow-sm">
-          <summary className="cursor-pointer list-none px-5 py-4 text-sm font-bold text-gray-800 [&::-webkit-details-marker]:hidden">
-            <span className="underline decoration-gray-300 underline-offset-2">Gastos por categoría clásica</span>
-            <span className="ml-2 text-xs font-normal text-gray-500">(campo categoría; distinto del tipo de gasto en Resumen / Gastos)</span>
-          </summary>
-          <div className="border-t border-gray-200 bg-white px-5 pb-5 pt-2">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={gastosCat} layout="vertical" margin={{ top: 0, right: 20, left: 5, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `S/${v.toLocaleString()}`}
-                  />
-                  <YAxis
-                    dataKey="cat"
-                    type="category"
-                    tick={{ fontSize: 11, fill: '#6B7280' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={100}
-                  />
-                  <Tooltip
-                    formatter={(v) => [formatCurrency(Number(v)), 'Total']}
-                    contentStyle={{ borderRadius: '12px', border: '1px solid #F3F4F6', fontSize: '12px' }}
-                  />
-                  <Bar dataKey="Total" fill="#8B5CF6" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </details>
-      )}
-
-      {/* Vehicle ranking table */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-soft">
-        <div className="border-b border-gray-100 px-5 py-4">
-          <h3 className="font-bold text-gray-800">Rentabilidad por vehículo</h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Ingresos y gastos operativos por unidad (histórico completo). Toca una fila para abrir el detalle.
-          </p>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {rentability.map((r, i) => (
-            <div key={r.vehicle.id} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
-              onClick={() => navigate(`/vehiculos/${r.vehicle.id}`)}>
-              <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0
-                ${i === 0 ? 'bg-yellow-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                {i + 1}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {REPORTES_SECTION_CARDS.map((card) => {
+          const Icon = card.icon;
+          const isActive = activeSection === card.id;
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => openSection(card.id)}
+              className={`group flex flex-col rounded-2xl border bg-white p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${card.accent} ${
+                isActive ? 'ring-2 ring-violet-400/60 ring-offset-1' : ''
+              }`}
+            >
+              <span className="flex items-start justify-between gap-2">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.iconBg}`}>
+                  <Icon size={20} />
+                </span>
+                <ChevronRight
+                  size={18}
+                  className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500"
+                />
               </span>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-900">{r.vehicle.marca} {r.vehicle.modelo}</p>
-                <p className="text-xs text-gray-400">{r.vehicle.placa}</p>
-              </div>
-              <div className="text-right">
-                <p className={`text-sm font-bold ${r.margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(r.margen)}</p>
-                <p className="text-xs text-gray-400">
-                  {r.totalIngresos > 0 ? ((r.margen / r.totalIngresos) * 100).toFixed(0) : 0}% rent.
-                </p>
-              </div>
-            </div>
-          ))}
-          {rentability.length === 0 && (
-            <p className="text-center py-8 text-sm text-gray-400">Sin datos disponibles</p>
-          )}
-        </div>
+              <span className="mt-3 font-bold text-slate-900">{card.title}</span>
+              <span className="mt-1 text-sm leading-snug text-slate-500">{card.description}</span>
+            </button>
+          );
+        })}
       </div>
+
+      {activeSection && activeCard ? (
+        <div
+          ref={panelRef}
+          className="scroll-mt-24 rounded-2xl border border-violet-200/60 bg-white p-4 shadow-lg shadow-violet-100/40 transition-all duration-300 sm:p-6"
+        >
+          <button
+            type="button"
+            onClick={closeSection}
+            className="mb-4 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          >
+            <ChevronLeft size={14} />
+            Volver al menú
+          </button>
+
+          {activeSection === 'mensual' ? (
+            <RendimientoMensualSection ingresos={ingresos} gastos={gastos} descuentos={descuentos} />
+          ) : null}
+          {activeSection === 'vehiculos' ? (
+            <RentabilidadVehiculoSection
+              vehicles={vehicles}
+              ingresos={ingresos}
+              gastos={gastos}
+              descuentos={descuentos}
+              yearOptions={yearOptions}
+            />
+          ) : null}
+          {activeSection === 'gastos_op' ? (
+            <GastosOperativosSection gastos={gastos} vehicles={vehicles} yearOptions={yearOptions} />
+          ) : null}
+          {activeSection === 'ingresos' ? (
+            <IngresosReporteSection ingresos={ingresos} vehicles={vehicles} yearOptions={yearOptions} />
+          ) : null}
+          {activeSection === 'financiamiento' ? <PrestamosAportesSection /> : null}
+          {activeSection === 'exportar' ? (
+            <ExportarSection ingresos={ingresos} gastos={gastos} descuentos={descuentos} />
+          ) : null}
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-center text-sm text-slate-500">
+          Elige un análisis arriba para ver gráficos, rankings y exportaciones.
+        </p>
+      )}
     </div>
   );
 };

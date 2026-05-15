@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { FinancialAuditLog } from '../data/types';
 import { isValidAuditUserId } from './authAuditUser';
+import { cleanUuid, deepStripZeroIdFields } from '../utils/uuidColumn';
 
 export interface FinancialAuditLogInsert {
   user_id: string;
@@ -37,11 +38,25 @@ function mapFinancialAuditRow(r: Record<string, unknown>): FinancialAuditLog {
 }
 
 export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Promise<boolean> {
-  if (!isValidAuditUserId(row.user_id)) {
-    console.warn('No authenticated user for audit log');
+  const uidFromClean = cleanUuid(row.user_id);
+  const uid =
+    uidFromClean ??
+    (typeof row.user_id === 'string' && row.user_id.trim() !== '0' ? row.user_id.trim() : '');
+  if (!isValidAuditUserId(uid)) {
+    console.warn('No authenticated user for audit log', { user_id: row.user_id });
     return true;
   }
-  const { error } = await supabase.from('financial_audit_logs').insert(row);
+  const sanitized: FinancialAuditLogInsert = {
+    ...row,
+    user_id: uid,
+    old_data: row.old_data
+      ? (deepStripZeroIdFields(row.old_data) as Record<string, unknown>)
+      : row.old_data,
+    new_data: row.new_data
+      ? (deepStripZeroIdFields(row.new_data) as Record<string, unknown>)
+      : row.new_data,
+  };
+  const { error } = await supabase.from('financial_audit_logs').insert(sanitized);
   if (error) {
     logPostgrestError('financial_audit_logs insert', error);
     return false;

@@ -20,3 +20,12 @@ export function isValidIngresoPrimaryKey(id: string): boolean {
   if (UUID_RE.test(t)) return true;
   return /^[1-9]\d*$/.test(t);
 }
+
+/** PK `public.gastos`: bigint o uuid (misma regla que ingresos; nunca `Number(uuid)`). */
+export function gastoPrimaryKeyFromRow(v: unknown): string {
+  return ingresoPrimaryKeyFromRow(v);
+}
+
+export function isValidGastoPrimaryKey(id: string): boolean {
+  return isValidIngresoPrimaryKey(id);
+}

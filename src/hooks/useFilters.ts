@@ -33,9 +33,10 @@ export const useFilters = () => {
     });
   };
 
-  const filterByVehicle = <T extends { vehicleId: number | null }>(items: T[]): T[] => {
+  const filterByVehicle = <T extends { vehicleId: number | string | null }>(items: T[]): T[] => {
     if (!filters.vehicleId) return items;
-    return items.filter(item => item.vehicleId === filters.vehicleId);
+    const want = String(filters.vehicleId);
+    return items.filter((item) => item.vehicleId != null && String(item.vehicleId) === want);
   };
 
   const filterIngresos = (ingresos: Ingreso[]): Ingreso[] => {

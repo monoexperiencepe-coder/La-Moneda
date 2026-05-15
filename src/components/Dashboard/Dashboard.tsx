@@ -1,3 +1,4 @@
+/** @deprecated Huérfano: no enrutado en la app actual. Sustituido por Resumen + ReportesHub. */
 import React, { useMemo } from 'react';
 import KPICards from './KPICards';
 import IncomeVsExpenses from './IncomeVsExpenses';

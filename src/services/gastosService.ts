@@ -6,6 +6,21 @@ import { fetchAllSupabasePages } from './supabaseRangeFetch';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { getDetalleMetodoByLabel } from '../data/factCatalog';
+import {
+  deepSanitizeUuidPoisonInJson,
+  sanitizePostgrestRowZeroIdColumns,
+  UUID_REGEX_FLAT,
+  vehicleIdAuditScalar,
+  cleanUuid,
+} from '../utils/uuidColumn';
+import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
+
+const MSG_GASTO_ID_INVALID =
+  'Este registro no tiene ID válido. Recarga la página o revisa el mapeo desde Supabase.';
+
+function normalizeGastoIdParam(id: unknown): string {
+  return typeof id === 'string' ? id.trim() : String(id ?? '').trim();
+}
 
 /** Campos de clasificación / revisión (Supabase snake_case vía mapeo). */
 export type ClasificacionGastoPatch = Partial<{
@@ -39,7 +54,7 @@ export interface GastoAuditMeta {
 export type UpdateGastoCategoriaManualFailure = {
   ok: false;
   message: string;
-  gastoId: number;
+  gastoId: string;
   empresaIdFrontend: string;
   empresaIdRow: string | null;
   supabase?: { message: string; code?: string; details?: string; hint?: string };
@@ -56,7 +71,7 @@ export type UpdateGastoCategoriaManualResult =
   | { ok: true; gasto: Gasto }
   | UpdateGastoCategoriaManualFailure;
 
-async function fetchGastoEmpresaIdForDiagnostics(id: number): Promise<string | null> {
+async function fetchGastoEmpresaIdForDiagnostics(id: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('gastos')
     .select('empresa_id')
@@ -70,7 +85,7 @@ async function fetchGastoEmpresaIdForDiagnostics(id: number): Promise<string | n
 
 /** Solo en desarrollo: payload que se enviará al UPDATE de `public.gastos`. */
 export function debugMoveGastoPayload(
-  id: number,
+  id: string,
   patch: GastoCategoriaManualPatch,
   updateRow: Record<string, unknown>,
 ): void {
@@ -84,7 +99,7 @@ export function debugMoveGastoPayload(
 }
 
 async function auditGastoMoveCategoryLogs(
-  id: number,
+  id: string,
   before: Record<string, unknown> | null,
   afterRow: Record<string, unknown>,
   meta: GastoAuditMeta,
@@ -116,11 +131,8 @@ async function auditGastoMoveCategoryLogs(
         reason: reasonBase,
       }),
     );
-    const beforeVeh = before.vehicle_id == null ? null : Number(before.vehicle_id);
-    const afterVeh =
-      afterRow.vehicle_id == null || afterRow.vehicle_id === ''
-        ? null
-        : Number(afterRow.vehicle_id);
+    const beforeVeh = vehicleIdAuditScalar(before.vehicle_id);
+    const afterVeh = vehicleIdAuditScalar(afterRow.vehicle_id);
     if (beforeVeh !== afterVeh) {
       await run('change_vehicle_id', () =>
         insertFinancialAuditLog({
@@ -236,7 +248,7 @@ function gastoDetalleManualPatchToRow(patch: GastoDetalleManualPatch): Record<st
 }
 
 async function auditGastoDetalleManualAfterUpdate(
-  id: number,
+  id: string,
   before: Record<string, unknown> | null,
   afterRow: Record<string, unknown>,
 ): Promise<void> {
@@ -262,18 +274,23 @@ async function auditGastoDetalleManualAfterUpdate(
  * Auditoría opcional en try/catch separado; el UPDATE no depende de ella.
  */
 export async function updateGastoDetalleManual(
-  id: number,
+  id: string,
   patch: GastoDetalleManualPatch,
 ): Promise<UpdateGastoDetalleManualResult> {
   const empresaIdFrontend = EMPRESA_ID || '';
+  const idNorm = normalizeGastoIdParam(id);
   const fail = (
     error: string,
     supabase?: { message: string; code?: string; details?: string; hint?: string },
   ): UpdateGastoDetalleManualResult => {
     const out: UpdateGastoDetalleManualResult = { ok: false, gasto: null, error, supabase };
-    console.error('[gastos updateGastoDetalleManual] FALLO', { id, patch, ...out });
+    console.error('[gastos updateGastoDetalleManual] FALLO', { id: idNorm, patch, ...out });
     return out;
   };
+
+  if (!isValidGastoPrimaryKey(idNorm)) {
+    return fail(MSG_GASTO_ID_INVALID);
+  }
 
   if (!empresaIdFrontend) {
     return fail('VITE_EMPRESA_ID no está configurado en el frontend.');
@@ -284,19 +301,19 @@ export async function updateGastoDetalleManual(
     return fail('No hay campos para actualizar (patch vacío).');
   }
 
-  const empresaIdRow = await fetchGastoEmpresaIdForDiagnostics(id);
+  const empresaIdRow = await fetchGastoEmpresaIdForDiagnostics(idNorm);
   if (empresaIdRow != null && empresaIdRow !== empresaIdFrontend) {
     return fail(
-      `El gasto #${id} pertenece a otra empresa (empresa_id en fila ≠ VITE_EMPRESA_ID). Corrige el entorno o el registro.`,
+      `El gasto #${idNorm} pertenece a otra empresa (empresa_id en fila ≠ VITE_EMPRESA_ID). Corrige el entorno o el registro.`,
     );
   }
 
-  const before = await fetchGastoRawById(id);
+  const before = await fetchGastoRawById(idNorm);
 
   const { data, error } = await supabase
     .from('gastos')
     .update(row)
-    .eq('id', id)
+    .eq('id', idNorm)
     .eq('empresa_id', empresaIdFrontend)
     .select('*')
     .maybeSingle();
@@ -316,11 +333,11 @@ export async function updateGastoDetalleManual(
       before == null
         ? 'No existe fila con este id y empresa_id (revisa RLS o el id).'
         : 'El UPDATE no devolvió fila (0 filas afectadas). Revisa RLS o empresa_id.';
-    return fail(`No se pudo actualizar el gasto #${id}. ${hint}`);
+    return fail(`No se pudo actualizar el gasto #${idNorm}. ${hint}`);
   }
 
   const afterRow = data as Record<string, unknown>;
-  void auditGastoDetalleManualAfterUpdate(id, before, afterRow);
+  void auditGastoDetalleManualAfterUpdate(idNorm, before, afterRow);
 
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }
@@ -328,10 +345,11 @@ export async function updateGastoDetalleManual(
 const TIPO_GASTO_REQUIERE_VEHICULO = new Set(['operativo_vehiculo', 'inversion_compra']);
 
 function isInvalidVehicleSentinel(v: unknown): boolean {
-  return v == null || v === '' || v === 0 || v === '0';
+  if (v == null || v === '' || v === 0 || v === '0') return true;
+  if (typeof v === 'string' && v.trim() === '0') return true;
+  if (typeof v === 'bigint' && v === BigInt(0)) return true;
+  return false;
 }
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Valor seguro para columna `vehicle_id` en `public.gastos`.
@@ -348,7 +366,7 @@ function normalizeVehicleIdForGastoRow(
   if (typeof raw === 'string') {
     const s = raw.trim();
     if (s === '') return null;
-    if (UUID_RE.test(s)) return s;
+    if (UUID_REGEX_FLAT.test(s)) return s;
     const n = Number(s);
     return Number.isFinite(n) && n > 0 ? n : null;
   }
@@ -358,6 +376,96 @@ function normalizeVehicleIdForGastoRow(
     return Number.isFinite(n) && n > 0 ? n : null;
   }
   return null;
+}
+
+/**
+ * Última pasada antes del UPDATE: anula `*_id` = 0/"0", fuerza flota global si el tipo no lleva vehículo,
+ * normaliza `vehicle_id` string numérico → number, y limpia `excel_extra` anidado.
+ */
+function finalizeGastoCategoriaManualUpdateRow(row: Record<string, unknown>): void {
+  sanitizePostgrestRowZeroIdColumns(row);
+  const tg = row.tipo_gasto;
+  const ts = tg == null || tg === '' ? '' : String(tg).trim();
+  if (ts && !TIPO_GASTO_REQUIERE_VEHICULO.has(ts)) {
+    row.vehicle_id = null;
+    row.es_global_flota = true;
+  }
+  const vid = row.vehicle_id;
+  if (vid != null && typeof vid === 'string') {
+    const t = vid.trim();
+    if (t === '' || t === '0') {
+      row.vehicle_id = null;
+    } else if (UUID_REGEX_FLAT.test(t)) {
+      row.vehicle_id = t;
+    } else {
+      const n = Number(t);
+      row.vehicle_id = Number.isFinite(n) && n > 0 ? n : null;
+    }
+  }
+  if (typeof row.vehicle_id === 'number' && row.vehicle_id <= 0) {
+    row.vehicle_id = null;
+  }
+  if (typeof row.vehicle_id === 'bigint') {
+    const n = Number(row.vehicle_id);
+    row.vehicle_id = Number.isFinite(n) && n > 0 ? n : null;
+  }
+  if (row.excel_extra != null && typeof row.excel_extra === 'object') {
+    row.excel_extra = deepSanitizeUuidPoisonInJson(row.excel_extra) as Record<string, unknown>;
+  }
+}
+
+/** Solo columnas permitidas en UPDATE de mover categoría (evita claves extrañas al PostgREST). */
+const GASTO_CATEGORIA_MANUAL_ROW_KEYS = new Set([
+  'tipo_gasto',
+  'subtipo_gasto',
+  'vehicle_id',
+  'es_global_flota',
+  'clasificacion_manual',
+  'requiere_revision',
+  'revisado_por',
+  'revisado_at',
+  'origen_clasificacion',
+  'excel_extra',
+]);
+
+function pickGastoCategoriaManualUpdatePayload(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of GASTO_CATEGORIA_MANUAL_ROW_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(row, k)) {
+      out[k] = row[k];
+    }
+  }
+  return out;
+}
+
+/** Diagnóstico temporal (dev + prod): detecta `0` / `"0"` en el payload del UPDATE. */
+function logGastoCategoriaMoveUpdateDiagnostics(
+  id: string,
+  patch: GastoCategoriaManualPatch,
+  updateRow: Record<string, unknown>,
+): void {
+  const tipoDest = patch.tipo_gasto ?? '(sin tipo en patch)';
+  const subDest = patch.subtipo_gasto ?? '(sin subtipo en patch)';
+  const zeroLike: { key: string; value: unknown; typeof: string }[] = [];
+  for (const [k, v] of Object.entries(updateRow)) {
+    if (v === 0 || v === '0' || (typeof v === 'bigint' && v === BigInt(0))) {
+      zeroLike.push({ key: k, value: v, typeof: typeof v });
+    }
+  }
+  const nestedZero = JSON.stringify(updateRow).includes('"vehicle_id":0')
+    || JSON.stringify(updateRow).includes('"vehicle_id":"0"');
+  console.error('[updateGastoCategoriaManual PRE-UPDATE]', {
+    id,
+    tipo_gasto_destino: tipoDest,
+    subtipo_gasto_destino: subDest,
+    patch_recibido: patch,
+    updateRow_final: updateRow,
+    claves_valor_0_o_string_0: zeroLike,
+    posible_vehicle_id_cero_en_json: nestedZero,
+  });
+  if (zeroLike.length > 0) {
+    console.table(zeroLike);
+  }
 }
 
 function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<string, unknown> {
@@ -400,13 +508,18 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
   return row;
 }
 
-async function fetchGastoRawById(id: number): Promise<Record<string, unknown> | null> {
-  if (!EMPRESA_ID) return null;
+async function fetchGastoRawById(
+  id: string,
+  /** Misma forma que el UPDATE (p. ej. UUID ya validado con `cleanUuid`). */
+  empresaIdFilter?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const eid = empresaIdFilter ?? EMPRESA_ID;
+  if (!eid) return null;
   const { data, error } = await supabase
     .from('gastos')
     .select('*')
     .eq('id', id)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', eid)
     .single();
   if (error) return null;
   return (data as Record<string, unknown>) ?? null;
@@ -416,18 +529,23 @@ async function fetchGastoRawById(id: number): Promise<Record<string, unknown> | 
  * Actualiza solo la capa de clasificación financiera / auditoría.
  */
 export async function updateClasificacionGasto(
-  id: number,
+  id: string,
   patch: ClasificacionGastoPatch,
   meta: GastoAuditMeta = {},
 ): Promise<Gasto | null> {
+  const idNorm = normalizeGastoIdParam(id);
+  if (!isValidGastoPrimaryKey(idNorm)) {
+    console.error('[gastos updateClasificacionGasto]', MSG_GASTO_ID_INVALID, { id: idNorm });
+    return null;
+  }
   if (!EMPRESA_ID) return null;
-  const before = await fetchGastoRawById(id);
+  const before = await fetchGastoRawById(idNorm);
   const row = clasificacionPatchToRow(patch);
   if (Object.keys(row).length === 0) return null;
   const { data, error } = await supabase
     .from('gastos')
     .update(row)
-    .eq('id', id)
+    .eq('id', idNorm)
     .eq('empresa_id', EMPRESA_ID)
     .select('*')
     .single();
@@ -442,7 +560,7 @@ export async function updateClasificacionGasto(
         user_id: auditUserId,
         action_type: 'fix_classification',
         entity_type: 'gasto',
-        entity_id: String(id),
+        entity_id: idNorm,
         old_data: before,
         new_data: data as Record<string, unknown>,
         reason: meta.reason ?? 'Corrección de clasificación financiera',
@@ -458,10 +576,11 @@ export async function updateClasificacionGasto(
  * El UPDATE a `public.gastos` se ejecuta antes que la auditoría; un fallo en audit no revierte el movimiento.
  */
 export async function updateGastoCategoriaManual(
-  id: number,
+  id: string,
   patch: GastoCategoriaManualPatch,
   meta: GastoAuditMeta = {},
 ): Promise<UpdateGastoCategoriaManualResult> {
+  const idNorm = normalizeGastoIdParam(id);
   const empresaIdFrontend = EMPRESA_ID || '';
   const patchSummary = {
     tipo_gasto: patch.tipo_gasto,
@@ -476,11 +595,35 @@ export async function updateGastoCategoriaManual(
     return out;
   };
 
+  if (!isValidGastoPrimaryKey(idNorm)) {
+    return fail({
+      message: MSG_GASTO_ID_INVALID,
+      gastoId: idNorm || '(vacío)',
+      empresaIdFrontend: empresaIdFrontend || '(vacío)',
+      empresaIdRow: null,
+      updatePayload: {},
+      patchSummary,
+    });
+  }
+
   if (!empresaIdFrontend) {
     return fail({
       message: 'VITE_EMPRESA_ID no está configurado en el frontend.',
-      gastoId: id,
+      gastoId: idNorm,
       empresaIdFrontend: '(vacío)',
+      empresaIdRow: null,
+      updatePayload: {},
+      patchSummary,
+    });
+  }
+
+  const empresaUuid = cleanUuid(empresaIdFrontend);
+  if (!empresaUuid) {
+    return fail({
+      message:
+        'VITE_EMPRESA_ID no es un UUID válido (p. ej. "0" o texto inválido). Revise el archivo .env; PostgREST falla al filtrar por empresa_id.',
+      gastoId: idNorm,
+      empresaIdFrontend,
       empresaIdRow: null,
       updatePayload: {},
       patchSummary,
@@ -495,7 +638,7 @@ export async function updateGastoCategoriaManual(
         return fail({
           message:
             'Operativo e inversión con utilidad requieren un vehículo válido. Elige un N° de unidad (no uses 0 ni vacío).',
-          gastoId: id,
+          gastoId: idNorm,
           empresaIdFrontend,
           empresaIdRow: null,
           updatePayload: {},
@@ -506,10 +649,12 @@ export async function updateGastoCategoriaManual(
   }
 
   const row = categoriaManualPatchToRow(patch);
-  if (Object.keys(row).length === 0) {
+  finalizeGastoCategoriaManualUpdateRow(row);
+  const updatePayload = pickGastoCategoriaManualUpdatePayload(row);
+  if (Object.keys(updatePayload).length === 0) {
     return fail({
       message: 'No hay campos para actualizar (patch vacío).',
-      gastoId: id,
+      gastoId: idNorm,
       empresaIdFrontend,
       empresaIdRow: null,
       updatePayload: {},
@@ -517,28 +662,29 @@ export async function updateGastoCategoriaManual(
     });
   }
 
-  const empresaIdRow = await fetchGastoEmpresaIdForDiagnostics(id);
-  if (empresaIdRow != null && empresaIdRow !== empresaIdFrontend) {
+  const empresaIdRow = await fetchGastoEmpresaIdForDiagnostics(idNorm);
+  if (empresaIdRow != null && empresaIdRow !== empresaUuid) {
     return fail({
       message:
-        `El gasto #${id} pertenece a otra empresa (empresa_id en fila ≠ VITE_EMPRESA_ID). Corrige el entorno o el registro.`,
-      gastoId: id,
+        `El gasto #${idNorm} pertenece a otra empresa (empresa_id en fila ≠ VITE_EMPRESA_ID). Corrige el entorno o el registro.`,
+      gastoId: idNorm,
       empresaIdFrontend,
       empresaIdRow,
-      updatePayload: row,
+      updatePayload,
       patchSummary,
     });
   }
 
-  const before = await fetchGastoRawById(id);
+  const before = await fetchGastoRawById(idNorm, empresaUuid);
 
-  debugMoveGastoPayload(id, patch, row);
+  logGastoCategoriaMoveUpdateDiagnostics(idNorm, patch, updatePayload);
+  debugMoveGastoPayload(idNorm, patch, updatePayload);
 
   const { data, error } = await supabase
     .from('gastos')
-    .update(row)
-    .eq('id', id)
-    .eq('empresa_id', empresaIdFrontend)
+    .update(updatePayload)
+    .eq('id', idNorm)
+    .eq('empresa_id', empresaUuid)
     .select('*')
     .maybeSingle();
 
@@ -546,7 +692,7 @@ export async function updateGastoCategoriaManual(
     logPostgrestError('gastos updateGastoCategoriaManual UPDATE', error);
     return fail({
       message: error.message || 'Error de Supabase al actualizar el gasto.',
-      gastoId: id,
+      gastoId: idNorm,
       empresaIdFrontend,
       empresaIdRow,
       supabase: {
@@ -555,7 +701,7 @@ export async function updateGastoCategoriaManual(
         details: error.details,
         hint: error.hint,
       },
-      updatePayload: row,
+      updatePayload,
       patchSummary,
     });
   }
@@ -566,17 +712,17 @@ export async function updateGastoCategoriaManual(
         ? 'No existe fila visible con este id y empresa_id (revisa RLS o que el id sea correcto).'
         : 'El UPDATE no devolvió fila (0 filas afectadas). Revisa RLS o empresa_id.';
     return fail({
-      message: `No se pudo mover el gasto #${id}. ${hint} Revisa la consola para detalle técnico.`,
-      gastoId: id,
+      message: `No se pudo mover el gasto #${idNorm}. ${hint} Revisa la consola para detalle técnico.`,
+      gastoId: idNorm,
       empresaIdFrontend,
       empresaIdRow,
-      updatePayload: row,
+      updatePayload,
       patchSummary,
     });
   }
 
   const afterRow = data as Record<string, unknown>;
-  await auditGastoMoveCategoryLogs(id, before, afterRow, meta);
+  await auditGastoMoveCategoryLogs(idNorm, before, afterRow, meta);
 
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }
@@ -593,7 +739,20 @@ export async function fetchGastos(): Promise<Gasto[]> {
       .range(from, to);
     return { data, error };
   });
-  return data.map((r) => mapGastoRow(r as Record<string, unknown>));
+  const mapped = data.map((r) => mapGastoRow(r as Record<string, unknown>));
+  const valid: Gasto[] = [];
+  for (const g of mapped) {
+    if (isValidGastoPrimaryKey(g.id)) {
+      valid.push(g);
+      continue;
+    }
+    console.warn('[gastos fetchGastos] fila descartada: id de gasto inválido', {
+      id: g.id,
+      fecha: g.fecha,
+      motivo: g.motivo?.slice?.(0, 80),
+    });
+  }
+  return valid;
 }
 
 export async function insertGasto(row: Omit<Gasto, 'id' | 'createdAt'>): Promise<Gasto | null> {
@@ -625,13 +784,18 @@ export async function insertGasto(row: Omit<Gasto, 'id' | 'createdAt'>): Promise
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
 
-export async function removeGasto(id: number): Promise<boolean> {
+export async function removeGasto(id: string): Promise<boolean> {
+  const idNorm = normalizeGastoIdParam(id);
+  if (!isValidGastoPrimaryKey(idNorm)) {
+    console.error('[gastos removeGasto]', MSG_GASTO_ID_INVALID, { id: idNorm });
+    return false;
+  }
   if (!EMPRESA_ID) return false;
-  const before = await fetchGastoRawById(id);
+  const before = await fetchGastoRawById(idNorm);
   const { error } = await supabase
     .from('gastos')
     .delete()
-    .eq('id', id)
+    .eq('id', idNorm)
     .eq('empresa_id', EMPRESA_ID);
   if (error) {
     console.error('[gastos delete]', error.message);
@@ -644,7 +808,7 @@ export async function removeGasto(id: number): Promise<boolean> {
         user_id: deleteUserId,
         action_type: 'delete_expense',
         entity_type: 'gasto',
-        entity_id: String(id),
+        entity_id: idNorm,
         old_data: before,
         new_data: null,
         reason: 'Eliminación de gasto',

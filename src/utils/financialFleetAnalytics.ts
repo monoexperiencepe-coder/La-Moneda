@@ -9,9 +9,9 @@ export function fechaEnPeriodo(fecha: string, desde: string, hasta: string): boo
   return d !== '' && d >= desde && d <= hasta;
 }
 
-function vehicleIdMatch(rowVid: number | null | undefined, vehId: number): boolean {
-  if (rowVid == null) return false;
-  return Number(rowVid) === Number(vehId);
+function vehicleIdMatch(rowVid: number | string | null | undefined, vehId: number): boolean {
+  if (rowVid == null || rowVid === '' || rowVid === 0 || rowVid === '0') return false;
+  return String(rowVid).trim() === String(vehId);
 }
 
 /** KPIs inteligentes filtrados por fechas de movimiento (ingresos / gastos). */

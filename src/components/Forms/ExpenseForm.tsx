@@ -28,8 +28,58 @@ import {
 } from '../../data/representacionInterna';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
+import {
+  getDefaultFactTipoSubtipoForOperativoCanon,
+  getOperativoSubtipoLabel,
+  getOperativoSubtipoOptions,
+} from '../../utils/operativoSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { todayStr } from '../../utils/formatting';
+
+/** Orden visual (arriba → abajo) para llevar al usuario al primer error. */
+const EXPENSE_VALIDATION_SCROLL_ORDER: (keyof FormState)[] = [
+  'categoriaFinanciera',
+  'fecha',
+  'vehicleId',
+  'subtipoOperativoCanon',
+  'subtipoRepresentacion',
+  'tipo',
+  'subTipo',
+  'metodoPagoDetalle',
+  'monto',
+];
+
+const EXPENSE_FIELD_SCROLL_IDS: Partial<Record<keyof FormState, string>> = {
+  categoriaFinanciera: 'expense-field-categoria-financiera',
+  fecha: 'expense-field-fecha',
+  vehicleId: 'expense-field-vehicle',
+  subtipoOperativoCanon: 'expense-field-subtipo-operativo',
+  subtipoRepresentacion: 'expense-field-subtipo-representacion',
+  tipo: 'expense-field-tipo-fact',
+  subTipo: 'expense-field-subtipo',
+  metodoPagoDetalle: 'expense-field-metodo-cuenta',
+  monto: 'expense-field-monto',
+};
+
+function scrollToFirstExpenseValidationError(
+  errs: Partial<Record<keyof FormState, string>>,
+): void {
+  for (const key of EXPENSE_VALIDATION_SCROLL_ORDER) {
+    if (!errs[key]) continue;
+    const domId = EXPENSE_FIELD_SCROLL_IDS[key];
+    if (!domId) continue;
+    const el = document.getElementById(domId);
+    if (!el) continue;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+      queueMicrotask(() => el.focus({ preventScroll: true }));
+    } else {
+      const inner = el.querySelector<HTMLElement>('input, select, textarea, button');
+      if (inner) queueMicrotask(() => inner.focus({ preventScroll: true }));
+    }
+    break;
+  }
+}
 
 interface ExpenseFormProps {
   vehicles: Vehicle[];
@@ -49,6 +99,8 @@ interface FormState {
   subTipo: string;
   /** Solo categoría `representacion_interna`: subtipo financiero (no Fact). */
   subtipoRepresentacion: string;
+  /** Solo `operativo_vehiculo`: valor canónico persistido en `subtipo_gasto` (snake_case). */
+  subtipoOperativoCanon: string;
   fechaDesde: string;
   fechaHasta: string;
   metodoPago: string;
@@ -74,6 +126,7 @@ function emptyForm(): FormState {
     tipo: tipo0,
     subTipo: getSubtiposGasto(tipo0)[0] ?? '',
     subtipoRepresentacion: '',
+    subtipoOperativoCanon: '',
     fechaDesde: '',
     fechaHasta: '',
     metodoPago: 'Yape',
@@ -96,6 +149,7 @@ function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState
       tipo: t0,
       subTipo: getSubtiposGasto(t0)[0] ?? '',
       subtipoRepresentacion: '',
+      subtipoOperativoCanon: '',
       fechaDesde: '',
       fechaHasta: '',
       metodoPago: 'Yape',
@@ -148,7 +202,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     return getFactTiposForFinanza(form.categoriaFinanciera);
   }, [form.categoriaFinanciera]);
 
-  const validate = (): boolean => {
+  const buildExpenseValidationErrors = (): Partial<Record<keyof FormState, string>> => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
     if (!form.categoriaFinanciera) newErrors.categoriaFinanciera = 'Elige categoría financiera';
     if (!form.fecha) newErrors.fecha = 'La fecha de movimiento es requerida';
@@ -163,6 +217,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     if (form.categoriaFinanciera === 'representacion_interna') {
       if (!form.subtipoRepresentacion.trim()) {
         newErrors.subtipoRepresentacion = 'Elige subtipo de representación interna';
+      }
+    } else if (form.categoriaFinanciera === 'operativo_vehiculo') {
+      if (!form.subtipoOperativoCanon.trim()) {
+        newErrors.subtipoOperativoCanon = 'Elige subtipo operativo';
       }
     } else if (subtipos.length > 0 && !form.subTipo) {
       newErrors.subTipo = 'Selecciona sub tipo';
@@ -181,13 +239,19 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
           ? 'Indica el vehículo (inversión con utilidad va por unidad).'
           : 'Operativo: indica el vehículo (N° unidad)';
     }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    const newErrors = buildExpenseValidationErrors();
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollToFirstExpenseValidationError(newErrors));
+      });
+      return;
+    }
     setLoading(true);
     try {
       const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
@@ -196,10 +260,18 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       const esRep = catFin === 'representacion_interna';
       const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
       const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
-      const subtipoFin = esRep ? form.subtipoRepresentacion.trim() : (form.subTipo || null) ? form.subTipo.trim() : null;
+      const subtipoFin = esRep
+        ? form.subtipoRepresentacion.trim()
+        : catFin === 'operativo_vehiculo'
+          ? form.subtipoOperativoCanon.trim()
+          : (form.subTipo || null)
+            ? form.subTipo.trim()
+            : null;
       const motivoFin = esRep
         ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
-        : (form.subTipo || form.tipo);
+        : catFin === 'operativo_vehiculo' && form.subtipoOperativoCanon.trim()
+          ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
+          : (form.subTipo || form.tipo);
       const rawM = Number(Number(form.monto).toFixed(2));
       await Promise.resolve(
         onSubmit({
@@ -256,6 +328,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         </div>
       ) : (
         <Select
+          id="expense-field-categoria-financiera"
           label="Categoría financiera"
           placeholder="— Elige una —"
           options={FINANZA_GASTO_REGISTRO_OPTIONS.map((o) => ({
@@ -289,6 +362,20 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   tipo: REPRESENTACION_INTERNA_FACT_TIPO,
                   subTipo: REPRESENTACION_INTERNA_FACT_SUBTIPO,
                   subtipoRepresentacion: defaultSubtipoRepresentacionInterna(),
+                  subtipoOperativoCanon: '',
+                  vehicleId: p.vehicleId,
+                };
+              }
+              if (cat === 'operativo_vehiculo') {
+                const canon = 'motor';
+                const { tipo: tOp, subTipo: sOp } = getDefaultFactTipoSubtipoForOperativoCanon(canon);
+                return {
+                  ...p,
+                  categoriaFinanciera: cat,
+                  tipo: tOp,
+                  subTipo: sOp,
+                  subtipoOperativoCanon: canon,
+                  subtipoRepresentacion: '',
                   vehicleId: p.vehicleId,
                 };
               }
@@ -299,16 +386,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 tipo: tipo0,
                 subTipo: getSubtiposGasto(tipo0)[0] ?? '',
                 subtipoRepresentacion: '',
+                subtipoOperativoCanon: '',
                 vehicleId: cat === 'gastos_globales' ? '' : p.vehicleId,
               };
             });
             setErrors((e) => ({
               ...e,
               categoriaFinanciera: '',
+              fecha: '',
+              vehicleId: '',
+              subtipoRepresentacion: '',
+              subtipoOperativoCanon: '',
               tipo: '',
               subTipo: '',
-              subtipoRepresentacion: '',
-              vehicleId: '',
+              monto: '',
+              metodoPagoDetalle: '',
             }));
           }}
           error={errors.categoriaFinanciera}
@@ -327,6 +419,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input
+                id="expense-field-fecha"
                 label="Fecha de movimiento"
                 type="date"
                 value={form.fecha}
@@ -353,6 +446,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 </div>
               ) : (
                 <Select
+                  id="expense-field-vehicle"
                   label={
                     form.categoriaFinanciera === 'operativo_vehiculo' ||
                     form.categoriaFinanciera === 'inversion_compra'
@@ -409,6 +503,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {form.categoriaFinanciera === 'representacion_interna' ? (
                 <Select
+                  id="expense-field-subtipo-representacion"
                   label="Subtipo (representación interna)"
                   options={SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
                     value: s,
@@ -425,9 +520,42 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   disabled={seleccionesBloqueadas}
                   helper="Tipo Fact fijo (OTROS GASTOS · REPRESENTACIÓN) para no duplicar selección."
                 />
+              ) : form.categoriaFinanciera === 'operativo_vehiculo' ? (
+                <>
+                  <Select
+                    id="expense-field-subtipo-operativo"
+                    label="Subtipo operativo"
+                    options={getOperativoSubtipoOptions()}
+                    value={form.subtipoOperativoCanon}
+                    placeholder="Seleccionar…"
+                    onChange={(v) => {
+                      if (!v) return;
+                      const { tipo: tOp, subTipo: sOp } = getDefaultFactTipoSubtipoForOperativoCanon(v);
+                      setForm((p) => ({ ...p, subtipoOperativoCanon: v, tipo: tOp, subTipo: sOp }));
+                      setErrors((e) => ({ ...e, subtipoOperativoCanon: '' }));
+                    }}
+                    error={errors.subtipoOperativoCanon}
+                    required
+                    disabled={seleccionesBloqueadas}
+                    helper="Se guarda como subtipo_gasto canónico (mismo valor en ranking, filtros e historial)."
+                  />
+                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-700">
+                    <p className="font-semibold text-gray-600">Tipo Fact (metadata)</p>
+                    <p className="mt-1">
+                      <span className="text-gray-500">Tipo:</span> {form.tipo || '—'}
+                    </p>
+                    <p>
+                      <span className="text-gray-500">Sub tipo:</span> {form.subTipo || '—'}
+                    </p>
+                    <p className="mt-1.5 text-[10px] text-gray-500">
+                      Ajustado automáticamente según el subtipo operativo; no altera el monto ni la categoría financiera.
+                    </p>
+                  </div>
+                </>
               ) : (
                 <>
                   <Select
+                    id="expense-field-tipo-fact"
                     label="Tipo (Fact)"
                     options={tiposFactParaCategoria.map((t) => ({ value: t, label: t }))}
                     value={form.tipo}
@@ -446,6 +574,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     disabled={seleccionesBloqueadas}
                   />
                   <Select
+                    id="expense-field-subtipo"
                     label="Sub tipo"
                     options={subtipos.map((s) => ({ value: s, label: s }))}
                     value={form.subTipo}
@@ -486,25 +615,28 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               KPI Fact: {inferCategoriaFromTipoGasto(form.tipo).replace(/_/g, ' ')}
             </p>
 
-            <MetodoCuentaPicker
-              metodosChips={METODOS_PAGO}
-              metodoPago={form.metodoPago}
-              metodoPagoDetalle={form.metodoPagoDetalle}
-              registrosForCount={gastos}
-              theme="rose"
-              conteoEtiqueta="gastos"
-              disabled={seleccionesBloqueadas}
-              onChange={({ metodoPago, metodoPagoDetalle }) => {
-                setForm((p) => ({ ...p, metodoPago, metodoPagoDetalle }));
-                setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
-              }}
-            />
-            {errors.metodoPagoDetalle ? (
-              <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>
-            ) : null}
+            <div id="expense-field-metodo-cuenta" className="scroll-mt-4">
+              <MetodoCuentaPicker
+                metodosChips={METODOS_PAGO}
+                metodoPago={form.metodoPago}
+                metodoPagoDetalle={form.metodoPagoDetalle}
+                registrosForCount={gastos}
+                theme="rose"
+                conteoEtiqueta="gastos"
+                disabled={seleccionesBloqueadas}
+                onChange={({ metodoPago, metodoPagoDetalle }) => {
+                  setForm((p) => ({ ...p, metodoPago, metodoPagoDetalle }));
+                  setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
+                }}
+              />
+              {errors.metodoPagoDetalle ? (
+                <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>
+              ) : null}
+            </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input
+                id="expense-field-monto"
                 label="Monto (S/)"
                 type="number"
                 min="0"

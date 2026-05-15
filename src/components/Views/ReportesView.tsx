@@ -1,3 +1,4 @@
+/** @deprecated Huérfano: sustituido por `pages/Reportes/ReportesHub`. No borrar aún; fuera del flujo principal. */
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../Common/Card';

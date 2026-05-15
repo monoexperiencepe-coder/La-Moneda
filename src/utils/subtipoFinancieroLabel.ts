@@ -2,6 +2,10 @@ import {
   getRepresentacionInternaSubtipoLabel,
   normalizeRepresentacionInternaSubtipo,
 } from './representacionInternaSubtipoLabel';
+import {
+  getOperativoSubtipoLabel,
+  resolveOperativoSubtipoGastoCanon,
+} from './operativoSubtipo';
 
 /** Valor interno de filtro: agrupa cuota / préstamo / interés sin tocar BD. */
 export const SUBTIPO_FILTRO_PRESTAMO_FUSION = '__ui_prestamo_cuota_interes__';
@@ -23,10 +27,23 @@ export function isPrestamoFinancieroFusionRaw(subtipo: string | null | undefined
 
 /**
  * Etiqueta visual para `subtipo_gasto` (financiero y similares). No altera el valor persistido.
+ * Con `tipo_gasto` se unifica la pestaña operativos (canónico snake_case vs texto Fact legacy).
  */
-export function getSubtipoFinancieroLabel(subtipo: string | null | undefined): string {
+export function getSubtipoFinancieroLabel(
+  subtipo: string | null | undefined,
+  tipoGasto?: string | null,
+): string {
   const s = (subtipo ?? '').trim();
   if (!s) return '—';
+  const tg = (tipoGasto ?? '').trim();
+  if (tg === 'representacion_interna' || !tg) {
+    const repCanon = normalizeRepresentacionInternaSubtipo(s);
+    if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
+  }
+  if (tg === 'operativo_vehiculo') {
+    const c = resolveOperativoSubtipoGastoCanon(s);
+    return c ? getOperativoSubtipoLabel(c) : '—';
+  }
   const repCanon = normalizeRepresentacionInternaSubtipo(s);
   if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
   const k = normKey(s);
@@ -43,6 +60,9 @@ export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string |
   if (!t) return '';
   if (tabTipoGasto === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(t) || '';
+  }
+  if (tabTipoGasto === 'operativo_vehiculo') {
+    return resolveOperativoSubtipoGastoCanon(t) ?? '';
   }
   if (tabTipoGasto === 'financiero_prestamo' && isPrestamoFinancieroFusionRaw(t)) {
     return SUBTIPO_FILTRO_PRESTAMO_FUSION;
@@ -61,6 +81,9 @@ export function gastoMatchesSubtipoFinancieroFilter(
   }
   if (tabTipoGasto === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(subtipoGasto) === filterValue;
+  }
+  if (tabTipoGasto === 'operativo_vehiculo') {
+    return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
   }
   return (subtipoGasto ?? '').trim() === filterValue;
 }

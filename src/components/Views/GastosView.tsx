@@ -7,7 +7,7 @@ interface GastosViewProps {
   vehicles: Vehicle[];
   gastos: Gasto[];
   onAdd: (gasto: Omit<Gasto, 'id' | 'createdAt'>) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string) => void;
 }
 
 const GastosView: React.FC<GastosViewProps> = ({ vehicles, gastos, onAdd, onDelete }) => {

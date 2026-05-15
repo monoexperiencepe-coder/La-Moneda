@@ -5,6 +5,7 @@ import Badge from '../Common/Badge';
 import { Ingreso, Gasto, Vehicle } from '../../data/types';
 import { formatCurrency, formatDate } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import { vehicleIdKey } from '../../utils/vehicleId';
 
 interface RecentRegistrosProps {
   ingresos: Ingreso[];
@@ -26,10 +27,11 @@ type RecentItem = {
 const RecentRegistros: React.FC<RecentRegistrosProps> = ({
   ingresos, gastos, vehicles, limit = 8
 }) => {
-  const getVehicleLabel = (vehicleId: number | null) => {
-    if (!vehicleId) return 'General';
-    const v = vehicles.find(v => v.id === vehicleId);
-    return v ? `${v.marca} ${v.modelo}` : `#${vehicleId}`;
+  const getVehicleLabel = (vehicleId: number | string | null) => {
+    const k = vehicleIdKey(vehicleId);
+    if (!k) return 'General';
+    const v = vehicles.find((x) => String(x.id) === k);
+    return v ? `${v.marca} ${v.modelo}` : `#${k}`;
   };
 
   const allItems: RecentItem[] = [

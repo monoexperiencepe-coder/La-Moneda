@@ -24,6 +24,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { canMutateIngresos } from '../../utils/roles';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleIdKey } from '../../utils/vehicleId';
 import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
@@ -36,7 +37,7 @@ interface RegistrosTableProps {
   gastos?: Gasto[];
   vehicles: Vehicle[];
   onDeleteIngreso?: (id: string) => Promise<boolean | void> | boolean | void;
-  onDeleteGasto?: (id: number) => void;
+  onDeleteGasto?: (id: string) => void;
   /** Desde URL (ej. Inicio → cobros pendientes): preselecciona filtro estado de pago en ingresos. */
   initialEstadoPago?: string;
   /** Muestra columna de capa financiera (tipo_gasto, confianza, etc.) en modo gastos. */
@@ -234,7 +235,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [pageSize, setPageSize] = useState(10);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [deletePending, setDeletePending] = useState<
-    null | { kind: 'ingreso'; row: Ingreso } | { kind: 'gasto'; id: number }
+    null | { kind: 'ingreso'; row: Ingreso } | { kind: 'gasto'; id: string }
   >(null);
   const [deletingIngresoId, setDeletingIngresoId] = useState<string | null>(null);
   const [viewItem, setViewItem] = useState<Ingreso | Gasto | null>(null);
@@ -275,16 +276,18 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     }
   }, []);
 
-  const getVehicleLabel = useCallback((vehicleId: number | null) => {
-    if (!vehicleId) return 'General';
-    const v = vehicles.find((x) => x.id === vehicleId);
-    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${vehicleId}`;
+  const getVehicleLabel = useCallback((vehicleId: number | string | null) => {
+    const k = vehicleIdKey(vehicleId);
+    if (!k) return 'General';
+    const v = vehicles.find((x) => String(x.id) === k);
+    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${k}`;
   }, [vehicles]);
 
-  const getVehicleIdPlaca = (vehicleId: number | null) => {
-    if (!vehicleId) return 'General';
-    const v = vehicles.find((x) => x.id === vehicleId);
-    if (!v) return `#${vehicleId}`;
+  const getVehicleIdPlaca = (vehicleId: number | string | null) => {
+    const k = vehicleIdKey(vehicleId);
+    if (!k) return 'General';
+    const v = vehicles.find((x) => String(x.id) === k);
+    if (!v) return `#${k}`;
     return `#${v.id} · ${v.placa}`;
   };
 
@@ -617,11 +620,23 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             const cubreIngresoMobile =
               mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
             return (
-            <button
-              key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
-              type="button"
+            <div
+              key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
+              role="button"
+              tabIndex={0}
+              className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-all cursor-pointer hover:border-gray-200 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
               onClick={() => beginOpenDetail(item)}
-              className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-transform"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  beginOpenDetail(item);
+                }
+              }}
+              aria-label={
+                mode === 'ingresos'
+                  ? `Abrir detalle del ingreso del ${formatDate((item as Ingreso).fecha)}`
+                  : `Abrir detalle del gasto del ${formatDate(item.fecha)}`
+              }
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -687,7 +702,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   ) : null}
                       {(item as Gasto).subtipo_gasto ? (
                     <span className="text-[10px] text-gray-500 truncate max-w-[140px]">
-                      {getSubtipoFinancieroLabel((item as Gasto).subtipo_gasto)}
+                      {getSubtipoFinancieroLabel((item as Gasto).subtipo_gasto, (item as Gasto).tipo_gasto)}
                     </span>
                   ) : null}
                   <Badge
@@ -758,7 +773,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   )}
                 </div>
               </div>
-            </button>
+            </div>
             );
           })
         )}
@@ -807,7 +822,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
                 return (
                 <tr
-                  key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : (item as Gasto).id}
+                  key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
                   className="hover:bg-gray-50 transition-colors cursor-pointer"
                   title="Clic en la fila para ver detalles"
                   onClick={() => beginOpenDetail(item)}

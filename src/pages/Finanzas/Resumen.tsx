@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ArrowRight } from 'lucide-react';
+import { ChevronLeft, Info, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { calculateKPIs, calculateFinancialKPIs } from '../../utils/calculations';
+import { vehicleIdKey } from '../../utils/vehicleId';
+import type { Gasto, Ingreso } from '../../data/types';
 
 type ResumenPreset = 'mes_actual' | 'mes_anterior' | 'anio_actual' | 'todo' | 'personalizado';
 
@@ -18,6 +19,21 @@ const CATEGORIA_MAP = [
   { key: 'representacion_interna', label: 'Representación interna' },
   { key: 'gastos_globales', label: 'Globales' },
 ] as const;
+
+const MESES_LARGO = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
 
 function monthRange(year: number, month: number): { desde: string; hasta: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -67,6 +83,248 @@ function getRangeByPreset(
   return { desde: null, hasta: null, label: 'Todo' };
 }
 
+/** Frase corta para el héroe (dueño no técnico). */
+function periodPhraseHuman(
+  preset: ResumenPreset,
+  range: { label: string; desde: string | null },
+  customYear: number,
+  customMonth: number | 'all',
+): string {
+  if (preset === 'mes_actual') {
+    const mm = Number(todayStr().slice(5, 7));
+    return `este mes (${MESES_LARGO[mm - 1] ?? 'mes actual'})`;
+  }
+  if (preset === 'mes_anterior') return 'el mes anterior';
+  if (preset === 'anio_actual') return `este año (${todayStr().slice(0, 4)})`;
+  if (preset === 'todo') return 'todo el historial registrado';
+  if (customMonth === 'all') return `el año ${customYear}`;
+  if (typeof customMonth === 'number') {
+    return `${MESES_LARGO[customMonth - 1] ?? 'el mes'} ${customYear}`;
+  }
+  return range.label.toLowerCase();
+}
+
+/** Período inmediatamente anterior equivalente (mes→mes anterior, año→año anterior). */
+function getPreviousEquivalentRange(
+  preset: ResumenPreset,
+  range: { desde: string | null; hasta: string | null },
+  customMonth: number | 'all',
+): { desde: string; hasta: string; compareLabel: string } | null {
+  if (preset === 'todo') return null;
+  const { desde, hasta } = range;
+  if (!desde || !hasta) return null;
+
+  const isFullYear = desde.endsWith('-01-01') && hasta.endsWith('-12-31');
+  if (preset === 'anio_actual' || (preset === 'personalizado' && customMonth === 'all') || isFullYear) {
+    const y = Number(desde.slice(0, 4));
+    if (!Number.isFinite(y)) return null;
+    const py = y - 1;
+    return { desde: `${py}-01-01`, hasta: `${py}-12-31`, compareLabel: `el año ${py}` };
+  }
+
+  const m = Number(desde.slice(5, 7));
+  const y = Number(desde.slice(0, 4));
+  if (!Number.isFinite(m) || !Number.isFinite(y) || m < 1 || m > 12) return null;
+  const pm = m === 1 ? 12 : m - 1;
+  const py = m === 1 ? y - 1 : y;
+  const r = monthRange(py, pm);
+  return { ...r, compareLabel: `${MESES_LARGO[pm - 1] ?? 'el mes anterior'} ${py}` };
+}
+
+type PeriodTotals = {
+  ingresos: number;
+  gastos: number;
+  resultado: number;
+  hasMovement: boolean;
+};
+
+function aggregatePeriodTotals(
+  ingresos: Ingreso[],
+  gastos: Gasto[],
+  desde: string | null,
+  hasta: string | null,
+): PeriodTotals {
+  let ing = 0;
+  let gas = 0;
+  let hasMovement = false;
+  const bounded = Boolean(desde && hasta);
+
+  for (const i of ingresos) {
+    const d = toDateOnlyString(i.fecha);
+    if (!d) continue;
+    if (bounded && (d < desde! || d > hasta!)) continue;
+    ing += ingresoMontoPEN(i);
+    hasMovement = true;
+  }
+  for (const g of gastos) {
+    const d = toDateOnlyString(g.fecha);
+    if (!d) continue;
+    if (bounded && (d < desde! || d > hasta!)) continue;
+    gas += g.monto;
+    hasMovement = true;
+  }
+  return { ingresos: ing, gastos: gas, resultado: ing - gas, hasMovement };
+}
+
+function pctDelta(current: number, previous: number): number | null {
+  if (previous === 0) {
+    if (current === 0) return null;
+    return current > 0 ? 100 : -100;
+  }
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+type CompareLine = { text: string; tone: 'good' | 'bad' | 'neutral' };
+
+function buildComparisonLines(
+  cur: PeriodTotals,
+  prev: PeriodTotals,
+  compareLabel: string,
+): CompareLine[] {
+  if (!prev.hasMovement && !cur.hasMovement) return [];
+  const lines: CompareLine[] = [];
+  const label = compareLabel;
+
+  const dIng = pctDelta(cur.ingresos, prev.ingresos);
+  if (dIng != null && (cur.ingresos > 0 || prev.ingresos > 0)) {
+    const up = dIng >= 0;
+    const abs = Math.abs(Math.round(dIng));
+    if (abs >= 1) {
+      lines.push({
+        text: `${up ? '↑' : '↓'} Ingresos ${abs}% vs ${label}`,
+        tone: up ? 'good' : 'bad',
+      });
+    }
+  }
+
+  const diffGas = cur.gastos - prev.gastos;
+  if (Math.abs(diffGas) >= 1 && (cur.gastos > 0 || prev.gastos > 0)) {
+    if (diffGas > 0) {
+      lines.push({
+        text: `↓ Gastaste ${formatCurrency(diffGas)} más que en ${label}`,
+        tone: 'bad',
+      });
+    } else {
+      lines.push({
+        text: `↑ Gastaste ${formatCurrency(Math.abs(diffGas))} menos que en ${label}`,
+        tone: 'good',
+      });
+    }
+  }
+
+  const diffRes = cur.resultado - prev.resultado;
+  if (Math.abs(diffRes) >= 1 && (cur.hasMovement || prev.hasMovement)) {
+    if (diffRes > 0) {
+      lines.push({
+        text: `↑ Resultado mejoró ${formatCurrency(diffRes)} vs ${label}`,
+        tone: 'good',
+      });
+    } else {
+      lines.push({
+        text: `↓ Resultado bajó ${formatCurrency(Math.abs(diffRes))} vs ${label}`,
+        tone: 'bad',
+      });
+    }
+  }
+
+  return lines.slice(0, 3);
+}
+
+type PeriodInsight = { tone: 'good' | 'warn' | 'neutral'; text: string };
+
+function buildPeriodInsights(input: {
+  cur: PeriodTotals;
+  prev: PeriodTotals | null;
+  hasCompare: boolean;
+  distribucion: { label: string; monto: number; pct: number; key: string }[];
+  prevOperativoMonto: number;
+  cobrosPendientesCount: number;
+  cobrosPendientesMonto: number;
+}): PeriodInsight[] {
+  const {
+    cur,
+    prev,
+    hasCompare,
+    distribucion,
+    prevOperativoMonto,
+    cobrosPendientesCount,
+    cobrosPendientesMonto,
+  } = input;
+  const op = distribucion.find((d) => d.key === 'operativo_vehiculo');
+  const top = distribucion[0];
+  const picks: PeriodInsight[] = [];
+  const add = (item: PeriodInsight) => {
+    if (picks.length < 2) picks.push(item);
+  };
+
+  if (cobrosPendientesCount >= 3 || cobrosPendientesMonto >= 800) {
+    add({
+      tone: 'warn',
+      text:
+        cobrosPendientesCount >= 3
+          ? `Hay ${cobrosPendientesCount} cobros pendientes acumulados (${formatCurrency(cobrosPendientesMonto)}).`
+          : `Hay ${formatCurrency(cobrosPendientesMonto)} por cobrar pendientes.`,
+    });
+  }
+
+  if (cur.resultado < 0 && cur.hasMovement) {
+    add({
+      tone: 'warn',
+      text: 'Los gastos del período superan a los ingresos registrados.',
+    });
+  }
+
+  if (hasCompare && prev?.hasMovement) {
+    const dGas = pctDelta(cur.gastos, prev.gastos);
+    if (dGas != null && dGas >= 12) {
+      add({
+        tone: 'warn',
+        text: `El gasto total subió ${Math.round(dGas)}% respecto al período anterior.`,
+      });
+    }
+    if (op && prevOperativoMonto > 0) {
+      const dOp = pctDelta(op.monto, prevOperativoMonto);
+      if (dOp != null && dOp >= 15) {
+        add({
+          tone: 'warn',
+          text: `El gasto operativo subió ${Math.round(dOp)}% respecto al período anterior.`,
+        });
+      }
+    }
+    const dIng = pctDelta(cur.ingresos, prev.ingresos);
+    const dGas2 = pctDelta(cur.gastos, prev.gastos);
+    if (dIng != null && dGas2 != null && dIng > dGas2 && dIng >= 5 && cur.ingresos > prev.ingresos) {
+      add({
+        tone: 'good',
+        text: 'Los ingresos crecieron más rápido que los gastos frente al período anterior.',
+      });
+    }
+  }
+
+  if (top && top.pct >= 35 && cur.gastos > 0) {
+    add({
+      tone: 'warn',
+      text: `${top.label} concentra gran parte del gasto del período (${top.pct.toFixed(0)}%).`,
+    });
+  }
+
+  if (op && cur.gastos > 0 && op.monto / cur.gastos >= 0.5) {
+    add({
+      tone: 'warn',
+      text: 'Más de la mitad del gasto del período es operativo por vehículo.',
+    });
+  }
+
+  if (picks.length === 0 && cur.hasMovement) {
+    picks.push({
+      tone: 'good',
+      text: 'El período se ve estable: sin señales fuertes de desvío.',
+    });
+  }
+
+  return picks;
+}
+
 function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: boolean): string {
   const t = (raw ?? '').trim();
   if (!t) return hasVehicle ? 'operativo_vehiculo' : 'gastos_globales';
@@ -77,13 +335,96 @@ function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: boolean)
     operativo_flota_global: 'gastos_globales',
   };
   const mapped = legacyMap[t] ?? t;
-  if (mapped === 'personal_socios_familiares' || mapped === 'representacion_interna' || mapped === 'personales') return 'representacion_interna';
+  if (mapped === 'personal_socios_familiares' || mapped === 'representacion_interna' || mapped === 'personales') {
+    return 'representacion_interna';
+  }
   return mapped;
+}
+
+function sumOperativoGastos(gastos: Gasto[], desde: string, hasta: string): number {
+  let s = 0;
+  for (const g of gastos) {
+    const d = toDateOnlyString(g.fecha);
+    if (!d || d < desde || d > hasta) continue;
+    if (normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null) !== 'operativo_vehiculo') continue;
+    s += g.monto;
+  }
+  return s;
+}
+
+function ComparePill({ line }: { line: CompareLine }) {
+  const cls =
+    line.tone === 'good'
+      ? 'border-emerald-200/80 bg-emerald-50/90 text-emerald-900'
+      : line.tone === 'bad'
+        ? 'border-rose-200/80 bg-rose-50/90 text-rose-900'
+        : 'border-slate-200 bg-slate-50 text-slate-700';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-opacity duration-300 ${cls}`}
+    >
+      {line.tone === 'good' ? <TrendingUp size={12} className="shrink-0" /> : null}
+      {line.tone === 'bad' ? <TrendingDown size={12} className="shrink-0" /> : null}
+      {line.text}
+    </span>
+  );
+}
+
+type AlertTone = 'danger' | 'warning' | 'success';
+
+interface ResumenAlert {
+  id: string;
+  tone: AlertTone;
+  title: string;
+  text: string;
+  href?: string;
+}
+
+function KpiChip({
+  label,
+  value,
+  tone,
+  tooltip,
+  href,
+}: {
+  label: string;
+  value: string;
+  tone: 'emerald' | 'rose' | 'slate' | 'amber';
+  tooltip: string;
+  href?: string;
+}) {
+  const toneClass = {
+    emerald: 'text-emerald-800',
+    rose: 'text-rose-800',
+    slate: 'text-slate-900',
+    amber: 'text-amber-900',
+  }[tone];
+
+  const inner = (
+    <div className="flex min-w-0 flex-col rounded-xl bg-white px-3 py-3 ring-1 ring-slate-100">
+      <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+        {label}
+        <span title={tooltip} aria-label={tooltip} className="inline-flex">
+          <Info size={12} className="shrink-0 opacity-40" />
+        </span>
+      </span>
+      <span className={`mt-1 truncate text-lg font-bold tabular-nums ${toneClass}`}>{value}</span>
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link to={href} className="block rounded-xl transition hover:ring-2 hover:ring-violet-200">
+        {inner}
+      </Link>
+    );
+  }
+  return inner;
 }
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, vehicles, cajaNegocioVehiculo } = useRegistrosContext();
+  const { ingresos, gastos, vehicles } = useRegistrosContext();
   const [preset, setPreset] = useState<ResumenPreset>('mes_actual');
   const current = todayStr();
   const currentYear = Number(current.slice(0, 4));
@@ -93,6 +434,11 @@ const Resumen: React.FC = () => {
   const range = useMemo(
     () => getRangeByPreset(preset, customYear, customMonth),
     [preset, customYear, customMonth],
+  );
+
+  const periodHuman = useMemo(
+    () => periodPhraseHuman(preset, range, customYear, customMonth),
+    [preset, range, customYear, customMonth],
   );
 
   const availableYears = useMemo(() => {
@@ -118,24 +464,22 @@ const Resumen: React.FC = () => {
 
   const ingresosP = useMemo(() => ingresos.filter((i) => inPeriod(i.fecha)), [ingresos, range]);
   const gastosP = useMemo(() => gastos.filter((g) => inPeriod(g.fecha)), [gastos, range]);
-  const cajaP = useMemo(() => cajaNegocioVehiculo.filter((row) => inPeriod(row.fecha)), [cajaNegocioVehiculo, range]);
 
   const totalIngresos = useMemo(() => ingresosP.reduce((s, i) => s + ingresoMontoPEN(i), 0), [ingresosP]);
   const totalGastos = useMemo(() => gastosP.reduce((s, g) => s + g.monto, 0), [gastosP]);
-  const totalCajaPeriodo = useMemo(() => cajaP.reduce((s, x) => s + x.monto, 0), [cajaP]);
   const resultadoNeto = totalIngresos - totalGastos;
-  const margenPct = totalIngresos > 0 ? (resultadoNeto / totalIngresos) * 100 : null;
 
-  const pendienteIngresos = useMemo(
-    () => ingresosP.filter((i) => (i.estadoPago ?? '').toUpperCase() === 'PENDIENTE'),
-    [ingresosP],
+  const cobrosPendientesGlobal = useMemo(
+    () => ingresos.filter((i) => (i.estadoPago ?? '').toUpperCase() === 'PENDIENTE'),
+    [ingresos],
   );
-  const pendienteMonto = useMemo(
-    () => pendienteIngresos.reduce((s, i) => s + ingresoMontoPEN(i), 0),
-    [pendienteIngresos],
+  const cobrosPendientesMonto = useMemo(
+    () => cobrosPendientesGlobal.reduce((s, i) => s + ingresoMontoPEN(i), 0),
+    [cobrosPendientesGlobal],
   );
 
   const hasData = ingresosP.length > 0 || gastosP.length > 0;
+  const fmt = (v: number) => (hasData ? formatCurrency(v) : '—');
 
   const distribucion = useMemo(() => {
     const total = totalGastos;
@@ -148,93 +492,208 @@ const Resumen: React.FC = () => {
       const monto = acc[c.key] ?? 0;
       const pct = total > 0 ? (monto / total) * 100 : 0;
       return { key: c.key, label: c.label, monto, pct };
-    }).sort((a, b) => b.monto - a.monto);
+    })
+      .filter((d) => d.monto > 0)
+      .sort((a, b) => b.monto - a.monto);
   }, [gastosP, totalGastos]);
 
-  const byKey = Object.fromEntries(distribucion.map((d) => [d.key, d.monto]));
-  const alertas = useMemo(() => {
-    const out: { tone: 'danger' | 'warning' | 'success'; text: string }[] = [];
-    if (resultadoNeto < 0) out.push({ tone: 'danger', text: 'Resultado del período negativo (gastos superan ingresos).' });
-    if (totalIngresos > 0 && (byKey.financiero_prestamo ?? 0) > totalIngresos * 0.3) {
-      out.push({ tone: 'danger', text: 'Gasto financiero alto respecto a ingresos del período.' });
-    }
-    if (totalIngresos > 0 && (byKey.planilla_laboral ?? 0) > totalIngresos * 0.25) {
-      out.push({ tone: 'warning', text: 'Planilla elevada frente a ingresos del período.' });
-    }
-    if (totalGastos > 0 && (byKey.gastos_globales ?? 0) > totalGastos * 0.1) {
-      out.push({ tone: 'warning', text: 'Gastos globales relevantes: conviene revisar clasificación.' });
-    }
-    if (!out.length) out.push({ tone: 'success', text: 'Sin alertas críticas en las reglas automáticas.' });
-    return out;
-  }, [resultadoNeto, totalIngresos, totalGastos, byKey]);
+  const byKey = useMemo(
+    () => Object.fromEntries(distribucion.map((d) => [d.key, d.monto])),
+    [distribucion],
+  );
 
-  const alertasUrgentes = alertas.filter((a) => a.tone !== 'success');
-  const alertaOk = alertas.find((a) => a.tone === 'success');
+  const top3Categorias = useMemo(() => distribucion.slice(0, 3), [distribucion]);
+
+  const previousRange = useMemo(
+    () => getPreviousEquivalentRange(preset, range, customMonth),
+    [preset, range, customMonth],
+  );
+
+  const prevTotals = useMemo(() => {
+    if (!previousRange) return null;
+    return aggregatePeriodTotals(ingresos, gastos, previousRange.desde, previousRange.hasta);
+  }, [ingresos, gastos, previousRange]);
+
+  const curTotals = useMemo(
+    (): PeriodTotals => ({
+      ingresos: totalIngresos,
+      gastos: totalGastos,
+      resultado: resultadoNeto,
+      hasMovement: hasData,
+    }),
+    [totalIngresos, totalGastos, resultadoNeto, hasData],
+  );
+
+  const comparisonLines = useMemo(() => {
+    if (!prevTotals || !previousRange) return [];
+    return buildComparisonLines(curTotals, prevTotals, previousRange.compareLabel);
+  }, [curTotals, prevTotals, previousRange]);
+
+  const prevOperativoMonto = useMemo(() => {
+    if (!previousRange) return 0;
+    return sumOperativoGastos(gastos, previousRange.desde, previousRange.hasta);
+  }, [gastos, previousRange]);
+
+  const periodInsights = useMemo(
+    () =>
+      buildPeriodInsights({
+        cur: curTotals,
+        prev: prevTotals,
+        hasCompare: Boolean(previousRange && prevTotals),
+        distribucion,
+        prevOperativoMonto,
+        cobrosPendientesCount: cobrosPendientesGlobal.length,
+        cobrosPendientesMonto,
+      }),
+    [
+      curTotals,
+      prevTotals,
+      previousRange,
+      distribucion,
+      prevOperativoMonto,
+      cobrosPendientesGlobal.length,
+      cobrosPendientesMonto,
+    ],
+  );
 
   const topOperativosVehiculo = useMemo(() => {
-    const map = new Map<number, number>();
+    const map = new Map<string, number>();
     for (const g of gastosP) {
       const k = normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null);
       if (k !== 'operativo_vehiculo') continue;
-      if (g.vehicleId == null) continue;
-      map.set(g.vehicleId, (map.get(g.vehicleId) ?? 0) + g.monto);
+      const key = vehicleIdKey(g.vehicleId);
+      if (!key) continue;
+      map.set(key, (map.get(key) ?? 0) + g.monto);
     }
     return [...map.entries()]
-      .map(([vehicleId, monto]) => {
-        const v = vehicles.find((x) => x.id === vehicleId);
-        const name = v ? `${v.marca} ${v.modelo} (${v.placa})` : `Unidad #${vehicleId}`;
-        return { vehicleId, name, monto };
+      .map(([key, monto]) => {
+        const v = vehicles.find((x) => String(x.id) === key);
+        const name = v ? `${v.marca} ${v.modelo} · ${v.placa}` : `Unidad #${key}`;
+        return { vehicleId: key, name, monto };
       })
       .sort((a, b) => b.monto - a.monto)
       .slice(0, 5);
   }, [gastosP, vehicles]);
 
-  const legacy = useMemo(() => calculateKPIs(ingresosP, gastosP, []), [ingresosP, gastosP]);
-  const intel = useMemo(() => calculateFinancialKPIs(ingresosP, gastosP), [ingresosP, gastosP]);
+  const alertas = useMemo((): ResumenAlert[] => {
+    const out: ResumenAlert[] = [];
+    const op = byKey.operativo_vehiculo ?? 0;
 
-  const fmt = (v: number) => (hasData ? formatCurrency(v) : '—');
+    if (cobrosPendientesGlobal.length > 0) {
+      const alto = cobrosPendientesMonto >= 500 || cobrosPendientesGlobal.length >= 3;
+      out.push({
+        id: 'pendientes',
+        tone: alto ? 'danger' : 'warning',
+        title: 'Cobros pendientes',
+        text:
+          cobrosPendientesGlobal.length === 1
+            ? `Hay ${formatCurrency(cobrosPendientesMonto)} por cobrar.`
+            : `Hay ${cobrosPendientesGlobal.length} cobros por un total de ${formatCurrency(cobrosPendientesMonto)}.`,
+        href: '/finanzas/ingresos?cobro=pendiente',
+      });
+    }
 
-  const quickLinkClass =
-    'inline-flex items-center gap-1 rounded-xl border border-violet-200/80 bg-white px-3 py-2 text-xs font-semibold text-violet-900 shadow-sm hover:bg-violet-50 sm:text-sm';
+    if (hasData && totalGastos > 0 && totalIngresos > 0 && totalGastos >= totalIngresos * 0.85) {
+      out.push({
+        id: 'gastos-altos',
+        tone: totalGastos >= totalIngresos ? 'danger' : 'warning',
+        title: 'Gastos elevados',
+        text: 'Los gastos del período consumen casi todo lo que ingresó. Revisa el detalle en Gastos.',
+        href: '/finanzas/gastos',
+      });
+    }
+
+    if (hasData && resultadoNeto < 0) {
+      out.push({
+        id: 'baja-utilidad',
+        tone: 'danger',
+        title: 'Baja utilidad',
+        text: `En ${periodHuman} los gastos superan a los ingresos registrados.`,
+      });
+    } else if (hasData && totalIngresos > 0 && resultadoNeto / totalIngresos < 0.1) {
+      out.push({
+        id: 'baja-utilidad-margen',
+        tone: 'warning',
+        title: 'Baja utilidad',
+        text: 'Queda poco margen después de gastos. Conviene revisar categorías con más peso.',
+      });
+    }
+
+    if (totalGastos > 0 && op > totalGastos * 0.55) {
+      out.push({
+        id: 'exceso-operativo',
+        tone: 'warning',
+        title: 'Mucho gasto operativo',
+        text: 'Más de la mitad del gasto del período es operativo por vehículo.',
+        href: '/finanzas/gastos',
+      });
+    }
+
+    if (out.length === 0) {
+      out.push({
+        id: 'ok',
+        tone: 'success',
+        title: 'Todo en orden',
+        text: 'No hay alertas urgentes con los criterios habituales de este panel.',
+      });
+    }
+
+    return out;
+  }, [
+    byKey,
+    cobrosPendientesGlobal.length,
+    cobrosPendientesMonto,
+    hasData,
+    periodHuman,
+    resultadoNeto,
+    totalGastos,
+    totalIngresos,
+  ]);
+
+  const heroTone =
+    !hasData ? 'neutral' : resultadoNeto >= 0 ? 'positive' : 'negative';
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-8 animate-fade-in">
-      <div className="flex items-start gap-3">
+    <div className="mx-auto max-w-4xl space-y-5 pb-10 animate-fade-in">
+      <header className="flex items-start gap-3">
         <button
           type="button"
           onClick={() => navigate('/finanzas')}
           className="mt-0.5 shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100"
+          aria-label="Volver a Finanzas"
         >
           <ChevronLeft size={20} />
         </button>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-600/90">Finanzas</p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Resumen ejecutivo</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Vista rápida del período. El detalle por módulo está en Ingresos, Gastos o Reportes.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">¿Cómo va mi negocio?</h1>
+          <p className="mt-1 text-sm text-slate-600">Lo esencial del período que elijas. Sin hojas de cálculo.</p>
         </div>
-      </div>
+      </header>
 
-      <Card title="Período" subtitle={`${range.label}${range.desde && range.hasta ? ` · ${range.desde} → ${range.hasta}` : ''}`}>
+      <Card
+        title="¿Qué período miras?"
+        subtitle={range.desde && range.hasta ? `${range.label} · ${range.desde} al ${range.hasta}` : range.label}
+        compact
+      >
         <div className="flex flex-wrap gap-2">
           {(
             [
-              { id: 'mes_actual', label: 'Mes actual' },
+              { id: 'mes_actual', label: 'Este mes' },
               { id: 'mes_anterior', label: 'Mes anterior' },
-              { id: 'anio_actual', label: 'Año actual' },
+              { id: 'anio_actual', label: 'Este año' },
               { id: 'todo', label: 'Todo' },
-              { id: 'personalizado', label: 'Personalizado' },
+              { id: 'personalizado', label: 'Elegir…' },
             ] as const
           ).map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => setPreset(p.id)}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${
                 preset === p.id
-                  ? 'border-violet-400 bg-violet-50 text-violet-900'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  ? 'border-violet-500 bg-violet-600 text-white shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-violet-200 hover:bg-violet-50/50'
               }`}
             >
               {p.label}
@@ -266,107 +725,120 @@ const Resumen: React.FC = () => {
         )}
       </Card>
 
-      {alertasUrgentes.length > 0 ? (
-        <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-950">Atención</p>
-          <ul className="mt-2 space-y-2">
-            {alertasUrgentes.map((a, i) => (
-              <li
-                key={`${a.text}-${i}`}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                  a.tone === 'danger'
-                    ? 'border-red-200 bg-red-50 text-red-900'
-                    : 'border-amber-200 bg-amber-100/80 text-amber-950'
-                }`}
-              >
-                {a.text}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : alertaOk ? (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-2 text-center text-sm font-medium text-emerald-900">
-          {alertaOk.text}
-        </p>
-      ) : null}
-
-      {/* Héroe: un solo número + contexto */}
-      <section className="rounded-2xl border border-violet-200/80 bg-gradient-to-b from-violet-50/90 to-white p-5 shadow-sm sm:p-7">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-800/90">Resultado del período</p>
-        <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-4xl">
+      {/* 1 — Héroe */}
+      <section
+        className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 sm:p-7 ${
+          heroTone === 'positive'
+            ? 'border-emerald-200/80 bg-gradient-to-b from-emerald-50/90 to-white'
+            : heroTone === 'negative'
+              ? 'border-rose-200/80 bg-gradient-to-b from-rose-50/80 to-white'
+              : 'border-slate-200 bg-gradient-to-b from-slate-50 to-white'
+        }`}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Tu resultado neto</p>
+        <p
+          className={`mt-2 text-3xl font-bold tabular-nums tracking-tight sm:text-4xl ${
+            heroTone === 'positive' ? 'text-emerald-900' : heroTone === 'negative' ? 'text-rose-900' : 'text-slate-400'
+          }`}
+        >
           {hasData ? formatCurrency(resultadoNeto) : '—'}
         </p>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">
-          <span className="font-semibold text-slate-800">Ingresos</span> del período menos{' '}
-          <span className="font-semibold text-slate-800">todos los gastos</span> registrados (todas las categorías). Es distinto
-          del &quot;margen&quot; del menú principal, que usa solo gastos operativos.
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">
+          {hasData ? (
+            resultadoNeto >= 0 ? (
+              <>
+                Te quedaron <strong>{formatCurrency(resultadoNeto)}</strong> en {periodHuman}, después de registrar todos
+                los gastos del período.
+              </>
+            ) : (
+              <>
+                En {periodHuman} los gastos superan a los ingresos por{' '}
+                <strong>{formatCurrency(Math.abs(resultadoNeto))}</strong>.
+              </>
+            )
+          ) : (
+            <>Aún no hay ingresos ni gastos en {periodHuman}. Regístralos en Ingresos o Gastos.</>
+          )}
+        </p>
+        <p
+          className="mt-2 text-[11px] text-slate-500"
+          title="Ingresos del período menos todos los gastos registrados en el mismo período."
+        >
+          Ingresos − gastos (todas las categorías) ·{' '}
+          <Link to="/finanzas/ingresos" className="font-medium text-violet-700 underline decoration-violet-300">
+            Ingresos
+          </Link>
+          {' · '}
+          <Link to="/finanzas/gastos" className="font-medium text-violet-700 underline decoration-violet-300">
+            Gastos
+          </Link>
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-3 border-t border-violet-100 pt-5 sm:grid-cols-3">
-          <div className="rounded-xl bg-white/90 px-3 py-3 text-center ring-1 ring-slate-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ingresos</p>
-            <p className="mt-1 text-lg font-bold tabular-nums text-emerald-800">{fmt(totalIngresos)}</p>
+        {comparisonLines.length > 0 ? (
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200/80 pt-4 animate-fade-in">
+            {comparisonLines.map((line) => (
+              <ComparePill key={line.text} line={line} />
+            ))}
           </div>
-          <div className="rounded-xl bg-white/90 px-3 py-3 text-center ring-1 ring-slate-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Gastos (total)</p>
-            <p className="mt-1 text-lg font-bold tabular-nums text-red-800">{fmt(totalGastos)}</p>
-          </div>
-          <div className="rounded-xl bg-white/90 px-3 py-3 text-center ring-1 ring-slate-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sobre ingresos</p>
-            <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
-              {hasData && margenPct != null ? `${margenPct.toFixed(1)}%` : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Utilidad operativa (ref.)</p>
-            <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{fmt(intel.utilidad_operativa)}</p>
-            <p className="mt-1 text-[10px] leading-snug text-slate-500">Ingresos − solo gastos operativos.</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Caja negocio (mismo período)</p>
-            <p className="mt-0.5 text-sm font-bold tabular-nums text-teal-900">{fmt(totalCajaPeriodo)}</p>
-            <p className="mt-1 text-[10px] leading-snug text-slate-500">Movimientos aparte de alquiler y operativo.</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Cobros pendientes</p>
-            <p className="mt-0.5 text-sm font-bold tabular-nums text-amber-900">
-              {pendienteIngresos.length > 0 ? formatCurrency(pendienteMonto) : '—'}
-            </p>
-            <p className="mt-1 text-[10px] leading-snug text-slate-500">
-              {pendienteIngresos.length > 0 ? (
-                <>
-                  {pendienteIngresos.length} en este período ·{' '}
-                  <Link to="/finanzas/ingresos?cobro=pendiente" className="font-semibold text-amber-800 underline">
-                    Ver en Ingresos
-                  </Link>
-                </>
-              ) : (
-                'Ninguno en las fechas elegidas.'
-              )}
-            </p>
-          </div>
-        </div>
+        ) : previousRange ? (
+          <p className="mt-4 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+            Sin datos en {previousRange.compareLabel} para comparar.
+          </p>
+        ) : null}
       </section>
 
-      <Card title="¿Dónde se fueron los gastos?" subtitle="Partes del total de gastos del período.">
+      {/* 2 — KPIs */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <KpiChip
+          label="Ingresos"
+          value={fmt(totalIngresos)}
+          tone="emerald"
+          tooltip="Suma de ingresos con fecha dentro del período."
+        />
+        <KpiChip
+          label="Gastos"
+          value={fmt(totalGastos)}
+          tone="rose"
+          tooltip="Suma de todos los gastos del período (operativos, planilla, financieros, etc.)."
+        />
+        <KpiChip
+          label="Resultado"
+          value={fmt(resultadoNeto)}
+          tone="slate"
+          tooltip="Ingresos del período menos gastos del período."
+        />
+        <KpiChip
+          label="Por cobrar"
+          value={cobrosPendientesGlobal.length > 0 ? formatCurrency(cobrosPendientesMonto) : '—'}
+          tone="amber"
+          tooltip="Cobros marcados como pendientes (todas las fechas). No depende del filtro de período."
+          href="/finanzas/ingresos?cobro=pendiente"
+        />
+      </div>
+
+      {/* 3 — Gastos por categoría */}
+      <Card
+        title="¿En qué se fue el dinero?"
+        subtitle="Gastos del período por categoría financiera."
+        compact
+      >
         {totalGastos <= 0 ? (
           <p className="text-sm text-slate-500">Sin gastos en este período.</p>
+        ) : distribucion.length === 0 ? (
+          <p className="text-sm text-slate-500">Sin gastos clasificados en este período.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             {distribucion.map((d) => (
               <div key={d.key}>
-                <div className="mb-1 flex items-center justify-between text-sm">
+                <div className="mb-1 flex items-center justify-between gap-2 text-sm">
                   <span className="font-medium text-slate-800">{d.label}</span>
-                  <span className="tabular-nums text-slate-600">
-                    {formatCurrency(d.monto)} · {d.pct.toFixed(1)}%
+                  <span className="shrink-0 tabular-nums text-slate-600">
+                    {formatCurrency(d.monto)} · {d.pct.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="h-2 rounded-full bg-violet-500"
+                    className="h-2.5 rounded-full bg-violet-500 transition-all"
                     style={{ width: `${Math.max(0, Math.min(100, d.pct))}%` }}
                   />
                 </div>
@@ -374,64 +846,124 @@ const Resumen: React.FC = () => {
             ))}
           </div>
         )}
+
+        {top3Categorias.length > 0 ? (
+          <div className="mt-6 border-t border-slate-100 pt-5">
+            <p className="text-xs font-bold uppercase tracking-wide text-violet-800/90">
+              Lo que más te costó este período
+            </p>
+            <ul className="mt-3 space-y-2.5">
+              {top3Categorias.map((d, idx) => (
+                <li key={d.key} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 text-slate-800">
+                    <span className="mr-2 font-bold tabular-nums text-violet-600">{idx + 1}.</span>
+                    {d.label}
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums text-slate-800">
+                    {formatCurrency(d.monto)}
+                    <span className="ml-1.5 font-normal text-slate-500">({d.pct.toFixed(0)}%)</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Card>
 
-      <Card title="Mayor costo operativo por unidad" subtitle="Solo categoría operativos en este período.">
+      {periodInsights.length > 0 ? (
+        <section className="rounded-2xl border border-violet-200/50 bg-gradient-to-br from-violet-50/50 via-white to-white p-4 shadow-sm transition-shadow duration-300 sm:p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+              <Sparkles size={16} />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Insight del período</h2>
+              <p className="text-xs text-slate-500">Lectura automática según tus números</p>
+            </div>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {periodInsights.map((ins) => (
+              <li
+                key={ins.text}
+                className={`rounded-xl border px-3 py-2.5 text-sm leading-snug ${
+                  ins.tone === 'good'
+                    ? 'border-emerald-200/80 bg-emerald-50/80 text-emerald-950'
+                    : ins.tone === 'warn'
+                      ? 'border-amber-200/80 bg-amber-50/80 text-amber-950'
+                      : 'border-slate-200 bg-slate-50 text-slate-800'
+                }`}
+              >
+                {ins.tone === 'good' ? '✅ ' : ins.tone === 'warn' ? '⚠️ ' : '· '}
+                {ins.text}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <Card
+        title="Vehículos que más gastaron"
+        subtitle="Solo gastos operativos del período."
+        compact
+      >
         {topOperativosVehiculo.length === 0 ? (
-          <p className="text-sm text-slate-500">Sin gastos operativos en el período.</p>
+          <p className="text-sm text-slate-500">Sin gastos operativos en este período.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y divide-slate-100">
             {topOperativosVehiculo.map((x, idx) => (
-              <div key={x.vehicleId} className="flex items-center justify-between text-sm">
-                <span className="text-slate-800">
-                  {idx + 1}. {x.name}
+              <div
+                key={x.vehicleId}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0"
+              >
+                <span className="min-w-0 text-slate-800">
+                  <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                    {idx + 1}
+                  </span>
+                  <span className="truncate">{x.name}</span>
                 </span>
-                <span className="font-semibold tabular-nums text-red-700">{formatCurrency(x.monto)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-rose-700">{formatCurrency(x.monto)}</span>
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ir al detalle</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link to="/finanzas/ingresos" className={quickLinkClass}>
-            Ingresos <ArrowRight size={14} className="opacity-70" />
-          </Link>
-          <Link to="/finanzas/gastos" className={quickLinkClass}>
-            Gastos <ArrowRight size={14} className="opacity-70" />
-          </Link>
-          <Link to="/finanzas/reportes" className={quickLinkClass}>
-            Reportes <ArrowRight size={14} className="opacity-70" />
-          </Link>
-          <Link to="/finanzas/caja-negocio" className={quickLinkClass}>
-            Utilidad / caja <ArrowRight size={14} className="opacity-70" />
-          </Link>
-        </div>
-        <p className="mt-3 text-center text-[11px] text-slate-500">
-          Tendencias mes a mes y comparativas: <strong>Reportes</strong>.
-        </p>
-      </div>
-
-      <details className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-700">
-        <summary className="cursor-pointer font-semibold text-slate-800">Desglose contable (equipo)</summary>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-xs font-medium text-slate-500">Margen menú Finanzas (solo operativos)</p>
-            <p className="mt-1 tabular-nums">Ingresos: {formatCurrency(legacy.totalIngresos)}</p>
-            <p className="tabular-nums">Gastos operativos: {formatCurrency(legacy.totalGastos)}</p>
-            <p className="mt-1 font-semibold tabular-nums text-violet-900">Margen: {formatCurrency(legacy.margenNeto)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-xs font-medium text-slate-500">Buckets financieros (mismo período)</p>
-            <p className="tabular-nums">Operativos: {formatCurrency(intel.gastos_operativos)}</p>
-            <p className="tabular-nums">Financieros: {formatCurrency(intel.gastos_financieros)}</p>
-            <p className="tabular-nums">Adm. + planilla: {formatCurrency(intel.gastos_administrativos)}</p>
-            <p className="mt-1 font-semibold tabular-nums">Utilidad neta simple: {formatCurrency(intel.utilidad_neta_simple)}</p>
-          </div>
-        </div>
-      </details>
+      {/* 5 — Alertas */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="text-sm font-bold text-slate-900">Alertas rápidas</h2>
+        <p className="mt-0.5 text-xs text-slate-500">Señales para revisar sin entrar a cada módulo.</p>
+        <ul className="mt-3 space-y-2">
+          {alertas.map((a) => (
+            <li
+              key={a.id}
+              className={`rounded-xl border px-3 py-2.5 ${
+                a.tone === 'danger'
+                  ? 'border-rose-200 bg-rose-50'
+                  : a.tone === 'warning'
+                    ? 'border-amber-200 bg-amber-50'
+                    : 'border-emerald-200 bg-emerald-50'
+              }`}
+            >
+              <p
+                className={`text-xs font-bold uppercase tracking-wide ${
+                  a.tone === 'danger' ? 'text-rose-900' : a.tone === 'warning' ? 'text-amber-950' : 'text-emerald-900'
+                }`}
+              >
+                {a.title}
+              </p>
+              <p className="mt-0.5 text-sm text-slate-800">{a.text}</p>
+              {a.href ? (
+                <Link
+                  to={a.href}
+                  className="mt-1.5 inline-block text-xs font-semibold text-violet-800 underline decoration-violet-300"
+                >
+                  Ver detalle →
+                </Link>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 };

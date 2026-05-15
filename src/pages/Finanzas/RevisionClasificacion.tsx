@@ -15,12 +15,15 @@ import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleIdKey } from '../../utils/vehicleId';
 import { SUBTIPOS_REPRESENTACION_INTERNA } from '../../data/representacionInterna';
 import { normKey } from '../../utils/subtipoFinancieroLabel';
 import {
-  getRepresentacionInternaSubtipoLabel,
-  normalizeRepresentacionInternaSubtipo,
-} from '../../utils/representacionInternaSubtipoLabel';
+  getDefaultSubtipoForTipoGasto,
+  normalizeSubtipoForTipoGasto,
+} from '../../utils/gastoMoveCategoriaDefaults';
+import { getOperativoSubtipoOptions } from '../../utils/operativoSubtipo';
+import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 
 const TIPO_OPCIONES = [
   { value: 'operativo_vehiculo', label: 'Operativo vehículo' },
@@ -36,21 +39,7 @@ const TIPO_OPCIONES = [
   { value: 'personal_socios', label: 'Personal socios (legacy)' },
 ] as const;
 
-const SUBTIPO_OPERATIVO_OPCIONES = [
-  { value: 'motor', label: 'Motor' },
-  { value: 'frenos', label: 'Frenos' },
-  { value: 'suspension', label: 'Suspensión' },
-  { value: 'llantas', label: 'Llantas' },
-  { value: 'accesorios', label: 'Accesorios' },
-  { value: 'Batería', label: 'Batería' },
-  { value: 'interior', label: 'Interior' },
-  { value: 'combustible', label: 'Combustible' },
-  { value: 'gnv', label: 'GNV' },
-  { value: 'electricidad', label: 'Electricidad' },
-  { value: 'aire_acondicionado', label: 'Aire acondicionado' },
-  { value: 'impuesto_vehicular', label: 'Impuesto vehicular' },
-  { value: 'planchado_pintura', label: 'Planchado / pintura' },
-] as const;
+const SUBTIPO_OPERATIVO_OPCIONES = getOperativoSubtipoOptions();
 
 const SUBTIPO_REPRESENTACION_OPCIONES = SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
   value: s,
@@ -70,14 +59,16 @@ function normalizeTipo(raw: string | null | undefined): string {
 
 function normalizeSubtipo(raw: string | null | undefined, tipoFinanza: string): string {
   const r0 = (raw ?? '').trim();
-  const r = normKey(r0) === 'bateria' ? 'Batería' : r0;
   if (tipoFinanza === 'representacion_interna') {
-    const c = normalizeRepresentacionInternaSubtipo(r);
-    if (c) return c;
-    return SUBTIPOS_REPRESENTACION_INTERNA[0] ?? SUBTIPO_DEFAULT;
+    return normalizeSubtipoForTipoGasto('representacion_interna', r0);
   }
+  if (tipoFinanza === 'operativo_vehiculo') {
+    return normalizeSubtipoForTipoGasto('operativo_vehiculo', r0);
+  }
+  const r = normKey(r0) === 'bateria' ? 'bateria' : r0;
   if (r && SUBTIPO_OPCIONES.some((o) => o.value === r)) return r;
-  return SUBTIPO_DEFAULT;
+  const def = getDefaultSubtipoForTipoGasto(tipoFinanza);
+  return def || SUBTIPO_DEFAULT;
 }
 
 function formatRevisionAt(iso: string | null | undefined): string {
@@ -95,8 +86,8 @@ const RevisionClasificacion: React.FC = () => {
     useRegistrosContext();
   const { canEditFinances } = useAuth();
 
-  const [drafts, setDrafts] = useState<Record<number, Draft>>({});
-  const [pending, setPending] = useState<{ id: number; kind: 'approve' | 'tipo' } | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [pending, setPending] = useState<{ id: string; kind: 'approve' | 'tipo' } | null>(null);
 
   const ordenados = useMemo(
     () =>
@@ -110,7 +101,7 @@ const RevisionClasificacion: React.FC = () => {
 
   useEffect(() => {
     setDrafts(() => {
-      const next: Record<number, Draft> = {};
+      const next: Record<string, Draft> = {};
       for (const g of ordenados) {
         const t = normalizeTipo(g.tipo_gasto);
         next[g.id] = {
@@ -124,14 +115,15 @@ const RevisionClasificacion: React.FC = () => {
 
   const busy = pending !== null;
 
-  const labelVeh = (vehicleId: number | null) => {
-    if (vehicleId == null) return '—';
-    const v = vehicles.find((x) => x.id === vehicleId);
-    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${vehicleId}`;
+  const labelVeh = (vehicleId: number | string | null) => {
+    const k = vehicleIdKey(vehicleId);
+    if (!k) return '—';
+    const v = vehicles.find((x) => String(x.id) === k);
+    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${k}`;
   };
 
   const handleApprove = useCallback(
-    async (gastoId: number) => {
+    async (gastoId: string) => {
       setPending({ id: gastoId, kind: 'approve' });
       try {
         const revisado_at = new Date().toISOString();
@@ -157,7 +149,7 @@ const RevisionClasificacion: React.FC = () => {
   );
 
   const handleSaveTipoSubtipo = useCallback(
-    async (gastoId: number) => {
+    async (gastoId: string) => {
       const d = drafts[gastoId];
       if (!d) return;
       setPending({ id: gastoId, kind: 'tipo' });
@@ -258,7 +250,7 @@ const RevisionClasificacion: React.FC = () => {
                     (draft.tipo !== serverTipo || draft.subtipo !== serverSub);
 
                   return (
-                    <tr key={g.id} className="hover:bg-gray-50">
+                    <tr key={`gasto-${g.id}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{formatDate(g.fecha)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-red-600 text-right tabular-nums">
                         −{formatCurrency(g.monto)}

@@ -197,10 +197,12 @@ export interface PrestamoFinancieroCalculoInfo {
  * Registro alineado a la hoja Fact (gastos).
  */
 export interface Gasto {
-  id: number;
+  /** PK Supabase (`bigint` o `uuid`), siempre string en cliente. */
+  id: string;
   fecha: string;
   fechaRegistro: string;
-  vehicleId: number | null;
+  /** FK `vehiculos.id`: bigint en muchos entornos; uuid en otros. Nunca usar 0 como «sin vehículo». */
+  vehicleId: number | string | null;
   /** Tipo maestro GASTOS (Dim_Tipo): MECÁNICOS, DOCUMENTOS, etc. */
   tipo: string;
   /** Sub Tipo (Dim_SubTipo) */

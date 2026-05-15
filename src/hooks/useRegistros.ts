@@ -82,7 +82,9 @@ function mergeIngresoSorted(prev: Ingreso[], row: Ingreso): Ingreso[] {
 
 /** Mismo criterio que fetchGastos: fecha desc, luego id desc (ids como string por bigint/PostgREST). */
 function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
-  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const without = prev.some((x) => String(x.id) === String(row.id))
+    ? prev.filter((x) => String(x.id) !== String(row.id))
+    : prev;
   const next = [...without, row];
   next.sort((a, b) => {
     const fd = b.fecha.localeCompare(a.fecha);
@@ -641,11 +643,11 @@ export const useRegistros = () => {
     }
   }, []);
 
-  const deleteGasto = useCallback(async (id: number) => {
+  const deleteGasto = useCallback(async (id: string) => {
     let prevSnapshot: Gasto[] = [];
     setGastos((prev) => {
       prevSnapshot = prev;
-      return prev.filter((g) => g.id !== id);
+      return prev.filter((g) => String(g.id) !== String(id));
     });
     const ok = await removeGasto(id);
     if (!ok) {
