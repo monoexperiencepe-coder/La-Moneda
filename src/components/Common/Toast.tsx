@@ -3,12 +3,21 @@ import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void | Promise<void>;
+}
+
 export interface ToastMessage {
   id: string;
   type: ToastType;
   title: string;
   message?: string;
   duration?: number;
+  /** Botón de acción (p. ej. Deshacer). */
+  action?: ToastAction;
+  /** Se invoca al cerrar o expirar el toast (limpiar undo pendiente). */
+  onDismiss?: () => void;
 }
 
 interface ToastItemProps {
@@ -65,17 +74,23 @@ const toastConfig = {
 
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   const [visible, setVisible] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const config = toastConfig[toast.type];
   const Icon = config.icon;
 
+  const dismiss = React.useCallback(() => {
+    setVisible(false);
+    setTimeout(() => {
+      toast.onDismiss?.();
+      onRemove(toast.id);
+    }, 300);
+  }, [toast, onRemove]);
+
   useEffect(() => {
     setTimeout(() => setVisible(true), 10);
-    const timer = setTimeout(() => {
-      setVisible(false);
-      setTimeout(() => onRemove(toast.id), 300);
-    }, toast.duration ?? 4000);
+    const timer = setTimeout(() => dismiss(), toast.duration ?? 4000);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, onRemove]);
+  }, [toast.id, toast.duration, dismiss]);
 
   const sz = config.iconSize;
   const cardExtra = config.cardClass;
@@ -98,10 +113,27 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
         {toast.message && (
           <p className={`${msgSz} mt-1 ${config.msgClass}`}>{toast.message}</p>
         )}
+        {toast.action && (
+          <button
+            type="button"
+            disabled={actionBusy}
+            onClick={() => {
+              setActionBusy(true);
+              void Promise.resolve(toast.action!.onClick()).finally(() => setActionBusy(false));
+            }}
+            className={`mt-2.5 inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${
+              toast.type === 'success'
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60'
+                : 'bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-60'
+            }`}
+          >
+            {toast.action.label}
+          </button>
+        )}
       </div>
       <button
         type="button"
-        onClick={() => onRemove(toast.id)}
+        onClick={dismiss}
         className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
         aria-label="Cerrar"
       >

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut, Undo2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useUndoAction } from '../../context/UndoActionContext';
+import { useUndoManager } from '../../context/UndoManagerContext';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -33,23 +33,22 @@ const Header: React.FC = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { executeUndo, pendingLabel, sessionUndoConsumed, undoRunning } = useUndoAction();
+  const { executeUndo, latestLabel, undoRunning, lastAction } = useUndoManager();
   const { toast } = useRegistrosContext();
 
-  const undoDisabled = sessionUndoConsumed || !pendingLabel || undoRunning;
-  const undoTitle = sessionUndoConsumed
-    ? 'Ya usaste deshacer en esta sesión. Recarga la página para volver a tenerlo.'
-    : !pendingLabel
-      ? 'No hay acción reciente para deshacer (eliminar, mover categoría, etc.).'
-      : `Deshacer una vez: ${pendingLabel}`;
+  const hasUndo = Boolean(lastAction);
+  const undoDisabled = !hasUndo || undoRunning;
+  const undoTitle = hasUndo
+    ? `Revertir última acción: ${latestLabel}. Disponible durante esta sesión.`
+    : 'No hay acción reciente para deshacer.';
 
   const handleGlobalUndo = async () => {
-    const label = pendingLabel;
+    const label = latestLabel;
     const res = await executeUndo();
     if (res === 'ok') {
-      toast.success('Cambios revertidos', label ? `Se revirtió: ${label}` : 'Última acción deshecha.');
+      toast.success('Cambio revertido', label ? `Se revirtió: ${label}` : undefined);
     } else if (res === 'fail') {
-      toast.error('No se pudo deshacer', 'Revisa conexión, permisos o intenta de nuevo.');
+      toast.error('No se pudo revertir el cambio.');
     }
   };
 
@@ -110,20 +109,29 @@ const Header: React.FC = () => {
 
           {/* Derecha: acciones (orden fijo; en móvil el deshacer lleva más contraste si hay acción pendiente) */}
           <div className="relative z-20 flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5">
-            <button
-              type="button"
-              onClick={() => void handleGlobalUndo()}
-              disabled={undoDisabled}
-              className={`relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
-                undoDisabled
-                  ? 'cursor-not-allowed text-gray-300 bg-gray-50/90'
-                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-100/80 hover:bg-indigo-100/90 hover:ring-indigo-200'
-              }`}
-              aria-label="Deshacer última acción"
-              title={undoTitle}
-            >
-              <Undo2 size={18} strokeWidth={2.25} className={undoRunning ? 'animate-pulse' : ''} />
-            </button>
+            {hasUndo && (
+              <button
+                type="button"
+                onClick={() => void handleGlobalUndo()}
+                disabled={undoDisabled}
+                className="flex max-w-[11rem] sm:max-w-[14rem] flex-shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-indigo-800 shadow-sm ring-1 ring-indigo-100/80 transition-colors hover:bg-indigo-100/90 disabled:opacity-60 sm:px-2.5 sm:py-2"
+                aria-label={undoTitle}
+                title={undoTitle}
+              >
+                <Undo2
+                  size={16}
+                  strokeWidth={2.25}
+                  className={`flex-shrink-0 ${undoRunning ? 'animate-pulse' : ''}`}
+                />
+                <span className="hidden min-w-0 flex-col items-start text-left leading-tight sm:flex">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-500/90">
+                    Última acción
+                  </span>
+                  <span className="truncate text-xs font-semibold">{latestLabel}</span>
+                </span>
+                <span className="text-xs font-semibold sm:hidden">Deshacer</span>
+              </button>
+            )}
             <button
               type="button"
               className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-50"
@@ -178,23 +186,24 @@ const Header: React.FC = () => {
 
       {mobileOpen && (
         <div className="border-t border-gray-100 bg-white px-4 py-3 animate-scale-in lg:hidden">
-          <div className="mb-3 flex justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                void handleGlobalUndo();
-                setMobileOpen(false);
-              }}
-              disabled={undoDisabled}
-              className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                undoDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-50 text-indigo-800 border border-indigo-100'
-              }`}
-              title={undoTitle}
-            >
-              <Undo2 size={16} />
-              Deshacer
-            </button>
-          </div>
+          {hasUndo && (
+            <div className="mb-3 flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleGlobalUndo();
+                  setMobileOpen(false);
+                }}
+                disabled={undoDisabled}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 disabled:opacity-60"
+                title={undoTitle}
+              >
+                <Undo2 size={16} />
+                Deshacer
+              </button>
+              <p className="text-[10px] text-gray-400">Disponible durante esta sesión</p>
+            </div>
+          )}
           <nav className="grid grid-cols-3 gap-2">
             {navItems.map(item => (
               <button

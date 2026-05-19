@@ -59,6 +59,50 @@ export const todayStr = (): string => {
   return new Date().toISOString().split('T')[0];
 };
 
+/** Año mínimo para registros operativos (kilometraje, movimientos). */
+export const REGISTRO_FECHA_MIN_YEAR = 2020;
+
+export function registroFechaInputBounds(): { min: string; max: string } {
+  const maxYear = new Date().getFullYear() + 1;
+  return {
+    min: `${REGISTRO_FECHA_MIN_YEAR}-01-01`,
+    max: `${maxYear}-12-31`,
+  };
+}
+
+/**
+ * Valida fecha de formulario (input type=date → YYYY-MM-DD).
+ * Evita años absurdos (ej. 3222) y fechas imposibles.
+ */
+export function validateRegistroFechaInput(
+  raw: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const norm = toDateOnlyString(raw);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
+    return { ok: false, error: 'Fecha no válida. Usa el selector de fecha.' };
+  }
+  const y = Number(norm.slice(0, 4));
+  const m = Number(norm.slice(5, 7));
+  const d = Number(norm.slice(8, 10));
+  const check = new Date(`${norm}T12:00:00`);
+  if (
+    Number.isNaN(check.getTime()) ||
+    check.getFullYear() !== y ||
+    check.getMonth() + 1 !== m ||
+    check.getDate() !== d
+  ) {
+    return { ok: false, error: 'Fecha no válida (día o mes incorrecto).' };
+  }
+  const maxYear = new Date().getFullYear() + 1;
+  if (y < REGISTRO_FECHA_MIN_YEAR || y > maxYear) {
+    return {
+      ok: false,
+      error: `El año debe estar entre ${REGISTRO_FECHA_MIN_YEAR} y ${maxYear}.`,
+    };
+  }
+  return { ok: true, value: norm };
+}
+
 /**
  * Normaliza columnas `date` / ISO / objeto Date a `YYYY-MM-DD` para filtros y joins.
  * Evita que `String(Date)` ("Mon Apr 29...") rompa comparaciones de strings en resúmenes.

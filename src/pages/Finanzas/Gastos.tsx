@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
+import { useBootstrapPending } from '../../hooks/useBootstrapPending';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import Select from '../../components/Common/Select';
 import Modal from '../../components/Common/Modal';
@@ -15,7 +16,6 @@ import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { useAuth } from '../../context/AuthContext';
-import { useUndoAction } from '../../context/UndoActionContext';
 import { gastoMatchesTipoGasto, tipoGastoUiCanonical } from '../../utils/gastosTipoGasto';
 import {
   getSubtipoFinancieroLabel,
@@ -124,8 +124,8 @@ interface GastosProps {
 const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = false }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { gastos, vehicles, deleteGasto, upsertGasto, toast, addGasto } = useRegistrosContext();
-  const { registerUndoable } = useUndoAction();
+  const { gastos, vehicles, deleteGasto, upsertGasto, toast, addGasto, showUndoToast } = useRegistrosContext();
+  const bootstrapPending = useBootstrapPending();
   const { canEditFinances } = useAuth();
 
   const isInversionesPage = mode === 'inversiones';
@@ -138,6 +138,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       : (GASTO_TABS[tabIndex] ?? null);
 
   const [registrarOpen, setRegistrarOpen] = useState(false);
+  const [registrarSaving, setRegistrarSaving] = useState(false);
   const [prefillVehicleId, setPrefillVehicleId] = useState<number | null>(null);
   const [gastoFormKey, setGastoFormKey] = useState(0);
 
@@ -168,7 +169,11 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const handleRegistrarGasto = async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
     const created = await addGasto(data);
-    if (created) closeRegistrarModal();
+    if (!created) return;
+    if (!gastoVisibleEnHistorial(created)) {
+      toast.info('Registro guardado, pero no aparece por el filtro actual.');
+    }
+    closeRegistrarModal();
   };
 
   const gastosTab = useMemo(
@@ -496,6 +501,21 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     return d;
   }, [gastosHistorialFiltrados, filterSubtipoGasto, tab?.tipo_gasto]);
 
+  const gastoVisibleEnHistorial = useCallback(
+    (g: Gasto) => {
+      if (tab && !gastoMatchesTipoGasto(g, tab.tipo_gasto)) return false;
+      if (filterRowsByYearMonth([g], historyYear, historyMonth).length === 0) return false;
+      if (
+        filterSubtipoGasto &&
+        !gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    [tab, historyYear, historyMonth, filterSubtipoGasto],
+  );
+
   const totalFlota = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
   const statsInversionesGastos = useMemo(() => {
     const rows = gastos.filter((g) => gastoMatchesTipoGasto(g, 'inversion_compra'));
@@ -716,31 +736,38 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         toast.error('No se pudo mover la categoría', short.length > 180 ? `${short.slice(0, 177)}…` : short);
         return;
       }
-      toast.success('Categoría actualizada', 'El gasto se movió correctamente.');
       upsertGasto(result.gasto);
-      registerUndoable({
-        id: `undo-move-gasto-${gastoId}-${Date.now()}`,
-        label: 'Revertir mover categoría de gasto',
-        undo: async () => {
-          const rev = await updateGastoCategoriaManual(
-            gastoId,
-            {
-              tipo_gasto: prevTipo,
-              subtipo_gasto: prevSub,
-              vehicle_id: normalizeGastoVehicleFkForDb(prevVeh),
-              es_global_flota: prevEsGlobalFlota,
-              clasificacion_manual: prevClasManual,
-              requiere_revision: prevReqRev,
-              revisado_at: prevRevisadoAt,
-              revisado_por: prevRevisadoPor,
-              origen_clasificacion: prevOrigen,
-              excel_extra: Object.keys(excelExtraBefore).length > 0 ? excelExtraBefore : null,
-            },
-            { reason: 'Deshacer desde barra superior' },
-          );
-          if (!rev.ok) return false;
-          upsertGasto(rev.gasto);
-          return true;
+      if (!gastoVisibleEnHistorial(result.gasto)) {
+        toast.info('Registro guardado, pero no aparece por el filtro actual.');
+      }
+      showUndoToast({
+        message: 'Categoría movida',
+        detail: 'El gasto se movió correctamente.',
+        undoAction: {
+          type: 'move',
+          label: 'Revertir mover categoría',
+          entityType: 'gasto',
+          entityId: gastoId,
+          undo: async () => {
+            const rev = await updateGastoCategoriaManual(
+              gastoId,
+              {
+                tipo_gasto: prevTipo,
+                subtipo_gasto: prevSub,
+                vehicle_id: normalizeGastoVehicleFkForDb(prevVeh),
+                es_global_flota: prevEsGlobalFlota,
+                clasificacion_manual: prevClasManual,
+                requiere_revision: prevReqRev,
+                revisado_at: prevRevisadoAt,
+                revisado_por: prevRevisadoPor,
+                origen_clasificacion: prevOrigen,
+                excel_extra: Object.keys(excelExtraBefore).length > 0 ? excelExtraBefore : null,
+              },
+              { reason: 'Deshacer mover categoría' },
+            );
+            if (!rev.ok) throw new Error('undo_failed');
+            upsertGasto(rev.gasto);
+          },
         },
       });
       closeMoveModal();
@@ -820,7 +847,15 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                   <span className="text-xs font-bold text-gray-800 tabular-nums sm:text-sm">{formatCurrency(data.monto)}</span>
                 </div>
                 <h3 className="text-sm font-bold text-gray-900 mb-0.5">{t.label}</h3>
-                <p className="text-[11px] text-gray-500">{data.count} registros</p>
+                <p className="text-[11px] text-gray-500 min-h-[1rem]">
+                  {bootstrapPending ? (
+                    <span className="inline-block h-3 w-[4.5rem] rounded-md shimmer-bg align-middle" aria-hidden />
+                  ) : (
+                    <>
+                      {data.count} registro{data.count === 1 ? '' : 's'}
+                    </>
+                  )}
+                </p>
                 <div className="mt-2 text-[10px] font-semibold text-primary-700/80">
                   Entrar a {t.label}
                 </div>
@@ -1204,6 +1239,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       <Modal
         isOpen={registrarOpen}
         onClose={closeRegistrarModal}
+        closeLocked={registrarSaving}
         title={isInversionesPage ? 'Registrar inversión con utilidad' : 'Registrar gasto'}
         size="xl"
       >
@@ -1212,6 +1248,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           vehicles={vehicles}
           gastos={gastos}
           onSubmit={handleRegistrarGasto}
+          onLoadingChange={setRegistrarSaving}
           noCard
           prefillVehicleId={prefillVehicleId}
           finanzaPreset={isInversionesPage ? 'inversion_compra' : null}

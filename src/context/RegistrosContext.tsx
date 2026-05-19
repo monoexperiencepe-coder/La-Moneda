@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { useRegistros } from '../hooks/useRegistros';
 import { useToast } from '../hooks/useToast';
 import { ToastMessage } from '../components/Common/Toast';
@@ -25,10 +25,17 @@ import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
 import { useAuth } from './AuthContext';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
-import { useUndoAction } from './UndoActionContext';
-import { insertGasto } from '../services/gastosService';
-import { insertIngreso } from '../services/ingresosService';
-import { omitGastoIds, omitIngresoIds } from '../utils/entityReinsertPayloads';
+import { useUndoManager } from './UndoManagerContext';
+import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
+import {
+  undoCreateConductor,
+  undoCreateGasto,
+  undoCreateIngreso,
+  undoDeleteConductor,
+  undoDeleteGasto,
+  undoDeleteIngreso,
+  undoUpdateConductor,
+} from '../undo/factories';
 
 interface RegistrosContextValue {
   vehicles: Vehicle[];
@@ -64,7 +71,7 @@ interface RegistrosContextValue {
   addUnidad: (data: Omit<UnidadRegistro, 'id' | 'createdAt'>) => Promise<UnidadRegistro | null>;
   addConductor: (data: Omit<Conductor, 'id' | 'createdAt'>) => Promise<Conductor | null>;
   updateConductor: (
-    id: number,
+    id: string,
     patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>,
   ) => Promise<Conductor | null>;
   addControlFecha: (data: Omit<ControlFecha, 'id' | 'createdAt'>) => Promise<ControlFecha | null>;
@@ -92,7 +99,7 @@ interface RegistrosContextValue {
   deleteDescuento: (id: number) => void;
   deletePrestamo: (id: number) => void;
   deleteUnidad: (id: string) => Promise<boolean>;
-  deleteConductor: (id: number) => Promise<boolean>;
+  deleteConductor: (id: string) => Promise<boolean>;
   deleteControlFecha: (id: number) => Promise<boolean>;
   deleteKilometraje: (id: number) => Promise<boolean>;
   getVehicleLabel: (vehicleId: number | null) => string;
@@ -105,6 +112,8 @@ interface RegistrosContextValue {
     warning: (title: string, message?: string) => void;
     info: (title: string, message?: string) => void;
   };
+  /** Toast con botón Deshacer + rollback Supabase/local. */
+  showUndoToast: (params: ShowUndoToastParams) => string;
   refreshFromSupabase: () => Promise<void>;
   /** Recarga solo la lista de gastos (sin tocar el resto del estado). */
   reloadGastosOnly: () => Promise<void>;
@@ -130,7 +139,21 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const registros = useRegistros();
   const toastHook = useToast();
   const { role } = useAuth();
-  const { registerUndoable } = useUndoAction();
+  const undoManager = useUndoManager();
+
+  const showUndoToast = useMemo(
+    () =>
+      createShowUndoToast(
+        {
+          success: toastHook.success,
+          error: toastHook.error,
+          addToastWithAction: toastHook.addToastWithAction,
+          removeToast: toastHook.removeToast,
+        },
+        undoManager,
+      ),
+    [toastHook, undoManager],
+  );
 
   const handleAddIngreso = async (data: Omit<Ingreso, 'id' | 'createdAt'>) => {
     if (!canCreateIngresos(role)) {
@@ -145,7 +168,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
         moneda === 'USD'
           ? `US$ ${data.monto.toFixed(2)} (≈ S/ ${ref.toFixed(2)}) — ${data.tipo}`
           : `+S/ ${ref.toFixed(2)} — ${data.tipo}`;
-      toastHook.success('💰 Ingreso registrado', msg);
+      showUndoToast({
+        message: 'Ingreso registrado',
+        detail: msg,
+        undoAction: undoCreateIngreso(result, (id) => registros.deleteIngreso(id)),
+      });
       return result;
     } catch (e) {
       toastHook.error('No se pudo registrar el ingreso', e instanceof Error ? e.message : '');
@@ -156,10 +183,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const handleAddGasto = async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
     try {
       const result = await registros.addGasto(data);
-      toastHook.success(
-        '💸 Gasto registrado',
-        `-S/ ${data.monto.toFixed(2)} — ${data.motivo}${data.pagadoA?.trim() ? ` · ${data.pagadoA.trim()}` : ''}`,
-      );
+      showUndoToast({
+        message: 'Gasto registrado',
+        detail: `-S/ ${data.monto.toFixed(2)} — ${data.motivo}${data.pagadoA?.trim() ? ` · ${data.pagadoA.trim()}` : ''}`,
+        undoAction: undoCreateGasto(result, (id) => registros.deleteGasto(id)),
+      });
       return result;
     } catch (e) {
       toastHook.error('No se pudo registrar el gasto', e instanceof Error ? e.message : '');
@@ -225,7 +253,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const handleAddConductor = async (data: Omit<Conductor, 'id' | 'createdAt'>) => {
     try {
       const result = await registros.addConductor(data);
-      toastHook.success('👤 Conductor registrado', `${data.nombres} ${data.apellidos}`);
+      showUndoToast({
+        message: 'Conductor registrado',
+        detail: `${data.nombres} ${data.apellidos}`,
+        undoAction: undoCreateConductor(result, (id) => registros.deleteConductor(id)),
+      });
       return result;
     } catch (e) {
       toastHook.error('No se pudo registrar el conductor', e instanceof Error ? e.message : '');
@@ -233,14 +265,26 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const handleUpdateConductor = async (id: number, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>) => {
+  const handleUpdateConductor = async (id: string, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>) => {
+    const before = registros.conductores.find((c) => c.id === id);
     try {
       const result = await registros.updateConductor(id, patch);
       if (!result) {
-        toastHook.error('No se pudo actualizar', 'Conductor no encontrado o error en Supabase.');
+        toastHook.error(
+          'No se pudo actualizar',
+          'Conductor no encontrado, ID inválido o error en Supabase. Revisa la consola (F12).',
+        );
         return null;
       }
-      toastHook.success('Conductor actualizado', `${result.nombres} ${result.apellidos}`);
+      if (before) {
+        showUndoToast({
+          message: 'Conductor actualizado',
+          detail: `${result.nombres} ${result.apellidos}`,
+          undoAction: undoUpdateConductor(before, registros.upsertConductor),
+        });
+      } else {
+        toastHook.success('Conductor actualizado', `${result.nombres} ${result.apellidos}`);
+      }
       return result;
     } catch (e) {
       toastHook.error('No se pudo actualizar', e instanceof Error ? e.message : '');
@@ -256,29 +300,13 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     const snapshot = registros.ingresos.find((i) => i.id === id);
     try {
       await registros.deleteIngreso(id);
-      toastHook.success('Ingreso eliminado correctamente');
       if (snapshot) {
-        registerUndoable({
-          id: `undo-ingreso-${id}-${Date.now()}`,
-          label: `Restaurar ingreso eliminado`,
-          undo: async () => {
-            try {
-              const restored = await insertIngreso(omitIngresoIds(snapshot));
-              if (!restored) {
-                toastHook.error('No se pudo restaurar', 'Supabase no devolvió el ingreso.');
-                return false;
-              }
-              registros.upsertIngreso(restored);
-              return true;
-            } catch (e) {
-              toastHook.error(
-                'No se pudo restaurar el ingreso',
-                e instanceof Error ? e.message : 'Error de red o servidor.',
-              );
-              return false;
-            }
-          },
+        showUndoToast({
+          message: 'Ingreso eliminado',
+          undoAction: undoDeleteIngreso(snapshot, registros.upsertIngreso),
         });
+      } else {
+        toastHook.success('Ingreso eliminado');
       }
       return true;
     } catch (e) {
@@ -292,19 +320,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
       await registros.deleteGasto(id);
       if (snapshot) {
-        registerUndoable({
-          id: `undo-gasto-${id}-${Date.now()}`,
-          label: `Restaurar gasto eliminado (#${id})`,
-          undo: async () => {
-            try {
-              const restored = await insertGasto(omitGastoIds(snapshot));
-              if (!restored) return false;
-              registros.upsertGasto(restored);
-              return true;
-            } catch {
-              return false;
-            }
-          },
+        showUndoToast({
+          message: 'Gasto eliminado',
+          undoAction: undoDeleteGasto(snapshot, registros.upsertGasto),
         });
       }
       return true;
@@ -324,9 +342,17 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const handleDeleteConductor = async (id: number): Promise<boolean> => {
+  const handleDeleteConductor = async (id: string): Promise<boolean> => {
+    const snapshot = registros.conductores.find((c) => c.id === id);
     try {
       await registros.deleteConductor(id);
+      if (snapshot) {
+        showUndoToast({
+          message: 'Conductor eliminado',
+          detail: `${snapshot.nombres} ${snapshot.apellidos}`,
+          undoAction: undoDeleteConductor(snapshot, registros.upsertConductor),
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar el conductor', e instanceof Error ? e.message : '');
@@ -528,6 +554,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
         warning: toastHook.warning,
         info: toastHook.info,
       },
+      showUndoToast,
       refreshFromSupabase: registros.refreshFromSupabase,
       reloadGastosOnly: registros.reloadGastosOnly,
       reloadIngresosOnly: registros.reloadIngresosOnly,

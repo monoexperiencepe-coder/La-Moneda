@@ -8,6 +8,8 @@ interface ModalProps {
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   footer?: React.ReactNode;
+  /** Si true, no cierra con ESC, backdrop ni X (p. ej. guardando). */
+  closeLocked?: boolean;
 }
 
 const sizeClasses = {
@@ -24,6 +26,7 @@ const Modal: React.FC<ModalProps> = ({
   children,
   size = 'md',
   footer,
+  closeLocked = false,
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -36,11 +39,11 @@ const Modal: React.FC<ModalProps> = ({
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !closeLocked) onClose();
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+  }, [onClose, closeLocked]);
 
   if (!isOpen) return null;
 
@@ -48,7 +51,9 @@ const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
+        onClick={() => {
+          if (!closeLocked) onClose();
+        }}
       />
       <div
         className={`
@@ -60,8 +65,12 @@ const Modal: React.FC<ModalProps> = ({
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
             <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              type="button"
+              onClick={() => {
+                if (!closeLocked) onClose();
+              }}
+              disabled={closeLocked}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <X size={18} />
             </button>

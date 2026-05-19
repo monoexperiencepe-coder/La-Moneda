@@ -53,6 +53,7 @@ import { fetchInversionesVehiculo } from '../services/inversionesVehiculoService
 import { fetchGastosCaja } from '../services/gastosCajaService';
 import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
+import { sortRegistrosByLatestCreatedOrDate } from '../utils/sortRegistrosByLatestCreatedOrDate';
 import { useAuth } from '../context/AuthContext';
 import { EMPRESA_ID } from '../config/app';
 
@@ -68,29 +69,20 @@ function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omi
   return { ...ingreso, moneda, tipoCambio, montoPENReferencia };
 }
 
-/** Mismo criterio que fetchIngresos: fecha desc, luego id desc. Evita recargar toda la app tras un alta. */
+/** Tras alta/edición local: más reciente arriba (created_at → fecha_registro → fecha → id). */
 function mergeIngresoSorted(prev: Ingreso[], row: Ingreso): Ingreso[] {
   const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
   const next = [...without, row];
-  next.sort((a, b) => {
-    const fd = b.fecha.localeCompare(a.fecha);
-    if (fd !== 0) return fd;
-    return String(b.id).localeCompare(String(a.id));
-  });
+  next.sort(sortRegistrosByLatestCreatedOrDate);
   return next;
 }
 
-/** Mismo criterio que fetchGastos: fecha desc, luego id desc (ids como string por bigint/PostgREST). */
 function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
   const without = prev.some((x) => String(x.id) === String(row.id))
     ? prev.filter((x) => String(x.id) !== String(row.id))
     : prev;
   const next = [...without, row];
-  next.sort((a, b) => {
-    const fd = b.fecha.localeCompare(a.fecha);
-    if (fd !== 0) return fd;
-    return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
-  });
+  next.sort(sortRegistrosByLatestCreatedOrDate);
   return next;
 }
 
@@ -105,7 +97,7 @@ function mergeUnidadSorted(prev: UnidadRegistro[], row: UnidadRegistro): UnidadR
 function mergeConductorSorted(prev: Conductor[], row: Conductor): Conductor[] {
   const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
   const next = [...without, row];
-  next.sort((a, b) => b.id - a.id);
+  next.sort((a, b) => String(b.id).localeCompare(String(a.id)));
   return next;
 }
 
@@ -669,6 +661,10 @@ export const useRegistros = () => {
     setIngresos((prev) => mergeIngresoSorted(prev, row));
   }, []);
 
+  const upsertConductor = useCallback((row: Conductor) => {
+    setConductores((prev) => mergeConductorSorted(prev, row));
+  }, []);
+
   const deleteDescuento = useCallback((id: number) => {
     setDescuentos((prev) => prev.filter((d) => d.id !== id));
   }, []);
@@ -695,7 +691,7 @@ export const useRegistros = () => {
   );
 
   const deleteConductor = useCallback(
-    async (id: number) => {
+    async (id: string) => {
       let prevSnapshot: Conductor[] = [];
       setConductores((prev) => {
         prevSnapshot = prev;
@@ -711,7 +707,7 @@ export const useRegistros = () => {
   );
 
   const updateConductor = useCallback(
-    async (id: number, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>): Promise<Conductor | null> => {
+    async (id: string, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>): Promise<Conductor | null> => {
       const updated = await patchConductor(id, patch);
       if (!updated) return null;
       setConductores((prev) => mergeConductorSorted(prev, updated));
@@ -813,6 +809,7 @@ export const useRegistros = () => {
     deleteGasto,
     upsertGasto,
     upsertIngreso,
+    upsertConductor,
     deleteDescuento,
     deletePrestamo,
     deleteUnidad,

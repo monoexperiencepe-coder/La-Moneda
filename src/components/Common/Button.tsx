@@ -10,11 +10,14 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses = {
-  primary: 'bg-primary-500 hover:bg-primary-600 text-white shadow-soft hover:shadow-soft-md border border-transparent',
-  secondary: 'bg-transparent border border-gray-200 text-primary-500 hover:bg-gray-50',
-  outline: 'border-2 border-primary-500 text-primary-500 hover:bg-primary-50 bg-transparent',
-  danger: 'bg-red-500 hover:bg-red-600 text-white shadow-soft border border-transparent',
-  ghost: 'bg-transparent text-gray-600 hover:bg-gray-100 border border-transparent',
+  primary:
+    'bg-primary-500 hover:bg-primary-600 text-white shadow-soft hover:shadow-soft-md border border-transparent hover:brightness-[1.03]',
+  secondary:
+    'bg-white/80 backdrop-blur-sm border border-gray-200/90 text-primary-500 hover:bg-gray-50/90 hover:border-gray-300/90',
+  outline:
+    'border-2 border-primary-500/90 text-primary-500 hover:bg-primary-50/80 bg-white/70 backdrop-blur-sm',
+  danger: 'bg-red-500 hover:bg-red-600 text-white shadow-soft border border-transparent hover:brightness-[1.03]',
+  ghost: 'bg-transparent text-gray-600 hover:bg-gray-100/90 border border-transparent',
 };
 
 const sizeClasses = {
@@ -40,9 +43,10 @@ const Button: React.FC<ButtonProps> = ({
       disabled={disabled || loading}
       className={`
         inline-flex items-center justify-center gap-2 font-medium
-        transition-all duration-200 ease-in-out
+        transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
+        active:scale-[0.985] active:transition-transform
         focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-        disabled:opacity-50 disabled:cursor-not-allowed
+        disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100
         ${variantClasses[variant]}
         ${sizeClasses[size]}
         ${className}

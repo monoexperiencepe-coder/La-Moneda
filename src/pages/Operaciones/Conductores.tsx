@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+﻿import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -8,45 +8,42 @@ import {
   Phone,
   ChevronUp,
   ChevronDown,
-  ChevronRight,
   MessageCircle,
-  MapPin,
-  AlertCircle,
-  FileCheck,
-  CalendarClock,
   Filter,
   X,
   Save,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import { conductorDisplayInitials, formatConductorDisplayLabel } from '../../utils/fleetPanel';
+import ConductorEditPanel from '../../components/operaciones/ConductorEditPanel';
+import {
+  conductorToDraft,
+  conductorDraftsEqual,
+  draftToConductorPatch,
+  validateConductorDraft,
+  whatsappHref,
+  telHref,
+  type ConductorEditDraft,
+} from '../../utils/conductorForm';
+import { cleanMojibakeText, displayConductorField } from '../../utils/cleanMojibakeText';
+import { isValidConductorId, logConductorIdDiagnostics } from '../../utils/conductorId';
+import { RegistroCountLabel, SkeletonTableRows, UpdatingChrome } from '../../components/Loading';
+import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
+
+type ConductorEditState = {
+  driverId: string;
+  draft: ConductorEditDraft;
+  baseline: ConductorEditDraft;
+};
 import type { Conductor, TipoDocumento, TipoDomicilio } from '../../data/types';
 
-/* ─── types ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 type EstadoFilter = 'TODOS' | 'VIGENTE' | 'SUSPENDIDO';
 type SortKey = 'apellidos' | 'vehicleId' | 'estado' | 'cochera' | 'celular';
 type SortDir = 'asc' | 'desc';
-
-type ConductorEditDraft = {
-  nombres: string;
-  apellidos: string;
-  tipoDocumento: TipoDocumento;
-  numeroDocumento: string;
-  domicilio: TipoDomicilio;
-  vehicleId: string;
-  estadoContrato: 'ABIERTO' | 'CERRADO';
-  celular: string;
-  cochera: string;
-  direccion: string;
-  numeroEmergencia: string;
-  fechaVencimientoContrato: string;
-  documentoFirmado: 'unset' | 'true' | 'false';
-  comentarios: string;
-  estado: 'VIGENTE' | 'SUSPENDIDO';
-  statusOriginal: string;
-};
 
 const TIPO_DOC_OPTS: { value: TipoDocumento; label: string }[] = [
   { value: 'DNI', label: 'DNI' },
@@ -59,28 +56,6 @@ const DOMICILIO_OPTS: { value: TipoDomicilio; label: string }[] = [
   { value: 'ALQUILADO', label: 'Alquilado' },
   { value: 'CASA DE FAMILIA', label: 'Casa de familia' },
 ];
-
-function conductorToDraft(c: Conductor): ConductorEditDraft {
-  return {
-    nombres: c.nombres ?? '',
-    apellidos: c.apellidos ?? '',
-    tipoDocumento: c.tipoDocumento,
-    numeroDocumento: c.numeroDocumento ?? '',
-    domicilio: c.domicilio,
-    vehicleId: c.vehicleId != null ? String(c.vehicleId) : '',
-    estadoContrato: c.estadoContrato,
-    celular: c.celular ?? '',
-    cochera: c.cochera ?? '',
-    direccion: c.direccion ?? '',
-    numeroEmergencia: c.numeroEmergencia ?? '',
-    fechaVencimientoContrato: c.fechaVencimientoContrato ?? '',
-    documentoFirmado:
-      c.documentoFirmado === true ? 'true' : c.documentoFirmado === false ? 'false' : 'unset',
-    comentarios: c.comentarios ?? '',
-    estado: c.estado,
-    statusOriginal: c.statusOriginal ?? '',
-  };
-}
 
 function emptyNuevoConductorForm() {
   return {
@@ -103,7 +78,7 @@ function emptyNuevoConductorForm() {
   };
 }
 
-/* ─── helpers ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const PALETTE = [
   'bg-violet-600', 'bg-sky-600', 'bg-emerald-600', 'bg-amber-500',
   'bg-rose-600',   'bg-indigo-600', 'bg-teal-600',   'bg-pink-600',
@@ -113,13 +88,7 @@ const avatarBg = (id: number | string) => {
   return PALETTE[Math.abs(n) % PALETTE.length];
 };
 
-function whatsappHref(phone: string) {
-  const digits = phone.replace(/\D/g, '');
-  const num = digits.startsWith('51') ? digits : `51${digits}`;
-  return `https://wa.me/${num}`;
-}
-
-/* ─── sort header ─────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ sort header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const SortTh: React.FC<{
   col: SortKey;
   current: SortKey;
@@ -148,17 +117,28 @@ const SortTh: React.FC<{
   );
 };
 
-/* ─── component ─────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const Conductores: React.FC = () => {
   const navigate = useNavigate();
-  const { conductores, vehicles, deleteConductor, updateConductor, addConductor } = useRegistrosContext();
+  const {
+    conductores,
+    vehicles,
+    deleteConductor,
+    updateConductor,
+    addConductor,
+    registrosBootstrapLoading,
+    registrosBootstrapComplete,
+  } = useRegistrosContext();
+  const listBootstrapping = registrosBootstrapLoading && !registrosBootstrapComplete;
 
   const [q, setQ] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>('TODOS');
   const [sortKey, setSortKey] = useState<SortKey>('vehicleId');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<ConductorEditDraft | null>(null);
+  const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
+  const [editState, setEditState] = useState<ConductorEditState | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
@@ -168,8 +148,14 @@ const Conductores: React.FC = () => {
   const [nuevoForm, setNuevoForm] = useState(emptyNuevoConductorForm);
   const [nuevoError, setNuevoError] = useState('');
   const [nuevoBusy, setNuevoBusy] = useState(false);
-  const [editSaveBusyId, setEditSaveBusyId] = useState<number | null>(null);
-  const [deleteBusyId, setDeleteBusyId] = useState<number | null>(null);
+  const [editSaveBusyId, setEditSaveBusyId] = useState<string | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+
+  const filterInputs = useMemo(
+    () => ({ q, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro }),
+    [q, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro],
+  );
+  const { deferred: deferredFilters, isRecalculating } = useDeferredRecalc(filterInputs);
 
   const hasActiveFilters = estadoFilter !== 'TODOS' || fechaDesde || fechaHasta || mesFiltro || anioFiltro || q;
 
@@ -200,6 +186,7 @@ const Conductores: React.FC = () => {
   }, []);
 
   const handleNuevoSubmit = useCallback(async () => {
+    if (nuevoBusy) return;
     setNuevoError('');
     const f = nuevoForm;
     if (!f.nombres.trim() || !f.apellidos.trim() || !f.numeroDocumento.trim() || !f.celular.trim()) {
@@ -234,7 +221,11 @@ const Conductores: React.FC = () => {
       }
       setShowNuevoForm(false);
       setNuevoForm(emptyNuevoConductorForm());
-      setExpandedId(result.id);
+      const d = conductorToDraft(result);
+      setEditingDriverId(result.id);
+      setEditState({ driverId: result.id, draft: d, baseline: d });
+      setShowAdvanced(false);
+      setEditError(null);
     } finally {
       setNuevoBusy(false);
     }
@@ -245,82 +236,119 @@ const Conductores: React.FC = () => {
     setSortKey(key);
   }, [sortKey]);
 
-  const toggleExpand = useCallback((id: number) => {
-    setExpandedId((prev) => (prev === id ? null : id));
+  const closeEdit = useCallback(() => {
+    setEditingDriverId(null);
+    setEditState(null);
+    setEditError(null);
+    setShowAdvanced(false);
   }, []);
 
+  const openEdit = useCallback((c: Conductor) => {
+    if (!isValidConductorId(c.id)) {
+      setEditError('Este conductor no tiene un ID válido. No se puede editar en Supabase.');
+      console.error('[conductores update] openEdit id inválido', {
+        id: c.id,
+        type: typeof c.id,
+        conductor: c,
+      });
+      return;
+    }
+    const d = conductorToDraft(c);
+    setEditingDriverId(c.id);
+    setEditState({ driverId: c.id, draft: d, baseline: d });
+    setEditError(null);
+    setShowAdvanced(false);
+  }, []);
+
+  const handleEditClick = useCallback(
+    (c: Conductor) => {
+      if (editingDriverId === c.id) {
+        closeEdit();
+        return;
+      }
+      openEdit(c);
+    },
+    [editingDriverId, closeEdit, openEdit],
+  );
+
   useEffect(() => {
-    if (expandedId == null) {
-      setDraft(null);
-      return;
-    }
-    const c = conductores.find((x) => x.id === expandedId);
-    if (!c) {
-      setExpandedId(null);
-      setDraft(null);
-      return;
-    }
-    setDraft(conductorToDraft(c));
-  }, [expandedId, conductores]);
+    if (conductores.length > 0) logConductorIdDiagnostics(conductores);
+  }, [conductores]);
 
   const handleSaveConductor = useCallback(
-    async (id: number, d: ConductorEditDraft) => {
+    async (id: string, d: ConductorEditDraft) => {
+      if (editSaveBusyId === id) return;
+      if (!isValidConductorId(id)) {
+        console.error('[conductores update] UI guardó con id inválido', { id, type: typeof id });
+        setEditError('Este conductor no tiene un ID válido. Recarga la página o revisa el registro en Supabase.');
+        return;
+      }
+      const validationError = validateConductorDraft(d);
+      if (validationError) {
+        setEditError(validationError);
+        return;
+      }
       setEditSaveBusyId(id);
+      setEditError(null);
+      console.log('[conductores update]', { id, type: typeof id });
       try {
-        const docFirm: boolean | null =
-          d.documentoFirmado === 'unset' ? null : d.documentoFirmado === 'true';
-        await updateConductor(id, {
-          nombres: d.nombres.trim(),
-          apellidos: d.apellidos.trim(),
-          tipoDocumento: d.tipoDocumento,
-          numeroDocumento: d.numeroDocumento.trim(),
-          domicilio: d.domicilio,
-          vehicleId: d.vehicleId.trim() === '' ? null : Number(d.vehicleId),
-          estadoContrato: d.estadoContrato,
-          celular: d.celular.trim(),
-          cochera: d.cochera.trim() || null,
-          direccion: d.direccion.trim() || null,
-          numeroEmergencia: d.numeroEmergencia.trim() || null,
-          fechaVencimientoContrato: d.fechaVencimientoContrato.trim() || null,
-          documentoFirmado: docFirm,
-          comentarios: d.comentarios.trim(),
-          estado: d.estado,
-          statusOriginal: d.statusOriginal.trim() || null,
-        });
+        const result = await updateConductor(id, draftToConductorPatch(d));
+        if (result) {
+          closeEdit();
+        } else {
+          console.error('[Conductores] updateConductor returned null', { id });
+          setEditError('No se pudo guardar el conductor. Revisa la conexión o los datos.');
+        }
+      } catch (e) {
+        console.error('[Conductores] updateConductor failed', { id, error: e });
+        setEditError(e instanceof Error ? e.message : 'No se pudo guardar el conductor.');
       } finally {
         setEditSaveBusyId((cur) => (cur === id ? null : cur));
       }
     },
-    [updateConductor],
+    [updateConductor, closeEdit],
   );
 
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const s = deferredFilters.q.trim().toLowerCase();
     const list = conductores.filter((c) => {
-      if (estadoFilter !== 'TODOS' && c.estado !== estadoFilter) return false;
+      if (deferredFilters.estadoFilter !== 'TODOS' && c.estado !== deferredFilters.estadoFilter) return false;
       // fecha de registro (createdAt)
-      if (fechaDesde) {
+      if (deferredFilters.fechaDesde) {
         const d = c.createdAt.slice(0, 10);
-        if (d < fechaDesde) return false;
+        if (d < deferredFilters.fechaDesde) return false;
       }
-      if (fechaHasta) {
+      if (deferredFilters.fechaHasta) {
         const d = c.createdAt.slice(0, 10);
-        if (d > fechaHasta) return false;
+        if (d > deferredFilters.fechaHasta) return false;
       }
-      if (mesFiltro) {
+      if (deferredFilters.mesFiltro) {
         const m = c.createdAt.slice(5, 7);
-        if (m !== mesFiltro) return false;
+        if (m !== deferredFilters.mesFiltro) return false;
       }
-      if (anioFiltro) {
+      if (deferredFilters.anioFiltro) {
         const y = c.createdAt.slice(0, 4);
-        if (y !== anioFiltro) return false;
+        if (y !== deferredFilters.anioFiltro) return false;
       }
       if (!s) return true;
       const v = vehicleMap.get(c.vehicleId ?? -1);
-      return [c.nombres, c.apellidos, c.numeroDocumento, c.celular, c.domicilio,
-              c.estado, c.cochera, c.numeroEmergencia, c.direccion,
-              String(c.vehicleId ?? ''), v ? `${v.marca} ${v.modelo} ${v.placa}` : '']
-        .filter(Boolean).join(' ').toLowerCase().includes(s);
+      const haystack = [
+        c.nombres,
+        c.apellidos,
+        c.numeroDocumento,
+        c.celular,
+        c.domicilio,
+        c.estado,
+        c.cochera,
+        c.numeroEmergencia,
+        c.direccion,
+        String(c.vehicleId ?? ''),
+        v ? `${v.marca} ${v.modelo} ${v.placa}` : '',
+      ]
+        .map((part) => cleanMojibakeText(part, { emptyAs: null }).toLowerCase())
+        .filter(Boolean)
+        .join(' ');
+      return haystack.includes(s);
     });
 
     list.sort((a, b) => {
@@ -335,7 +363,14 @@ const Conductores: React.FC = () => {
     });
 
     return list;
-  }, [conductores, q, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro, sortKey, sortDir, vehicleMap]);
+  }, [conductores, deferredFilters, sortKey, sortDir, vehicleMap]);
+
+  const canShowEmpty = !listBootstrapping && !isRecalculating;
+
+  const editingPanelRowIndex = useMemo(() => {
+    if (editState == null) return -1;
+    return filtered.findIndex((row) => row.id === editState.driverId);
+  }, [filtered, editState]);
 
   const years = useMemo(() => {
     const ys = new Set<string>();
@@ -354,7 +389,7 @@ const Conductores: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-50 animate-fade-in overflow-hidden">
 
-      {/* ── HEADER ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="shrink-0 bg-white border-b border-gray-100 shadow-soft px-4 sm:px-6 pt-4 pb-3 flex flex-col gap-3">
         {/* row 1 */}
         <div className="flex items-center justify-between">
@@ -365,7 +400,14 @@ const Conductores: React.FC = () => {
             </button>
             <div>
               <h1 className="text-base font-bold text-gray-900 leading-tight">Conductores</h1>
-              <p className="text-[11px] text-gray-400">{conductores.length} registros · clic en fila para detalles · clic en columna para ordenar</p>
+              <p className="text-[11px] text-gray-400 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <RegistroCountLabel
+                  count={conductores.length}
+                  pending={listBootstrapping}
+                  updating={isRecalculating}
+                />
+                <span>· Editar en cada fila · clic en columna para ordenar</span>
+              </p>
             </div>
           </div>
           <button
@@ -416,14 +458,14 @@ const Conductores: React.FC = () => {
             {/* search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={13} />
-              <input type="search" placeholder="Nombre, doc, carro…" value={q}
+              <input type="search" placeholder="Nombre, documento o carro" value={q}
                 onChange={(e) => setQ(e.target.value)}
                 className="pl-8 pr-3 py-2 w-44 sm:w-60 rounded-xl border border-gray-200 bg-gray-50 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all" />
             </div>
           </div>
         </div>
 
-        {/* ── fecha filter panel ── */}
+        {/* â”€â”€ fecha filter panel â”€â”€ */}
         {showFilters && (
           <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-gray-100 animate-fade-in">
             <div>
@@ -699,9 +741,10 @@ const Conductores: React.FC = () => {
         </div>
       )}
 
-      {/* ── TABLE ──────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto px-2 sm:px-4 py-2">
-        <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0">
+      {/* â”€â”€ TABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="relative flex-1 overflow-auto px-2 sm:px-4 py-2 min-h-[20rem]">
+        <UpdatingChrome active={isRecalculating} />
+        <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0 content-enter transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
           <thead>
             <tr>
               <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 w-7 rounded-tl-xl" />
@@ -711,30 +754,52 @@ const Conductores: React.FC = () => {
               <SortTh col="celular"   current={sortKey} dir={sortDir} onSort={handleSort}>Contacto</SortTh>
               <SortTh col="cochera"   current={sortKey} dir={sortDir} onSort={handleSort}>Cochera</SortTh>
               <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">Registro</th>
-              <SortTh col="estado"    current={sortKey} dir={sortDir} onSort={handleSort} className="rounded-tr-xl">Estado</SortTh>
-              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 w-7 rounded-tr-xl" />
+              <SortTh col="estado" current={sortKey} dir={sortDir} onSort={handleSort}>
+                Estado
+              </SortTh>
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right rounded-tr-xl">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c, idx) => {
+            {listBootstrapping ? (
+              <tr>
+                <td colSpan={9} className="p-3">
+                  <SkeletonTableRows rows={8} cols={5} />
+                </td>
+              </tr>
+            ) : canShowEmpty && filtered.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="py-16 text-center text-gray-400">
+                  <Search size={28} className="mx-auto mb-3 opacity-40" />
+                  <p className="text-sm font-medium">Sin resultados</p>
+                  <p className="text-xs mt-1">Prueba con otro nombre, documento o número de carro</p>
+                </td>
+              </tr>
+            ) : (
+            filtered.map((c, idx) => {
               const v = vehicleMap.get(c.vehicleId ?? -1);
               const isVigente = c.estado === 'VIGENTE';
-              const isExpanded = expandedId === c.id;
+              const isEditingThisRow = editState?.driverId === c.id;
+              const showEditPanel = isEditingThisRow && idx === editingPanelRowIndex;
+              const hasChanges =
+                showEditPanel && editState
+                  ? !conductorDraftsEqual(editState.draft, editState.baseline)
+                  : false;
 
               return (
-                <React.Fragment key={c.id}>
-                  {/* ── main row ── */}
+                <React.Fragment key={`conductor-${c.id}`}>
                   <tr
-                    onClick={() => toggleExpand(c.id)}
-                    className={`group cursor-pointer transition-colors ${isExpanded ? 'bg-primary-50/60' : 'hover:bg-white'}`}
+                    className={`group transition-colors ${isEditingThisRow ? 'bg-primary-50/50' : 'hover:bg-white'}`}
                   >
                     {/* index */}
-                    <td className={`py-2 px-2 text-[10px] text-gray-400 tabular-nums border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
+                    <td className={`py-2 px-2 text-[10px] text-gray-400 tabular-nums border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'}`}>
                       {idx + 1}
                     </td>
 
                     {/* avatar + name */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'}`}>
                       <div className="flex items-center gap-2.5">
                         <div className={`shrink-0 w-8 h-8 rounded-full ${avatarBg(c.id)} flex items-center justify-center text-white text-[11px] font-bold`}>
                           {conductorDisplayInitials(c)}
@@ -743,62 +808,55 @@ const Conductores: React.FC = () => {
                           <p className="font-semibold text-gray-900 truncate max-w-[10rem] text-[13px]" title={formatConductorDisplayLabel(c)}>
                             {formatConductorDisplayLabel(c)}
                           </p>
-                          <p className="text-[10px] text-gray-400">{c.domicilio}</p>
+                          <p className="text-[10px] text-gray-400">{displayConductorField(c.domicilio)}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* documento */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       <span className="text-[10px] font-semibold bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 mr-1">
                         {c.tipoDocumento}
                       </span>
-                      <span className="font-mono text-xs text-gray-700">{c.numeroDocumento}</span>
+                      <span className="font-mono text-xs text-gray-700">{displayConductorField(c.numeroDocumento)}</span>
                     </td>
 
                     {/* carro */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       {v ? (
                         <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
                           <span className="text-[11px] font-bold text-slate-700">#{v.id}</span>
                           <span className="text-[11px] text-slate-500 hidden sm:inline">{v.marca} {v.modelo}</span>
                           <span className="text-[10px] font-mono text-slate-400">{v.placa}</span>
                         </div>
-                      ) : <span className="text-xs text-gray-300">—</span>}
+                      ) : <span className="text-xs text-gray-300">{'\u2014'}</span>}
                     </td>
 
-                    {/* contacto: phone + whatsapp */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
-                      <div className="flex items-center gap-2">
-                        <a href={`tel:${c.celular}`} onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-[11px] font-mono text-sky-600 hover:text-sky-800 hover:underline">
-                          <Phone size={10} />{c.celular}
-                        </a>
-                        <a href={whatsappHref(c.celular)} target="_blank" rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                          title="WhatsApp">
-                          <MessageCircle size={12} />
-                        </a>
-                      </div>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                      <span className="text-[11px] font-mono text-gray-700">{displayConductorField(c.celular)}</span>
                     </td>
 
-                    {/* cochera */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'}`}>
-                      {c.cochera
-                        ? <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
-                            c.cochera.toLowerCase().includes('abierta')
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'}`}>
+                      {c.cochera && displayConductorField(c.cochera) !== '\u2014' && displayConductorField(c.cochera) !== '-' ? (
+                        <span
+                          className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                            cleanMojibakeText(c.cochera, { emptyAs: null }).toLowerCase().includes('abierta')
                               ? 'bg-sky-50 text-sky-700'
                               : 'bg-slate-50 text-slate-600'
-                          }`}>{c.cochera}</span>
-                        : <span className="text-gray-300 text-xs">—</span>}
+                          }`}
+                        >
+                          {displayConductorField(c.cochera)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">{'\u2014'}</span>
+                      )}
                     </td>
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-[11px] text-gray-600`}>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-[11px] text-gray-600`}>
                       {formatDate(c.createdAt.slice(0, 10))}
                     </td>
 
                     {/* estado */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${
                         isVigente ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>
@@ -807,311 +865,111 @@ const Conductores: React.FC = () => {
                       </span>
                     </td>
 
-                    {/* expand chevron */}
-                    <td className={`py-2 px-2 border-b ${isExpanded ? 'border-transparent' : 'border-gray-100'} text-right`}>
-                      <span className={`text-gray-400 transition-transform duration-200 inline-block ${isExpanded ? 'rotate-90' : ''}`}>
-                        <ChevronRight size={14} />
-                      </span>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} text-right`}>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          type="button"
+                          title="Editar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(c);
+                          }}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isEditingThisRow
+                              ? 'bg-primary-100 text-primary-700'
+                              : 'text-gray-500 hover:bg-gray-100 hover:text-primary-600'
+                          }`}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <a
+                          href={whatsappHref(c.celular)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="WhatsApp"
+                          className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <MessageCircle size={13} />
+                        </a>
+                        <a
+                          href={telHref(c.celular)}
+                          title="Llamar"
+                          className="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 transition-colors"
+                        >
+                          <Phone size={13} />
+                        </a>
+                        <button
+                          type="button"
+                          title="Eliminar"
+                          disabled={deleteBusyId === c.id || editSaveBusyId === c.id}
+                          onClick={() => {
+                            void (async () => {
+                              setDeleteBusyId(c.id);
+                              try {
+                                const ok = await deleteConductor(c.id);
+                                if (ok) closeEdit();
+                              } finally {
+                                setDeleteBusyId((cur) => (cur === c.id ? null : cur));
+                              }
+                            })();
+                          }}
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                        >
+                          {deleteBusyId === c.id ? (
+                            <Loader2 size={13} className="animate-spin" aria-hidden />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
-                  {/* ── expanded: edición + acciones ── */}
-                  {isExpanded && draft && (
-                    <tr className="bg-primary-50/40" onClick={(e) => e.stopPropagation()}>
+                  {showEditPanel && editState && (
+                    <tr className="bg-primary-50/30">
                       <td />
-                      <td colSpan={8} className="px-4 pb-4 pt-3 border-b border-primary-100">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 mb-3 flex items-center gap-2">
-                          <FileCheck size={12} /> Editar conductor
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Nombres</span>
-                            <input
-                              type="text"
-                              value={draft.nombres}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, nombres: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Apellidos</span>
-                            <input
-                              type="text"
-                              value={draft.apellidos}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, apellidos: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Tipo documento</span>
-                            <select
-                              value={draft.tipoDocumento}
-                              onChange={(e) =>
-                                setDraft((p) =>
-                                  p ? { ...p, tipoDocumento: e.target.value as TipoDocumento } : p,
-                                )
-                              }
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              {TIPO_DOC_OPTS.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Número documento</span>
-                            <input
-                              type="text"
-                              value={draft.numeroDocumento}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, numeroDocumento: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Domicilio</span>
-                            <select
-                              value={draft.domicilio}
-                              onChange={(e) =>
-                                setDraft((p) =>
-                                  p ? { ...p, domicilio: e.target.value as TipoDomicilio } : p,
-                                )
-                              }
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              {DOMICILIO_OPTS.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="block sm:col-span-2 lg:col-span-1">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Vehículo</span>
-                            <select
-                              value={draft.vehicleId}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, vehicleId: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              <option value="">Sin vehículo asignado</option>
-                              {vehiclesSorted.map((v) => (
-                                <option key={v.id} value={String(v.id)}>
-                                  #{v.id} · {v.placa} · {v.marca} {v.modelo}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado contrato</span>
-                            <select
-                              value={draft.estadoContrato}
-                              onChange={(e) =>
-                                setDraft((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        estadoContrato: e.target.value as 'ABIERTO' | 'CERRADO',
-                                      }
-                                    : p,
-                                )
-                              }
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              <option value="ABIERTO">Abierto</option>
-                              <option value="CERRADO">Cerrado</option>
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Celular</span>
-                            <input
-                              type="tel"
-                              value={draft.celular}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, celular: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block sm:col-span-2 lg:col-span-1">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                              <AlertCircle size={10} /> Número de emergencia
-                            </span>
-                            <input
-                              type="text"
-                              placeholder="Nombre y teléfono de contacto"
-                              value={draft.numeroEmergencia}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, numeroEmergencia: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block sm:col-span-2">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                              <MapPin size={10} /> Dirección
-                            </span>
-                            <input
-                              type="text"
-                              value={draft.direccion}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, direccion: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cochera</span>
-                            <input
-                              type="text"
-                              placeholder="Ej. Abierta / Cerrada"
-                              value={draft.cochera}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, cochera: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                              <CalendarClock size={10} /> Vencimiento contrato
-                            </span>
-                            <input
-                              type="date"
-                              value={draft.fechaVencimientoContrato}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, fechaVencimientoContrato: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Doc. firmado</span>
-                            <select
-                              value={draft.documentoFirmado}
-                              onChange={(e) =>
-                                setDraft((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        documentoFirmado: e.target.value as ConductorEditDraft['documentoFirmado'],
-                                      }
-                                    : p,
-                                )
-                              }
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              <option value="unset">Sin registrar</option>
-                              <option value="true">Sí, firmado</option>
-                              <option value="false">No firmado</option>
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado conductor</span>
-                            <select
-                              value={draft.estado}
-                              onChange={(e) =>
-                                setDraft((p) =>
-                                  p ? { ...p, estado: e.target.value as 'VIGENTE' | 'SUSPENDIDO' } : p,
-                                )
-                              }
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            >
-                              <option value="VIGENTE">Vigente</option>
-                              <option value="SUSPENDIDO">Suspendido</option>
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Status original (Excel)</span>
-                            <input
-                              type="text"
-                              value={draft.statusOriginal}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, statusOriginal: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                            />
-                          </label>
-                          <label className="block sm:col-span-2 lg:col-span-3">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Comentarios</span>
-                            <textarea
-                              rows={2}
-                              value={draft.comentarios}
-                              onChange={(e) => setDraft((p) => (p ? { ...p, comentarios: e.target.value } : p))}
-                              className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none resize-y min-h-[2.5rem]"
-                            />
-                          </label>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-primary-100/60">
-                          <button
-                            type="button"
-                            disabled={editSaveBusyId === c.id || deleteBusyId === c.id}
-                            onClick={() => void handleSaveConductor(c.id, draft)}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft disabled:opacity-50"
-                          >
-                            {editSaveBusyId === c.id ? (
-                              <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
-                            ) : (
-                              <Save size={14} />
-                            )}
-                            {editSaveBusyId === c.id ? 'Guardando…' : 'Guardar cambios'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDraft(conductorToDraft(c))}
-                            className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                          >
-                            Deshacer edición
-                          </button>
-                          <a
-                            href={whatsappHref(draft.celular || c.celular)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium text-emerald-600 hover:bg-emerald-50 border border-emerald-100 transition-colors"
-                          >
-                            <MessageCircle size={12} /> WhatsApp
-                          </a>
-                          <a
-                            href={`tel:${draft.celular || c.celular}`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium text-sky-600 hover:bg-sky-50 border border-sky-100 transition-colors"
-                          >
-                            <Phone size={12} /> Llamar
-                          </a>
-                          <button
-                            type="button"
-                            disabled={deleteBusyId === c.id || editSaveBusyId === c.id}
-                            onClick={() => {
-                              void (async () => {
-                                setDeleteBusyId(c.id);
-                                try {
-                                  const ok = await deleteConductor(c.id);
-                                  if (ok) setExpandedId(null);
-                                } finally {
-                                  setDeleteBusyId((cur) => (cur === c.id ? null : cur));
-                                }
-                              })();
-                            }}
-                            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 border border-red-100 transition-colors disabled:opacity-50"
-                          >
-                            {deleteBusyId === c.id ? (
-                              <Loader2 size={12} className="animate-spin shrink-0" aria-hidden />
-                            ) : (
-                              <Trash2 size={12} />
-                            )}
-                            Eliminar
-                          </button>
-                        </div>
+                      <td colSpan={8} className="px-3 pb-3 pt-1 border-b border-primary-100">
+                        <ConductorEditPanel
+                          draft={editState.draft}
+                          vehiclesSorted={vehiclesSorted}
+                          saving={editSaveBusyId === c.id}
+                          hasChanges={hasChanges}
+                          error={editError}
+                          showAdvanced={showAdvanced}
+                          onToggleAdvanced={() => setShowAdvanced((p) => !p)}
+                          onChange={(patch) =>
+                            setEditState((prev) =>
+                              prev ? { ...prev, draft: { ...prev.draft, ...patch } } : prev,
+                            )
+                          }
+                          onCancel={closeEdit}
+                          onSave={() => void handleSaveConductor(c.id, editState.draft)}
+                        />
                       </td>
                     </tr>
                   )}
                 </React.Fragment>
               );
-            })}
+            })
+            )}
           </tbody>
         </table>
-
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <Search size={28} className="mb-3 opacity-40" />
-            <p className="text-sm font-medium">Sin resultados</p>
-            <p className="text-xs mt-1">Prueba con otro nombre, documento o número de carro</p>
-          </div>
-        )}
       </div>
 
-      {/* ── FOOTER ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ FOOTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="shrink-0 bg-white border-t border-gray-100 px-6 py-2 flex items-center justify-between text-[11px] text-gray-400">
-        <span>
-          Mostrando <strong className="text-gray-700">{filtered.length}</strong> de {conductores.length} conductores
-          {q && <span className="ml-1">· filtrado por "<span className="text-primary-500">{q}</span>"</span>}
+        <span className="flex flex-wrap items-center gap-1">
+          {listBootstrapping ? (
+            <span className="inline-block h-3.5 w-48 rounded-md shimmer-bg" aria-hidden />
+          ) : (
+            <>
+              Mostrando <strong className="text-gray-700">{filtered.length}</strong> de {conductores.length} conductores
+              {q && <span className="ml-1">{'\u00b7'} filtrado por "<span className="text-primary-500">{q}</span>"</span>}
+              {isRecalculating ? <span className="text-indigo-500/80 font-medium">· actualizando</span> : null}
+            </>
+          )}
         </span>
-        <span className="hidden sm:block">SYSTEM Excel · CONDUCTORES</span>
+        <span className="hidden sm:block">SYSTEM Excel {'\u00b7'} CONDUCTORES</span>
       </div>
     </div>
   );

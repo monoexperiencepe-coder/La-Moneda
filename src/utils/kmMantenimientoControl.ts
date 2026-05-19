@@ -11,10 +11,7 @@ function diffDaysFromToday(dateStr: string): number {
 /** Km recorridos desde el último mantenimiento; alerta en UI y en “Qué hacer hoy”. */
 export const KM_ALERTA_VARIACION_DESDE_MANT = 5000;
 
-/** Heurística para etiqueta Compuesto vs Simple (histórico / descripción). */
-export const KM_HEURISTICA_TIPO_COMPUESTO = 3500;
-
-export type TipoMantenimientoKm = 'Simple' | 'Compuesto';
+export type TipoMantenimientoKm = 'Simple' | 'Completo';
 
 export interface KmControlRow {
   vehicleId: number;
@@ -24,48 +21,31 @@ export interface KmControlRow {
   fUlt: string | null;
   variacion: number | null;
   dias: number | null;
-  tipoMant: TipoMantenimientoKm;
+  /** Tipo del último mantenimiento registrado; null si solo hay lecturas semanales. */
+  tipoMant: TipoMantenimientoKm | null;
   alertaVariacion: boolean;
 }
 
-function tipoMantDesdeVariacionYDescripcion(variacion: number | null, lastMantDesc: string): TipoMantenimientoKm {
-  const d = lastMantDesc.toUpperCase();
-  if (
-    d.includes('COMPUESTO') ||
-    d.includes('COMPLETO') ||
-    d.includes('MANT.COMPLETO') ||
-    d.includes('MANT COMPLETO')
-  ) {
-    return 'Compuesto';
-  }
-  if (variacion != null && variacion >= KM_HEURISTICA_TIPO_COMPUESTO) return 'Compuesto';
-  if (d.includes('SIMPLE') || d.includes('MANT.SIMPLE')) return 'Simple';
-  return 'Simple';
+function sortRowsChrono(rows: KilometrajeRegistro[]): KilometrajeRegistro[] {
+  return [...rows].sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
 }
 
 /**
- * Tipo de mantenimiento inferido por fila (últimos registros).
- * `null` = registro solo de km semanal, sin datos de mantenimiento en esa fila.
+ * Tipo de mantenimiento inferido por fila.
+ * `null` = solo lectura semanal de km (sin mantenimiento en esa fila).
  */
 export function tipoMantenimientoDesdeRegistro(r: KilometrajeRegistro): TipoMantenimientoKm | null {
   const desc = (r.descripcion ?? '').trim().toUpperCase();
   const tieneKmMant = r.kmMantenimiento != null && Number.isFinite(r.kmMantenimiento);
-  const tieneKm = r.kilometraje != null && Number.isFinite(r.kilometraje);
 
-  if (!tieneKmMant && !desc) {
-    return tieneKm ? null : null;
+  if (desc.includes('COMPUESTO') || desc.includes('COMPLETO') || desc.includes('MANT.COMPLETO') || desc.includes('MANT COMPLETO')) {
+    return 'Completo';
   }
-
-  if (desc.includes('COMPUESTO') || desc.includes('COMPLETO') || desc.includes('MANT.COMPLETO')) {
-    return 'Compuesto';
-  }
-  if (desc.includes('SIMPLE') || desc.includes('MANT.SIMPLE')) {
-    return 'Simple';
-  }
-
-  if (tieneKmMant && tieneKm) {
-    const delta = r.kilometraje! - r.kmMantenimiento!;
-    if (delta >= KM_HEURISTICA_TIPO_COMPUESTO) return 'Compuesto';
+  if (desc.includes('SIMPLE') || desc.includes('MANT.SIMPLE') || desc.includes('MANT SIMPLE')) {
     return 'Simple';
   }
 
@@ -74,12 +54,25 @@ export function tipoMantenimientoDesdeRegistro(r: KilometrajeRegistro): TipoMant
   return null;
 }
 
+export function esRegistroMantenimiento(r: KilometrajeRegistro): boolean {
+  return tipoMantenimientoDesdeRegistro(r) != null;
+}
+
+export function tipoMantenimientoEtiqueta(t: TipoMantenimientoKm | null): string {
+  if (t === 'Simple') return 'Simple';
+  if (t === 'Completo') return 'Completo';
+  return 'Solo km semanal';
+}
+
 export function variacionSuperaUmbralAlerta(variacion: number | null): boolean {
   return variacion != null && Number.isFinite(variacion) && variacion >= KM_ALERTA_VARIACION_DESDE_MANT;
 }
 
 /**
- * Una fila por vehículo con datos en `kilometrajes`: último km de mant., último km odométrico y variación.
+ * Control KMS por vehículo:
+ * - km actual = última lectura de odómetro (por fecha)
+ * - km mant. = último registro de mantenimiento (simple/completo), no el máximo histórico
+ * - variación = km actual − km del último mantenimiento
  */
 export function buildKmControlRows(
   kilometrajes: KilometrajeRegistro[],
@@ -98,42 +91,38 @@ export function buildKmControlRows(
   entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
 
   return entries.map(([vehicleId, rows]) => {
-    const maxKmMant = rows.reduce<number | null>((acc, r) => {
-      if (r.kmMantenimiento == null) return acc;
-      return acc == null ? r.kmMantenimiento : Math.max(acc, r.kmMantenimiento);
-    }, null);
-    const maxKm = rows.reduce<number | null>((acc, r) => {
-      if (r.kilometraje == null) return acc;
-      return acc == null ? r.kilometraje : Math.max(acc, r.kilometraje);
-    }, null);
-    const fMant =
-      maxKmMant == null
-        ? null
-        : rows
-            .filter((r) => r.kmMantenimiento === maxKmMant)
-            .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]?.fecha ?? null;
-    const fUlt =
-      maxKm == null
-        ? null
-        : rows
-            .filter((r) => r.kilometraje === maxKm)
-            .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]?.fecha ?? null;
-    const variacion = maxKm != null && maxKmMant != null ? maxKm - maxKmMant : null;
-    const dias = fMant && fUlt ? Math.abs(diffDaysFromToday(fMant) - diffDaysFromToday(fUlt)) : null;
-    const lastMantDesc =
-      rows
-        .filter((r) => r.descripcion?.trim())
-        .sort((a, b) => (b.fecha + b.createdAt).localeCompare(a.fecha + a.createdAt))[0]
-        ?.descripcion?.trim()
-        ?.toUpperCase() ?? '';
+    const sorted = sortRowsChrono(rows);
 
-    const tipoMant = tipoMantDesdeVariacionYDescripcion(variacion, lastMantDesc);
+    let kmMant: number | null = null;
+    let fMant: string | null = null;
+    let tipoMant: TipoMantenimientoKm | null = null;
+
+    for (const r of sorted) {
+      if (!esRegistroMantenimiento(r)) continue;
+      kmMant = r.kmMantenimiento ?? r.kilometraje ?? null;
+      fMant = r.fecha;
+      tipoMant = tipoMantenimientoDesdeRegistro(r);
+      break;
+    }
+
+    let kmUlt: number | null = null;
+    let fUlt: string | null = null;
+    for (const r of sorted) {
+      if (r.kilometraje != null && Number.isFinite(r.kilometraje)) {
+        kmUlt = r.kilometraje;
+        fUlt = r.fecha;
+        break;
+      }
+    }
+
+    const variacion = kmUlt != null && kmMant != null ? kmUlt - kmMant : null;
+    const dias = fMant && fUlt ? Math.abs(diffDaysFromToday(fMant) - diffDaysFromToday(fUlt)) : null;
     const alertaVariacion = variacionSuperaUmbralAlerta(variacion);
 
     return {
       vehicleId,
-      kmMant: maxKmMant,
-      kmUlt: maxKm,
+      kmMant,
+      kmUlt,
       fMant,
       fUlt,
       variacion,

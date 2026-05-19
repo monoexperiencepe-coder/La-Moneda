@@ -13,6 +13,8 @@ import {
   type ReportesPeriodPreset,
 } from '../../../utils/reportesAnalytics';
 import ReportesPeriodFilter from '../components/ReportesPeriodFilter';
+import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
+import { UpdatingChrome } from '../../../components/Loading';
 
 interface GastosOperativosSectionProps {
   gastos: Gasto[];
@@ -25,7 +27,13 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
 
-  const range = useMemo(() => getReportesPeriodRange(preset, customYear), [preset, customYear]);
+  const filterKey = useMemo(() => ({ preset, customYear }), [preset, customYear]);
+  const { deferred: deferredFilter, isRecalculating } = useDeferredRecalc(filterKey);
+
+  const range = useMemo(
+    () => getReportesPeriodRange(deferredFilter.preset, deferredFilter.customYear),
+    [deferredFilter],
+  );
   const gastosPeriod = useMemo(
     () => filterGastosPeriod(gastos, range.desde, range.hasta),
     [gastos, range.desde, range.hasta],
@@ -82,7 +90,7 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
   const totalOp = useMemo(() => operativos.reduce((s, g) => s + g.monto, 0), [operativos]);
 
   return (
-    <section className="space-y-4 animate-fade-in">
+    <section className="space-y-4 content-enter">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Gastos operativos</h2>
         <p className="mt-1 text-sm text-slate-600">
@@ -98,48 +106,64 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
         onCustomYearChange={setCustomYear}
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <TopBlock title="Top subtipos operativos" items={topSubtipos.map((x) => ({ label: x.label, monto: x.monto }))} />
-        <TopBlock
-          title="Por categoría financiera"
-          items={topCategorias.map((x) => ({ label: x.label, monto: x.monto }))}
-        />
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-900">Vehículos con más gasto operativo</h3>
-          {topVehiculos.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-400">Sin gastos operativos en el período.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {topVehiculos.map((x, idx) => (
-                <li key={x.vehicleId}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/vehiculos/${x.vehicleId}`)}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-sm hover:bg-slate-50"
-                  >
-                    <span className="text-slate-800">
-                      <span className="mr-2 font-bold text-rose-600">{idx + 1}.</span>
-                      {x.label}
-                    </span>
-                    <span className="shrink-0 font-semibold tabular-nums text-slate-800">
-                      {formatCurrency(x.monto)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+      <div className="filter-surface">
+        <UpdatingChrome active={isRecalculating} />
+        <div className="grid gap-4 lg:grid-cols-3 stagger-children">
+          <TopBlock
+            title="Top subtipos operativos"
+            items={topSubtipos.map((x) => ({ label: x.label, monto: x.monto }))}
+            updating={isRecalculating}
+          />
+          <TopBlock
+            title="Por categoría financiera"
+            items={topCategorias.map((x) => ({ label: x.label, monto: x.monto }))}
+            updating={isRecalculating}
+          />
+          <div className="glass-panel p-4">
+            <h3 className="text-sm font-bold text-slate-900">Vehículos con más gasto operativo</h3>
+            {topVehiculos.length === 0 && !isRecalculating ? (
+              <p className="mt-3 text-sm text-slate-400">Sin gastos operativos en el período.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {topVehiculos.map((x, idx) => (
+                  <li key={x.vehicleId}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/vehiculos/${x.vehicleId}`)}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-sm transition-colors duration-300 hover:bg-slate-50/90 active:scale-[0.995]"
+                    >
+                      <span className="text-slate-800">
+                        <span className="mr-2 font-bold text-rose-600">{idx + 1}.</span>
+                        {x.label}
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums text-slate-800">
+                        {formatCurrency(x.monto)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </section>
   );
 };
 
-function TopBlock({ title, items }: { title: string; items: { label: string; monto: number }[] }) {
+function TopBlock({
+  title,
+  items,
+  updating,
+}: {
+  title: string;
+  items: { label: string; monto: number }[];
+  updating?: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <div className="glass-panel p-4">
       <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-      {items.length === 0 ? (
+      {items.length === 0 && !updating ? (
         <p className="mt-3 text-sm text-slate-400">Sin datos.</p>
       ) : (
         <ul className="mt-3 space-y-2">

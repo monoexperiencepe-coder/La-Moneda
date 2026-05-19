@@ -1,3 +1,5 @@
+import { cleanConductorRecord } from '../utils/cleanMojibakeText';
+import { mapConductorId } from '../utils/conductorId';
 import { toDateOnlyString } from '../utils/formatting';
 import { UUID_REGEX_FLAT } from '../utils/uuidColumn';
 import { gastoPrimaryKeyFromRow, ingresoPrimaryKeyFromRow } from '../utils/ingresoRecordId';
@@ -135,9 +137,9 @@ export function mapUnidadRow(r: Record<string, unknown>): UnidadRegistro {
 }
 
 export function mapConductorRow(r: Record<string, unknown>): Conductor {
-  return {
-    id: num(r.id),
-    vehicleId: r.vehicle_id != null ? num(r.vehicle_id) : null,
+  const raw = {
+    id: mapConductorId(r.id),
+    vehicleId: numOrNull(r.vehicle_id),
     tipoDocumento: str(r.tipo_documento) as TipoDocumento,
     numeroDocumento: str(r.numero_documento),
     nombres: str(r.nombres),
@@ -155,6 +157,7 @@ export function mapConductorRow(r: Record<string, unknown>): Conductor {
     comentarios: str(r.comentarios),
     createdAt: isoCreated(r.created_at),
   };
+  return cleanConductorRecord(raw) as Conductor;
 }
 
 export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
@@ -412,7 +415,9 @@ export function conductorPatchToSnake(
   if (patch.direccion !== undefined) out.direccion = patch.direccion;
   if (patch.documentoFirmado !== undefined) out.documento_firmado = patch.documentoFirmado;
   if (patch.fechaVencimientoContrato !== undefined) {
-    out.fecha_vencimiento_contrato = patch.fechaVencimientoContrato;
+    const fv = patch.fechaVencimientoContrato;
+    out.fecha_vencimiento_contrato =
+      fv == null || String(fv).trim() === '' ? null : String(fv).trim();
   }
   if (patch.comentarios !== undefined) out.comentarios = patch.comentarios;
   return out;

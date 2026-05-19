@@ -1,5 +1,6 @@
 import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import type { Vehicle, Ingreso, ControlFecha, KilometrajeRegistro, Conductor, Pendiente } from '../data/types';
+import { cleanMojibakeText } from './cleanMojibakeText';
 import { todayStr } from './formatting';
 import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
 
@@ -44,11 +45,11 @@ export function ultimoKmPorVehiculo(kilometrajes: KilometrajeRegistro[], vehicle
  * No implica que falte el vínculo conductor ↔ vehículo.
  */
 export function formatConductorDisplayLabel(c: Conductor): string {
-  const nom = `${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim();
+  const nom = `${cleanMojibakeText(c.nombres, { emptyAs: null })} ${cleanMojibakeText(c.apellidos, { emptyAs: null })}`.trim();
   if (nom) return nom;
-  const doc = String(c.numeroDocumento ?? '').trim();
+  const doc = cleanMojibakeText(c.numeroDocumento, { emptyAs: null });
   if (doc) return doc;
-  const cel = String(c.celular ?? '').trim();
+  const cel = cleanMojibakeText(c.celular, { emptyAs: null });
   if (cel) return cel;
   return 'Conductor registrado sin nombre';
 }
@@ -73,7 +74,7 @@ export function conductorAsignadoLabel(conductores: Conductor[], vehicleId: numb
   const vigentes = conductores.filter(
     (c) => c.vehicleId != null && Number(c.vehicleId) === Number(vehicleId) && c.estado === 'VIGENTE',
   );
-  vigentes.sort((a, b) => Number(a.id) - Number(b.id));
+  vigentes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
   const c = vigentes[0];
   if (!c) return '—';
   return formatConductorDisplayLabel(c);

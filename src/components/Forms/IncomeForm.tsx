@@ -23,6 +23,7 @@ interface IncomeFormProps {
   noCard?: boolean;
   /** Preselecciona N° vehículo al montar o al cambiar el id. */
   prefillVehicleId?: number | null;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
 interface FormState {
@@ -65,10 +66,15 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
   onSubmit,
   noCard = false,
   prefillVehicleId = null,
+  onLoadingChange,
 }) => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
   const [periodoOpen, setPeriodoOpen] = useState(false);
 
   const activeVehicles = vehicles.filter(v => v.activo);
@@ -102,6 +108,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     if (!validate()) return;
     setLoading(true);
     try {

@@ -89,6 +89,7 @@ interface ExpenseFormProps {
   prefillVehicleId?: number | null;
   /** Solo inversión con utilidad: categoría fija `inversion_compra` (Finanzas → Inversiones). */
   finanzaPreset?: 'inversion_compra' | null;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
 interface FormState {
@@ -169,11 +170,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   noCard = false,
   prefillVehicleId = null,
   finanzaPreset = null,
+  onLoadingChange,
 }) => {
   const [form, setForm] = useState<FormState>(() => initialExpenseForm(finanzaPreset));
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [periodoOpen, setPeriodoOpen] = useState(false);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
 
   useEffect(() => {
     if (prefillVehicleId != null && Number.isFinite(prefillVehicleId) && prefillVehicleId > 0) {
@@ -244,6 +250,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     const newErrors = buildExpenseValidationErrors();
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {

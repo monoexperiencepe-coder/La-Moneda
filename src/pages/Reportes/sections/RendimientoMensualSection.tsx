@@ -4,6 +4,8 @@ import { MESES } from '../../../data/catalogs';
 import { formatCurrency } from '../../../utils/formatting';
 import { ingresoMontoPEN } from '../../../utils/moneda';
 import { gastosOperativosSolamente } from '../../../utils/cajaNegocio';
+import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
+import { UpdatingChrome } from '../../../components/Loading';
 
 interface RendimientoMensualSectionProps {
   ingresos: Ingreso[];
@@ -48,7 +50,9 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
     });
   }, [availableYears]);
 
-  const chartYearNum = chartYear ? Number(chartYear) : NaN;
+  const { deferred: deferredChartYear, isRecalculating } = useDeferredRecalc(chartYear);
+  const displayYear = deferredChartYear || chartYear;
+  const chartYearNum = displayYear ? Number(displayYear) : NaN;
 
   const filasMes: MesRow[] = useMemo(() => {
     if (!Number.isFinite(chartYearNum)) {
@@ -120,7 +124,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
   const resultadoPositivo = totalesAnio.resultado >= 0;
 
   return (
-    <section className="space-y-5 animate-fade-in">
+    <section className="space-y-5 content-enter">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Rendimiento mensual</h2>
         <p className="mt-1 text-sm text-slate-600">Mes por mes: cuánto entró, cuánto salió en gastos de flota y qué quedó.</p>
@@ -134,10 +138,10 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
               key={y}
               type="button"
               onClick={() => setChartYear(String(y))}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] ${
                 chartYear === String(y)
                   ? 'bg-violet-600 text-white shadow-sm'
-                  : 'border border-slate-200 bg-white text-slate-700 hover:border-violet-300'
+                  : 'border border-slate-200/90 bg-white/95 text-slate-700 hover:border-violet-300 hover:shadow-sm backdrop-blur-sm'
               }`}
             >
               {y}
@@ -149,16 +153,18 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
       </div>
 
       {chartYear ? (
-        <>
+        <div className="filter-surface space-y-5">
+          <UpdatingChrome active={isRecalculating} />
+          <div className="space-y-5 stagger-children">
           {/* Resumen del año — lenguaje dueño */}
           <div
-            className={`rounded-2xl border p-5 sm:p-6 ${
+            className={`rounded-2xl border p-5 sm:p-6 backdrop-blur-sm ${
               resultadoPositivo
                 ? 'border-emerald-200 bg-gradient-to-b from-emerald-50/90 to-white'
                 : 'border-rose-200 bg-gradient-to-b from-rose-50/70 to-white'
             }`}
           >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Resultado del año {chartYear}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Resultado del año {displayYear}</p>
             <p
               className={`mt-2 text-3xl font-bold tabular-nums tracking-tight sm:text-4xl ${
                 resultadoPositivo ? 'text-emerald-900' : 'text-rose-900'
@@ -169,12 +175,12 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
               {resultadoPositivo ? (
                 <>
-                  En {chartYear}, después de los gastos operativos de la flota, el negocio cerró con{' '}
+                  En {displayYear}, después de los gastos operativos de la flota, el negocio cerró con{' '}
                   <strong>{formatCurrency(totalesAnio.resultado)}</strong> a favor.
                 </>
               ) : (
                 <>
-                  En {chartYear} los gastos operativos superaron lo que entró por{' '}
+                  En {displayYear} los gastos operativos superaron lo que entró por{' '}
                   <strong>{formatCurrency(Math.abs(totalesAnio.resultado))}</strong>.
                 </>
               )}
@@ -197,7 +203,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
           </div>
 
           {/* Tabla simple */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="glass-panel overflow-hidden border-slate-200 p-0">
             <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-5">
               <h3 className="text-sm font-bold text-slate-900">Detalle mes a mes</h3>
               <p className="mt-0.5 text-xs text-slate-500">Solo gastos operativos de vehículos en la columna «Salió».</p>
@@ -220,7 +226,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-semibold text-slate-900">
-                    <td className="px-4 py-3 sm:px-5">Total {chartYear}</td>
+                    <td className="px-4 py-3 sm:px-5">Total {displayYear}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-emerald-800">
                       {formatCurrency(totalesAnio.ingresos)}
                     </td>
@@ -246,7 +252,8 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
               </p>
             ) : null}
           </div>
-        </>
+          </div>
+        </div>
       ) : null}
     </section>
   );

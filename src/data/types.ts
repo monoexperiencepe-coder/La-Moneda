@@ -395,7 +395,8 @@ export interface UnidadRegistro {
 }
 
 export interface Conductor {
-  id: number;
+  /** PK Supabase: uuid (string). Enteros serial legados también como string. */
+  id: string;
   vehicleId: number | null;
   tipoDocumento: TipoDocumento;
   numeroDocumento: string;

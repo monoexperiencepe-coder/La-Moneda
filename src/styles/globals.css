@@ -59,17 +59,30 @@
 
   /* Game card hover */
   .game-card {
-    @apply bg-white rounded-2xl border border-gray-100 shadow-soft
-           hover:shadow-soft-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer;
+    @apply bg-white/95 rounded-2xl border border-gray-100/90 shadow-soft backdrop-blur-sm
+           hover:shadow-soft-lg hover:-translate-y-0.5 hover:border-gray-200/90
+           active:scale-[0.995]
+           transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer;
   }
 
   /* Hub mission button */
   .mission-btn {
     @apply relative overflow-hidden rounded-2xl p-6
-           border-2 border-transparent
-           hover:scale-[1.02] active:scale-[0.98]
-           transition-all duration-300 cursor-pointer
+           border-2 border-transparent backdrop-blur-[2px]
+           hover:scale-[1.015] hover:shadow-soft-md active:scale-[0.985]
+           transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer
            focus:outline-none focus:ring-4;
+  }
+
+  /** Paneles reportes / rankings — vidrio suave */
+  .glass-panel {
+    @apply rounded-2xl border border-slate-100/90 bg-white/95 shadow-sm backdrop-blur-sm
+           transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
+           hover:border-slate-200/90 hover:shadow-md;
+  }
+
+  .filter-surface {
+    @apply relative min-h-[8rem];
   }
 
   /* Drawer overlay */
@@ -96,5 +109,35 @@
   .shimmer-bg {
     background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
     background-size: 200% 100%;
+  }
+
+  .content-enter {
+    animation: content-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .stagger-children > * {
+    animation: content-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger-children > *:nth-child(n + 6) { animation-delay: 200ms; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+@keyframes content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

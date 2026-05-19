@@ -5,7 +5,6 @@ import AporteRegistroModal from '../../components/Finanzas/AporteRegistroModal';
 import AporteRetiroModal from '../../components/Finanzas/AporteRetiroModal';
 import { useAuth } from '../../context/AuthContext';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { useUndoAction } from '../../context/UndoActionContext';
 import { supabase } from '../../lib/supabase';
 import {
   APORTE_TIPO_RETIRO,
@@ -50,8 +49,7 @@ type ReloadOpts = { background?: boolean };
 
 const AportesPanel: React.FC = () => {
   const { canEditFinances } = useAuth();
-  const { toast } = useRegistrosContext();
-  const { registerUndoable } = useUndoAction();
+  const { toast, showUndoToast } = useRegistrosContext();
   const [rows, setRows] = useState<AporteAccionista[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -200,7 +198,7 @@ const AportesPanel: React.FC = () => {
       if (!canEditFinances) return;
       const esRetiro = String(r.tipo ?? '').trim() === APORTE_TIPO_RETIRO;
       const tipoTxt = esRetiro ? 'retiro' : 'aporte';
-      const msg = `¿Eliminar este ${tipoTxt} de ${r.accionista || '(sin nombre)'} — ${montoFmt(Math.abs(r.monto), r.moneda)}? Podrás deshacerlo una sola vez con el botón «Deshacer» del encabezado.`;
+      const msg = `¿Eliminar este ${tipoTxt} de ${r.accionista || '(sin nombre)'} — ${montoFmt(Math.abs(r.monto), r.moneda)}? Podrás deshacerlo desde el aviso «Deshacer».`;
       if (!window.confirm(msg)) return;
       setDeletingId(r.id);
       try {
@@ -209,32 +207,36 @@ const AportesPanel: React.FC = () => {
           toast.error('No se pudo eliminar', delErr);
           return;
         }
-        registerUndoable({
-          id: `undo-aporte-${r.id}-${Date.now()}`,
-          label: `Restaurar ${esRetiro ? 'retiro' : 'aporte'} eliminado`,
-          undo: async () => {
-            const { error: insErr } = await insertAporteAccionista({
-              accionista: r.accionista,
-              vehiculoReferencia: r.vehiculoReferencia,
-              monto: r.monto,
-              moneda: r.moneda,
-              fechaAporte: r.fechaAporte,
-              generaInteres: r.generaInteres,
-              tipo: r.tipo,
-              observaciones: r.observaciones,
-            });
-            if (insErr) return false;
-            await reload({ background: true });
-            return true;
+        await reload({ background: true });
+        showUndoToast({
+          message: 'Registro eliminado',
+          detail: `${tipoTxt} quitado de la lista.`,
+          undoAction: {
+            type: 'delete',
+            label: `Restaurar ${esRetiro ? 'retiro' : 'aporte'}`,
+            entityType: 'aporte',
+            entityId: r.id,
+            undo: async () => {
+              const { error: insErr } = await insertAporteAccionista({
+                accionista: r.accionista,
+                vehiculoReferencia: r.vehiculoReferencia,
+                monto: r.monto,
+                moneda: r.moneda,
+                fechaAporte: r.fechaAporte,
+                generaInteres: r.generaInteres,
+                tipo: r.tipo,
+                observaciones: r.observaciones,
+              });
+              if (insErr) throw new Error(insErr);
+              await reload({ background: true });
+            },
           },
         });
-        toast.success('Registro eliminado', `${tipoTxt} quitado de la lista.`);
-        await reload({ background: true });
       } finally {
         setDeletingId(null);
       }
     },
-    [canEditFinances, reload, toast, registerUndoable],
+    [canEditFinances, reload, toast, showUndoToast],
   );
 
   const busy = loading || refreshing;

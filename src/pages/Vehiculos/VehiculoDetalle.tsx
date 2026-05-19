@@ -146,7 +146,7 @@ const VehiculoDetalle: React.FC = () => {
           const ra = a.estado === 'VIGENTE' ? 0 : 1;
           const rb = b.estado === 'VIGENTE' ? 0 : 1;
           if (ra !== rb) return ra - rb;
-          return b.id - a.id;
+          return String(b.id).localeCompare(String(a.id));
         }),
     [conductores, vid],
   );

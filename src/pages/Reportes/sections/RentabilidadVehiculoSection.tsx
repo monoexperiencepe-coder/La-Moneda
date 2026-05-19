@@ -10,6 +10,8 @@ import {
   type ReportesPeriodPreset,
 } from '../../../utils/reportesAnalytics';
 import ReportesPeriodFilter from '../components/ReportesPeriodFilter';
+import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
+import { UpdatingChrome } from '../../../components/Loading';
 
 interface RentabilidadVehiculoSectionProps {
   vehicles: Vehicle[];
@@ -30,7 +32,13 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
 
-  const range = useMemo(() => getReportesPeriodRange(preset, customYear), [preset, customYear]);
+  const filterKey = useMemo(() => ({ preset, customYear }), [preset, customYear]);
+  const { deferred: deferredFilter, isRecalculating } = useDeferredRecalc(filterKey);
+
+  const range = useMemo(
+    () => getReportesPeriodRange(deferredFilter.preset, deferredFilter.customYear),
+    [deferredFilter],
+  );
 
   const rentability = useMemo(() => {
     const i = filterIngresosPeriod(ingresos, range.desde, range.hasta);
@@ -52,7 +60,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
     r.totalIngresos > 0 ? Math.round((r.margen / r.totalIngresos) * 100) : 0;
 
   return (
-    <section className="space-y-4 animate-fade-in">
+    <section className="space-y-4 content-enter">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Rentabilidad por vehículo</h2>
         <p className="mt-1 text-sm text-slate-600">
@@ -97,6 +105,7 @@ function RankingList({
   items,
   margenPct,
   tone,
+  updating,
   onRow,
 }: {
   title: string;
@@ -104,14 +113,15 @@ function RankingList({
   items: ReturnType<typeof calculateVehicleRentability>;
   margenPct: (r: ReturnType<typeof calculateVehicleRentability>[0]) => number;
   tone: 'good' | 'warn';
+  updating?: boolean;
   onRow: (id: number) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <div className="glass-panel overflow-hidden p-0">
       <div className="border-b border-slate-100 px-4 py-3">
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
       </div>
-      {items.length === 0 ? (
+      {items.length === 0 && !updating ? (
         <p className="px-4 py-6 text-center text-sm text-slate-400">{empty}</p>
       ) : (
         <ul className="divide-y divide-slate-50">
@@ -120,7 +130,7 @@ function RankingList({
               <button
                 type="button"
                 onClick={() => onRow(r.vehicle.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-300 hover:bg-slate-50/90 active:scale-[0.995]"
               >
                 <span
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${

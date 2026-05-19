@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import type { Descuento, Gasto, Ingreso } from '../../../data/types';
 import { MESES } from '../../../data/catalogs';
 import { gastosOperativosSolamente } from '../../../utils/cajaNegocio';
 import { ingresoMontoPEN } from '../../../utils/moneda';
 import { exportGastosCsv, exportIngresosCsv, exportMensualCsv } from '../../../utils/reportesExport';
+import { useRegistrosContext } from '../../../context/RegistrosContext';
+import { useDelayedLoading } from '../../../hooks/useDelayedLoading';
 
 interface ExportarSectionProps {
   ingresos: Ingreso[];
@@ -13,7 +15,9 @@ interface ExportarSectionProps {
 }
 
 const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, descuentos }) => {
+  const { toast } = useRegistrosContext();
   const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
 
   const years = useMemo(() => {
     const ys = new Set<number>();
@@ -47,25 +51,45 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
     });
   }, [ingresos, gastosOp, descuentos, exportYear]);
 
+  const runExport = (key: string, fn: () => void) => {
+    if (exportingKey) return;
+    setExportingKey(key);
+    window.requestAnimationFrame(() => {
+      try {
+        fn();
+        toast.success('Reporte exportado', 'El archivo CSV se descargó correctamente.');
+      } catch {
+        toast.error('No se pudo exportar', 'Intenta de nuevo en unos segundos.');
+      } finally {
+        window.setTimeout(() => setExportingKey(null), 400);
+      }
+    });
+  };
+
+  const mensualBusy = exportingKey === 'mensual';
+  const { showLoader: mensualShowLoader, showMessage: mensualSlow } = useDelayedLoading(Boolean(mensualBusy));
+
   return (
-    <section className="space-y-4 animate-fade-in">
+    <section className="space-y-4 content-enter">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Exportar información</h2>
         <p className="mt-1 text-sm text-slate-600">Descarga CSV para Excel o análisis externo. Sin PDF por ahora.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-1">
+      <div className="grid gap-3 sm:grid-cols-1 stagger-children">
         <ExportButton
           title="Exportar gastos"
           description="Todos los gastos registrados (incluye categorías financieras)."
-          onClick={() => exportGastosCsv(gastos)}
+          busy={exportingKey === 'gastos'}
+          onClick={() => runExport('gastos', () => exportGastosCsv(gastos))}
         />
         <ExportButton
           title="Exportar ingresos"
           description="Todos los ingresos con monto en soles de referencia."
-          onClick={() => exportIngresosCsv(ingresos)}
+          busy={exportingKey === 'ingresos'}
+          onClick={() => runExport('ingresos', () => exportIngresosCsv(ingresos))}
         />
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold text-slate-900">Exportar reporte mensual</p>
@@ -76,7 +100,8 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
                 <select
                   value={exportYear}
                   onChange={(e) => setExportYear(e.target.value)}
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold"
+                  disabled={Boolean(exportingKey)}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60"
                 >
                   {years.map((y) => (
                     <option key={y} value={y}>
@@ -87,11 +112,20 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
               ) : null}
               <button
                 type="button"
-                onClick={() => exportMensualCsv(exportYear, mensualRows)}
-                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700"
+                disabled={Boolean(exportingKey)}
+                onClick={() => runExport('mensual', () => exportMensualCsv(exportYear, mensualRows))}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
               >
-                <Download size={16} />
-                Descargar CSV
+                {mensualBusy && mensualShowLoader ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Download size={16} />
+                )}
+                {mensualBusy
+                  ? mensualSlow
+                    ? 'Preparando archivo…'
+                    : 'Generando CSV…'
+                  : 'Descargar CSV'}
               </button>
             </div>
           </div>
@@ -101,19 +135,35 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
   );
 };
 
-function ExportButton({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
+function ExportButton({
+  title,
+  description,
+  onClick,
+  busy,
+}: {
+  title: string;
+  description: string;
+  onClick: () => void;
+  busy?: boolean;
+}) {
+  const { showLoader, showMessage } = useDelayedLoading(Boolean(busy));
+  const label = busy ? (showMessage ? 'Preparando archivo…' : 'Generando CSV…') : 'Descargar';
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-violet-300 hover:shadow-md"
+      disabled={busy}
+      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-violet-300 hover:shadow-md active:scale-[0.995] disabled:opacity-60 disabled:pointer-events-none"
     >
       <span>
         <span className="block font-semibold text-slate-900">{title}</span>
-        <span className="mt-0.5 block text-sm text-slate-500">{description}</span>
+        <span className="mt-0.5 block text-sm text-slate-500">
+          {busy ? label : description}
+        </span>
       </span>
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-        <Download size={18} />
+        {busy && showLoader ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
       </span>
     </button>
   );

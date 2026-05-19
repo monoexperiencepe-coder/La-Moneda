@@ -2,9 +2,10 @@ import React, { Suspense, lazy, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Preloader from './components/Preloader/Preloader';
 import MainLayout from './components/Layout/MainLayout';
+import RoutePageSkeleton from './components/Loading/RoutePageSkeleton';
 import { ToastContainer } from './components/Common/Toast';
 import { RegistrosProvider, useRegistrosContext } from './context/RegistrosContext';
-import { UndoActionProvider } from './context/UndoActionContext';
+import { UndoManagerProvider } from './context/UndoManagerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Auth
@@ -41,15 +42,6 @@ const Pendientes = lazy(() => import('./pages/Operaciones/Pendientes'));
 const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
-
-const RouteSkeleton: React.FC = () => (
-  <div className="animate-pulse space-y-4 p-4 sm:p-6">
-    <div className="h-6 w-52 rounded bg-gray-200" />
-    <div className="h-24 w-full rounded-xl bg-gray-100" />
-    <div className="h-24 w-full rounded-xl bg-gray-100" />
-    <div className="h-24 w-full rounded-xl bg-gray-100" />
-  </div>
-);
 
 /** Spinner mientras se verifica la sesión de Supabase. */
 const AuthLoadingScreen: React.FC = () => (
@@ -91,7 +83,7 @@ const AppContent: React.FC = () => {
   return (
     <>
       <BrowserRouter>
-        <Suspense fallback={<RouteSkeleton />}>
+        <Suspense fallback={<RoutePageSkeleton />}>
           <Routes>
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
@@ -102,7 +94,7 @@ const AppContent: React.FC = () => {
               element={
                 <PrivateRoute>
                   <MainLayout>
-                    <Suspense fallback={<RouteSkeleton />}>
+                    <Suspense fallback={<RoutePageSkeleton />}>
                       <Routes>
                         {/* Dashboard */}
                         <Route path="/" element={<Inicio />} />
@@ -183,11 +175,11 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
-      <UndoActionProvider>
+      <UndoManagerProvider>
         <RegistrosProvider>
           <AppContent />
         </RegistrosProvider>
-      </UndoActionProvider>
+      </UndoManagerProvider>
     </AuthProvider>
   );
 };

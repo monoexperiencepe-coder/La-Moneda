@@ -19,13 +19,14 @@ const Ingresos: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const cobroPendiente = searchParams.get('cobro') === 'pendiente';
-  const { ingresos, vehicles, deleteIngreso, addIngreso } = useRegistrosContext();
+  const { ingresos, vehicles, deleteIngreso, addIngreso, toast } = useRegistrosContext();
 
   /** Ranking por vehículo: mostrar toda la flota o solo unidades con al menos 1 ingreso en el período. */
   const [rankingVehicleScope, setRankingVehicleScope] = useState<'all' | 'with_moves'>('all');
   /** Orden de filas en ranking por vehículo (orden de flota = por id de vehículo). */
   const [rankingVehicleSort, setRankingVehicleSort] = useState<'fleet' | 'moves' | 'total'>('fleet');
   const [registrarOpen, setRegistrarOpen] = useState(false);
+  const [registrarSaving, setRegistrarSaving] = useState(false);
   const [prefillVehicleId, setPrefillVehicleId] = useState<number | null>(null);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
 
@@ -55,7 +56,15 @@ const Ingresos: React.FC = () => {
 
   const handleRegistrarIngreso = async (data: Omit<Ingreso, 'id' | 'createdAt'>) => {
     const created = await addIngreso(data);
-    if (created) closeRegistrarModal();
+    if (!created) return;
+    const enPeriodo = filterRowsByYearMonth([created], historyYear, historyMonth).length > 0;
+    const estadoTabla = cobroPendiente ? 'PENDIENTE' : '';
+    const enEstado =
+      !estadoTabla || (created.estadoPago ?? '').toUpperCase() === estadoTabla.toUpperCase();
+    if (!enPeriodo || !enEstado) {
+      toast.info('Registro guardado, pero no aparece por el filtro actual.');
+    }
+    closeRegistrarModal();
   };
 
   const availableYears = useMemo(() => {
@@ -858,6 +867,7 @@ const Ingresos: React.FC = () => {
       <Modal
         isOpen={registrarOpen}
         onClose={closeRegistrarModal}
+        closeLocked={registrarSaving}
         title="Registrar ingreso"
         size="xl"
       >
@@ -866,6 +876,7 @@ const Ingresos: React.FC = () => {
           vehicles={vehicles}
           ingresos={ingresos}
           onSubmit={handleRegistrarIngreso}
+          onLoadingChange={setRegistrarSaving}
           noCard
           prefillVehicleId={prefillVehicleId}
         />
