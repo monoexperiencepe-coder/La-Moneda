@@ -47,7 +47,7 @@ import {
   tipoGastoRequiereVehiculo,
   tipoGastoUsaSubtipoOperativo,
 } from '../../utils/gastoMoveCategoriaDefaults';
-import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
+import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
@@ -657,7 +657,10 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const vehicleOptions = useMemo(
     () => [
       { value: '', label: 'Seleccionar vehículo' },
-      ...vehicles.map((v) => ({ value: String(v.id), label: `${v.marca} ${v.modelo} (${v.placa})` })),
+      ...vehicles.map((v) => ({
+        value: String(v.id),
+        label: vehicleSelectOptionLabel(v),
+      })),
     ],
     [vehicles],
   );

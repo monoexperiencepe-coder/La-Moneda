@@ -32,3 +32,26 @@ export function vehicleIdKey(v: VehicleIdLike): string | null {
 export function vehicleIdsEqual(a: VehicleIdLike, b: VehicleIdLike): boolean {
   return vehicleIdKey(a) === vehicleIdKey(b);
 }
+
+export type VehicleSelectLabelFields = {
+  id: number | string;
+  marca?: string | null;
+  modelo?: string | null;
+  placa?: string | null;
+};
+
+/** Etiqueta visible en selects de vehículo (value sigue siendo `String(id)`). */
+export function vehicleSelectOptionLabel(v: VehicleSelectLabelFields): string {
+  const idStr = String(v.id).trim();
+  const marcaModelo = [v.marca, v.modelo]
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter(Boolean)
+    .join(' ');
+  const placa = typeof v.placa === 'string' ? v.placa.trim() : '';
+  const parts: string[] = [`Unidad ${idStr}`];
+  if (marcaModelo && placa) parts.push(`${marcaModelo} (${placa})`);
+  else if (marcaModelo) parts.push(marcaModelo);
+  else if (placa) parts.push(placa);
+  parts.push(`ID: ${idStr}`);
+  return parts.join(' · ');
+}
