@@ -160,6 +160,8 @@ export const useRegistros = () => {
   const [gastosCaja, setGastosCaja] = useState<GastoCaja[]>([]);
   const [cajaNegocioVehiculo, setCajaNegocioVehiculo] = useState<CajaNegocioVehiculo[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const gastosAuditRef = useRef(gastos);
+  gastosAuditRef.current = gastos;
   const { isAuthenticated } = useAuth();
   /**
    * Tras login / sesión restaurada: `false` hasta terminar refresh + margen mínimo UI.
@@ -657,6 +659,10 @@ export const useRegistros = () => {
     });
   }, []);
 
+  const removeGastoLocal = useCallback((id: string) => {
+    setGastos((prev) => prev.filter((g) => String(g.id) !== String(id)));
+  }, []);
+
   const upsertIngreso = useCallback((row: Ingreso) => {
     setIngresos((prev) => mergeIngresoSorted(prev, row));
   }, []);
@@ -741,6 +747,14 @@ export const useRegistros = () => {
     [],
   );
 
+  const mergeKilometraje = useCallback((row: KilometrajeRegistro) => {
+    setKilometrajes((prev) => mergeKilometrajeSorted(prev, row));
+  }, []);
+
+  const mergePendiente = useCallback((row: Pendiente) => {
+    setPendientes((prev) => mergePendienteSorted(prev, row));
+  }, []);
+
   const getVehicleLabel = useCallback(
     (vehicleId: number | null) => {
       if (!vehicleId) return 'General';
@@ -761,6 +775,13 @@ export const useRegistros = () => {
     () => gastos.filter((g) => g.requiere_revision === true),
     [gastos],
   );
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    void import('../audit/registerAuditGastosWindow').then(({ registerAuditGastosWindow }) => {
+      registerAuditGastosWindow(() => gastosAuditRef.current);
+    });
+  }, []);
 
   return {
     vehicles,
@@ -808,6 +829,7 @@ export const useRegistros = () => {
     deleteIngreso,
     deleteGasto,
     upsertGasto,
+    removeGastoLocal,
     upsertIngreso,
     upsertConductor,
     deleteDescuento,
@@ -816,6 +838,8 @@ export const useRegistros = () => {
     deleteConductor,
     deleteControlFecha,
     deleteKilometraje,
+    mergeKilometraje,
+    mergePendiente,
     getVehicleLabel,
     getVehicleById,
     setVehicles,

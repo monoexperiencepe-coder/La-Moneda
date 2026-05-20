@@ -12,6 +12,7 @@ const TIPO_GASTO_LABEL: Record<string, string> = {
   personales: 'Representación interna',
   gastos_globales: 'Globales',
   inversion_compra: 'Inversión con utilidad',
+  pendiente_revision: 'Pendiente de revisión',
   /** Valores legacy / históricos (misma etiqueta que el canonical). */
   financiero: 'Financieros',
   inversion: 'Inversión con utilidad',

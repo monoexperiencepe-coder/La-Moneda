@@ -14,6 +14,7 @@ export interface AppUserProfile {
   id: string;
   name: string;
   role: AppRole;
+  email?: string | null;
 }
 
 /** Moneda de registro (préstamos, ingresos multimoneda). */

@@ -1,5 +1,7 @@
-import type { Conductor, Gasto, Ingreso } from '../data/types';
+import type { Conductor, Gasto, Ingreso, KilometrajeRegistro, Pendiente } from '../data/types';
 import { insertConductor, patchConductor, removeConductor } from '../services/conductoresService';
+import { insertKilometraje, removeKilometraje } from '../services/kilometrajesService';
+import { insertPendiente, patchPendiente, removePendiente } from '../services/pendientesService';
 import {
   insertGasto,
   removeGasto,
@@ -7,7 +9,13 @@ import {
   type GastoDetalleManualPatch,
 } from '../services/gastosService';
 import { insertIngreso, removeIngreso } from '../services/ingresosService';
-import { omitConductorIds, omitGastoIds, omitIngresoIds } from '../utils/entityReinsertPayloads';
+import {
+  omitConductorIds,
+  omitGastoIds,
+  omitIngresoIds,
+  omitKilometrajeIds,
+  omitPendienteIds,
+} from '../utils/entityReinsertPayloads';
 import type { RegisterUndoInput } from './types';
 
 type LocalUpsert<T> = (row: T) => void;
@@ -158,6 +166,91 @@ export function gastoDetallePatchFromRow(g: Gasto): GastoDetalleManualPatch {
 }
 
 /** UPDATE detalle manual → restaura snapshot anterior del gasto. */
+export function undoCreateKilometraje(
+  created: KilometrajeRegistro,
+  deleteLocal: (id: number) => Promise<void>,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'create',
+    label: 'Kilometraje registrado',
+    entityType: 'kilometraje',
+    entityId: String(created.id),
+    undo: async () => {
+      const ok = await removeKilometraje(created.id);
+      if (!ok) throw new Error('undo_failed');
+      await deleteLocal(created.id);
+    },
+  };
+}
+
+export function undoDeleteKilometraje(
+  snapshot: KilometrajeRegistro,
+  mergeLocal: (row: KilometrajeRegistro) => void,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'delete',
+    label: 'Kilometraje eliminado',
+    entityType: 'kilometraje',
+    entityId: String(snapshot.id),
+    undo: async () => {
+      const restored = await insertKilometraje(omitKilometrajeIds(snapshot));
+      if (!restored) throw new Error('undo_failed');
+      mergeLocal(restored);
+    },
+  };
+}
+
+export function undoCreatePendiente(
+  created: Pendiente,
+  deleteLocal: (id: number) => Promise<void>,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'create',
+    label: 'Pendiente registrado',
+    entityType: 'pendiente',
+    entityId: String(created.id),
+    undo: async () => {
+      const ok = await removePendiente(created.id);
+      if (!ok) throw new Error('undo_failed');
+      await deleteLocal(created.id);
+    },
+  };
+}
+
+export function undoDeletePendiente(
+  snapshot: Pendiente,
+  mergeLocal: (row: Pendiente) => void,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'delete',
+    label: 'Pendiente eliminado',
+    entityType: 'pendiente',
+    entityId: String(snapshot.id),
+    undo: async () => {
+      const restored = await insertPendiente(omitPendienteIds(snapshot));
+      if (!restored) throw new Error('undo_failed');
+      mergeLocal(restored);
+    },
+  };
+}
+
+export function undoUpdatePendiente(
+  before: Pendiente,
+  mergeLocal: (row: Pendiente) => void,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'update',
+    label: 'Pendiente actualizado',
+    entityType: 'pendiente',
+    entityId: String(before.id),
+    undo: async () => {
+      const restored = await patchPendiente(before.id, omitPendienteIds(before));
+      if (!restored) throw new Error('undo_failed');
+      mergeLocal(restored);
+    },
+  };
+}
+
 export function undoUpdateGastoDetalle(
   before: Gasto,
   upsertLocal: LocalUpsert<Gasto>,

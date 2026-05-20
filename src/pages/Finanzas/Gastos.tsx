@@ -16,6 +16,12 @@ import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { useAuth } from '../../context/AuthContext';
+import {
+  canMovePendienteToTipo,
+  canViewGlobalTotals,
+  OPERADOR_MOVE_TARGET_TIPO_GASTO,
+  permissionUserFromAuth,
+} from '../../utils/permissions';
 import { gastoMatchesTipoGasto, tipoGastoUiCanonical } from '../../utils/gastosTipoGasto';
 import {
   getSubtipoFinancieroLabel,
@@ -41,6 +47,7 @@ import {
   tipoGastoRequiereVehiculo,
 } from '../../utils/gastoMoveCategoriaDefaults';
 import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
+import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
 
@@ -79,6 +86,25 @@ const GASTO_TABS: GastoTabDef[] = [
   { id: 'glob', label: 'Globales', tipo_gasto: 'gastos_globales', emoji: '🌐', gradient: 'from-teal-500/10 to-cyan-500/10', border: 'border-teal-200 hover:border-teal-400' },
 ];
 
+/** Cola temporal: clasificación pendiente (no mezclar con «Otros»). */
+const PENDIENTE_REVISION_TAB: GastoTabDef = {
+  id: 'rev',
+  label: 'Pendiente de revisión',
+  tipo_gasto: 'pendiente_revision',
+  emoji: '⏳',
+  gradient: 'from-amber-500/10 to-orange-500/10',
+  border: 'border-amber-300 hover:border-amber-500',
+};
+
+/** Parrilla Gastos: 6 categorías + pendiente (inversión va en tarjeta aparte → Finanzas → Inversiones). */
+const GASTO_PARILLA_TABS: GastoTabDef[] = [...GASTO_TABS, PENDIENTE_REVISION_TAB];
+
+/** Parrilla visible para cuenta operador restringida. */
+const OPERADOR_GASTO_PARILLA_TABS: GastoTabDef[] = [
+  GASTO_TABS.find((t) => t.tipo_gasto === 'gastos_globales')!,
+  PENDIENTE_REVISION_TAB,
+];
+
 /** Orden para el modal «mover categoría» (incluye inversiones). */
 const GASTO_CATEGORIAS_PARA_MOVIMIENTO: GastoTabDef[] = [
   ...GASTO_TABS.slice(0, 4),
@@ -95,6 +121,7 @@ const TAB_ACCENT_STRIP: Record<string, string> = {
   inv: 'from-violet-500 via-fuchsia-600 to-violet-800',
   per: 'from-pink-500 via-rose-500 to-pink-700',
   glob: 'from-teal-500 via-cyan-600 to-teal-800',
+  rev: 'from-amber-500 via-orange-500 to-amber-700',
 };
 
 /** Degradado de barras del gráfico mensual (coherente con la categoría). */
@@ -106,6 +133,7 @@ const TAB_BAR_GRADIENT: Record<string, { from: string; to: string }> = {
   inv: { from: '#C084FC', to: '#6B21A8' },
   per: { from: '#F472B6', to: '#BE185D' },
   glob: { from: '#2DD4BF', to: '#0F766E' },
+  rev: { from: '#FBBF24', to: '#C2410C' },
 };
 
 const PERIODO_SUBTIPO_OPTIONS: { value: 'ALL' | 'YEAR' | 'MONTH'; label: string }[] = [
@@ -126,7 +154,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const [searchParams, setSearchParams] = useSearchParams();
   const { gastos, vehicles, deleteGasto, upsertGasto, toast, addGasto, showUndoToast } = useRegistrosContext();
   const bootstrapPending = useBootstrapPending();
-  const { canEditFinances } = useAuth();
+  const { canEditFinances, user, profile, isFinancialOperador } = useAuth();
+  const permissionUser = useMemo(
+    () => permissionUserFromAuth(user, profile?.email ?? null),
+    [user, profile?.email],
+  );
+  const showGlobalTotals = canViewGlobalTotals(permissionUser);
+  const parrillaTabs =
+    isFinancialOperador && mode !== 'inversiones' ? OPERADOR_GASTO_PARILLA_TABS : GASTO_PARILLA_TABS;
 
   const isInversionesPage = mode === 'inversiones';
   const hidePageChrome = embeddedInParent && isInversionesPage;
@@ -135,7 +170,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     ? INVERSION_GASTO_TAB
     : tabIndex == null
       ? null
-      : (GASTO_TABS[tabIndex] ?? null);
+      : (parrillaTabs[tabIndex] ?? null);
 
   const [registrarOpen, setRegistrarOpen] = useState(false);
   const [registrarSaving, setRegistrarSaving] = useState(false);
@@ -525,17 +560,58 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const resumenPorCategoria = useMemo(
     () =>
       Object.fromEntries(
-        GASTO_TABS.map((t) => {
+        parrillaTabs.map((t) => {
           const rows = gastos.filter((g) => gastoMatchesTipoGasto(g, t.tipo_gasto));
           return [t.tipo_gasto, { count: rows.length, monto: rows.reduce((s, g) => s + g.monto, 0) }];
         }),
       ),
+    [gastos, parrillaTabs],
+  );
+
+  const gastosPendienteRevisionAll = useMemo(
+    () => gastos.filter((g) => gastoMatchesTipoGasto(g, 'pendiente_revision')),
     [gastos],
   );
 
-  const categoriaOptions = useMemo(
-    () => GASTO_CATEGORIAS_PARA_MOVIMIENTO.map((t) => ({ value: t.tipo_gasto, label: `${t.emoji} ${t.label}` })),
-    [],
+  const statsPendienteRevision = useMemo(() => {
+    const rows = gastosPendienteRevisionAll;
+    return { n: rows.length, monto: rows.reduce((s, g) => s + g.monto, 0) };
+  }, [gastosPendienteRevisionAll]);
+
+  const getVehicleLabel = useCallback(
+    (vehicleId: number | null) => {
+      if (!vehicleId) return 'General / sin unidad';
+      const v = vehicles.find((x) => x.id === vehicleId);
+      return v ? `#${v.id} ${v.marca} ${v.modelo} (${v.placa})` : `Carro #${vehicleId}`;
+    },
+    [vehicles],
+  );
+
+  const sumaSeisCategorias = useMemo(
+    () => GASTO_TABS.reduce((s, t) => s + (resumenPorCategoria[t.tipo_gasto]?.monto ?? 0), 0),
+    [resumenPorCategoria],
+  );
+
+  const sumaConciliacionVisual = useMemo(
+    () => sumaSeisCategorias + statsInversionesGastos.monto + statsPendienteRevision.monto,
+    [sumaSeisCategorias, statsInversionesGastos.monto, statsPendienteRevision.monto],
+  );
+
+  const conciliacionCuadra = Math.abs(sumaConciliacionVisual - totalFlota) < 0.02;
+
+  const categoriaOptions = useMemo(() => {
+    const all = GASTO_CATEGORIAS_PARA_MOVIMIENTO.map((t) => ({
+      value: t.tipo_gasto,
+      label: `${t.emoji} ${t.label}`,
+    }));
+    if (!isFinancialOperador) return all;
+    const allowed = new Set<string>(OPERADOR_MOVE_TARGET_TIPO_GASTO);
+    return all.filter((o) => allowed.has(o.value));
+  }, [isFinancialOperador]);
+
+  const canMoveToTipo = useCallback(
+    (tipo: string) => canMovePendienteToTipo(permissionUser, tipo),
+    [permissionUser],
   );
 
   const subtipoOptionsForMove = useMemo(() => {
@@ -647,6 +723,10 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const handleConfirmMoveCategoria = async () => {
     if (!moveTarget) return;
     if (moveDisabled) return;
+    if (!canMoveToTipo(moveTipo)) {
+      toast.error('Sin permiso', 'No puedes mover este gasto a esa categoría.');
+      return;
+    }
     const gastoId = moveTarget.id;
     let excelExtraBefore: Record<string, unknown> = {};
     try {
@@ -797,25 +877,46 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                     {statsInversionesGastos.n} movimiento{statsInversionesGastos.n === 1 ? '' : 's'} ·{' '}
                     {formatCurrency(statsInversionesGastos.monto)} en inversión con utilidad (tabla gastos)
                   </>
-                ) : (
+                ) : showGlobalTotals ? (
                   <>
                     {gastos.length} movimientos · S/ {totalFlota.toLocaleString('es-PE', { minimumFractionDigits: 2 })} total tabla
                   </>
+                ) : (
+                  <>
+                    {gastos.length} movimientos en tus categorías asignadas
+                  </>
                 )}
               </p>
+              {!isInversionesPage && showGlobalTotals ? (
+                <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
+                  Conciliación: {formatCurrency(sumaConciliacionVisual)}
+                  {conciliacionCuadra ? (
+                    <span className="text-emerald-600 font-semibold"> · cuadra con total tabla</span>
+                  ) : (
+                    <span className="text-amber-700 font-semibold">
+                      {' '}
+                      · diferencia {formatCurrency(totalFlota - sumaConciliacionVisual)}
+                    </span>
+                  )}
+                </p>
+              ) : null}
               <p className="text-[11px] text-gray-400 mt-0.5">
                 {isInversionesPage
                   ? 'Compras e inversión en flota (tipo_gasto inversion_compra). «Caja negocio» sigue en Finanzas → Caja negocio.'
-                  : 'Selecciona una categoría para ver su resumen y su historial. Inversiones: Finanzas → Inversiones. «Caja negocio» sigue en Finanzas → Caja negocio.'}
+                  : isFinancialOperador
+                    ? 'Acceso restringido: Gastos globales y Pendiente de revisión.'
+                    : '6 categorías + Inversión + Pendiente de revisión = total tabla. Inversiones: Finanzas → Inversiones.'}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={openRegistrarModal}
-            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold shadow-soft transition-all">
-            + Registrar
-          </button>
+          {!isFinancialOperador ? (
+            <button
+              type="button"
+              onClick={openRegistrarModal}
+              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold shadow-soft transition-all">
+              + Registrar
+            </button>
+          ) : null}
         </div>
       ) : isInversionesPage && embeddedInParent ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -830,9 +931,11 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       ) : null}
 
       {tab == null && !isInversionesPage && (
+        <div className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-2" role="tablist" aria-label="Categoría de gasto">
-          {GASTO_TABS.map((t, i) => {
+          {parrillaTabs.map((t, i) => {
             const data = resumenPorCategoria[t.tipo_gasto] ?? { count: 0, monto: 0 };
+            const isPendiente = t.tipo_gasto === 'pendiente_revision';
             return (
               <button
                 key={t.id}
@@ -840,7 +943,9 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                 role="tab"
                 aria-selected={false}
                 onClick={() => setTabIndex(i)}
-                className={`mission-btn bg-gradient-to-br ${t.gradient} border-2 ${t.border} group text-left`}
+                className={`mission-btn bg-gradient-to-br ${t.gradient} border-2 ${t.border} group text-left ${
+                  isPendiente && data.count > 0 ? 'ring-2 ring-amber-300/80' : ''
+                }`}
               >
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-2xl group-hover:scale-110 transition-transform">{t.emoji}</span>
@@ -856,12 +961,65 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                     </>
                   )}
                 </p>
+                {isPendiente && data.count > 0 ? (
+                  <p className="mt-1 text-[10px] font-medium text-amber-800 leading-snug">
+                    Sin clasificar — revisar y mover categoría
+                  </p>
+                ) : null}
                 <div className="mt-2 text-[10px] font-semibold text-primary-700/80">
                   Entrar a {t.label}
                 </div>
               </button>
             );
           })}
+          {showGlobalTotals ? (
+            <button
+              type="button"
+              onClick={() => navigate('/finanzas/inversiones/utilidad')}
+              className={`mission-btn bg-gradient-to-br ${INVERSION_GASTO_TAB.gradient} border-2 ${INVERSION_GASTO_TAB.border} group text-left`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <span className="text-2xl group-hover:scale-110 transition-transform">{INVERSION_GASTO_TAB.emoji}</span>
+                <span className="text-xs font-bold text-gray-800 tabular-nums sm:text-sm">
+                  {formatCurrency(statsInversionesGastos.monto)}
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-gray-900 mb-0.5">{INVERSION_GASTO_TAB.label}</h3>
+              <p className="text-[11px] text-gray-500 min-h-[1rem]">
+                {bootstrapPending ? (
+                  <span className="inline-block h-3 w-[4.5rem] rounded-md shimmer-bg align-middle" aria-hidden />
+                ) : (
+                  <>
+                    {statsInversionesGastos.n} registro{statsInversionesGastos.n === 1 ? '' : 's'}
+                  </>
+                )}
+              </p>
+              <div className="mt-2 text-[10px] font-semibold text-violet-700/80">Abrir en Inversiones →</div>
+            </button>
+          ) : null}
+        </div>
+        {showGlobalTotals ? (
+        <div
+          className={`rounded-xl border px-3 py-2.5 text-[11px] leading-snug sm:text-xs ${
+            conciliacionCuadra
+              ? 'border-emerald-200/90 bg-emerald-50/80 text-emerald-900'
+              : 'border-amber-200/90 bg-amber-50/80 text-amber-950'
+          }`}
+        >
+          <p className="font-semibold">Suma visible = total tabla</p>
+          <p className="mt-0.5 tabular-nums">
+            6 categorías ({formatCurrency(sumaSeisCategorias)}) + Inversión (
+            {formatCurrency(statsInversionesGastos.monto)}) + Pendiente revisión (
+            {formatCurrency(statsPendienteRevision.monto)}) ={' '}
+            <span className="font-bold">{formatCurrency(sumaConciliacionVisual)}</span>
+            {conciliacionCuadra ? (
+              <span className="text-emerald-700"> ✓</span>
+            ) : (
+              <span className="text-amber-800"> (total tabla {formatCurrency(totalFlota)})</span>
+            )}
+          </p>
+        </div>
+        ) : null}
         </div>
       )}
 
@@ -883,6 +1041,23 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             {isInversionesPage ? '← Volver a Finanzas' : '← Cambiar categoría'}
           </button>
         </div>
+      ) : null}
+
+      {tab.tipo_gasto === 'pendiente_revision' ? (
+        <PendienteRevisionConciliacionPanel
+          pendientes={gastosPendienteRevisionAll}
+          totalGastosFlota={showGlobalTotals ? totalFlota : 0}
+          showHistoricoPercent={showGlobalTotals}
+          vehicles={vehicles}
+          canEdit={canEditFinances}
+          canMoveToTipo={canMoveToTipo}
+          userLabel={user.name || REVISION_USER_LABEL}
+          categoriaOptions={categoriaOptions}
+          upsertGasto={upsertGasto}
+          toast={toast}
+          showUndoToast={showUndoToast}
+          getVehicleLabel={getVehicleLabel}
+        />
       ) : null}
 
       <div className="relative overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_20px_40px_-24px_rgba(15,23,42,0.14)]">
@@ -1147,7 +1322,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         isOpen={moveTarget != null}
         onClose={closeMoveModal}
         title="Mover gasto de categoría"
-        size="md"
+        size="lg"
+        closeLocked={moveSaving}
         footer={(
           <>
             <Button variant="ghost" onClick={closeMoveModal} disabled={moveSaving}>
@@ -1216,9 +1392,9 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             )}
             {isInversionTarget && !moveVehicleId && (
               <p className="text-xs text-amber-700">Debes seleccionar un vehículo para inversión con utilidad.</p>
-      )}
+            )}
 
-      <div>
+            <div>
               <label htmlFor="motivo-cambio-categoria" className="label">Motivo del cambio (opcional)</label>
               <textarea
                 id="motivo-cambio-categoria"
@@ -1232,7 +1408,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             {!hasAnyChange && (
               <p className="text-xs text-gray-500">No hay cambios para guardar.</p>
             )}
-      </div>
+          </div>
         )}
       </Modal>
 

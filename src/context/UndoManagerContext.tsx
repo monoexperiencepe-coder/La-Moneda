@@ -2,11 +2,19 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { useAuth } from './AuthContext';
 import type { RegisterUndoInput, UndoAction, UndoExecuteResult } from '../undo/types';
+
+const DEV = import.meta.env.DEV;
+
+function logUndo(...args: unknown[]) {
+  if (DEV) console.log('[undo]', ...args);
+}
 
 /** @deprecated Usar `RegisterUndoInput`. */
 export type UndoableEntry = {
@@ -16,12 +24,10 @@ export type UndoableEntry = {
 };
 
 type UndoManagerValue = {
-  /** Registra la única acción reversible de la sesión (reemplaza la anterior). */
   registerUndo: (input: RegisterUndoInput) => string;
   executeUndo: (actionId?: string) => Promise<UndoExecuteResult>;
   clearUndo: () => void;
   getAction: (actionId: string) => UndoAction | undefined;
-  /** Última acción reversible o null. */
   lastAction: UndoAction | null;
   latestActionId: string | null;
   latestLabel: string | null;
@@ -36,15 +42,31 @@ function newActionId(): string {
 }
 
 export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated } = useAuth();
   const [lastAction, setLastAction] = useState<UndoAction | null>(null);
   const [undoRunning, setUndoRunning] = useState(false);
   const lastActionRef = useRef<UndoAction | null>(null);
+  const wasAuthenticatedRef = useRef(false);
 
   lastActionRef.current = lastAction;
 
+  useEffect(() => {
+    logUndo('provider mounted');
+    return () => logUndo('provider unmounted');
+  }, []);
+
   const clearUndo = useCallback(() => {
+    if (lastActionRef.current) logUndo('clear');
     setLastAction(null);
   }, []);
+
+  useEffect(() => {
+    if (wasAuthenticatedRef.current && !isAuthenticated) {
+      logUndo('clear (logout)');
+      clearUndo();
+    }
+    wasAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated, clearUndo]);
 
   const registerUndo = useCallback((input: RegisterUndoInput): string => {
     const id = newActionId();
@@ -58,6 +80,7 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       undo: input.undo,
     };
     setLastAction(action);
+    logUndo('set action', { id, label: input.label, type: input.type, entityType: input.entityType });
     return id;
   }, []);
 
@@ -84,15 +107,19 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (!target || undoRunning) return 'noop';
 
       if (actionId && actionId !== target.id) {
+        logUndo('execute stale', { actionId, current: target.id });
         return 'stale';
       }
 
+      logUndo('execute', { id: target.id, label: target.label });
       setUndoRunning(true);
       try {
         await target.undo();
         setLastAction(null);
+        logUndo('success', { id: target.id });
         return 'ok';
-      } catch {
+      } catch (e) {
+        logUndo('fail', e);
         return 'fail';
       } finally {
         setUndoRunning(false);

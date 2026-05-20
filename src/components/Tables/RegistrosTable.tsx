@@ -1198,7 +1198,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <p className="text-sm font-medium">Cargando…</p>
           </div>
         ) : viewItem && mode === 'gastos' && gastoDetailEditing && gastoEditDraft ? (
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-0.5">
+          <div className="space-y-3 pr-0.5">
             <p className="text-[10px] text-slate-500 leading-snug">
               Para cambiar la categoría financiera (capa tipo gasto / subtipo financiero) usa el botón «Mover categoría» en la fila del listado.
             </p>

@@ -10,6 +10,10 @@ import { supabase } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import type { AppRole, AppUserProfile } from '../data/types';
 import { canAccessOperativo, canEditFinances, canViewFinances, isAdminRole } from '../utils/roles';
+import {
+  isFinancialOperadorRestricted,
+  permissionUserFromAuth,
+} from '../utils/permissions';
 
 export interface UserProfile {
   id: string;
@@ -31,6 +35,8 @@ interface AuthContextValue {
   canViewFinances: boolean;
   canEditFinances: boolean;
   canAccessOperativo: boolean;
+  /** Cuenta operador@… con acceso solo a gastos globales + pendiente revisión (restricción UI). */
+  isFinancialOperador: boolean;
   /** Retorna mensaje de error o null si OK. */
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
@@ -113,10 +119,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const user = useMemo<AppUserProfile>(() => {
     if (profile) {
-      return { id: profile.id, name: profile.name || profile.email, role: effectiveRole };
+      return {
+        id: profile.id,
+        name: profile.name || profile.email,
+        role: effectiveRole,
+        email: profile.email,
+      };
     }
     return FALLBACK_USER;
   }, [profile, effectiveRole]);
+
+  const permissionUser = useMemo(
+    () => permissionUserFromAuth(user, profile?.email ?? null),
+    [user, profile?.email],
+  );
+
+  const financialOperador = isFinancialOperadorRestricted(permissionUser);
 
   const value = useMemo<AuthContextValue>(() => ({
     profile,
@@ -125,13 +143,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: !!profile && profile.is_active,
     isLoading,
     isAdmin: isAdminRole(effectiveRole),
-    canViewFinances: canViewFinances(effectiveRole),
-    canEditFinances: canEditFinances(effectiveRole),
-    canAccessOperativo: canAccessOperativo(effectiveRole),
+    canViewFinances: financialOperador || canViewFinances(effectiveRole),
+    canEditFinances: financialOperador || canEditFinances(effectiveRole),
+    canAccessOperativo: financialOperador ? false : canAccessOperativo(effectiveRole),
+    isFinancialOperador: financialOperador,
     login,
     logout,
     setRole: (r) => setDevRole(r),
-  }), [profile, user, effectiveRole, isLoading, login, logout]);
+  }), [profile, user, effectiveRole, isLoading, financialOperador, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

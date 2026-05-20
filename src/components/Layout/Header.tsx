@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut, Undo2 } from 'lucide-react';
+import { Menu, X, Bell, Settings, Home, DollarSign, Car, Wrench, BarChart3, Target, LogOut, Undo2, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useUndoManager } from '../../context/UndoManagerContext';
 import { useRegistrosContext } from '../../context/RegistrosContext';
+import { canViewSection, permissionUserFromAuth, type AppSection } from '../../utils/permissions';
+import RealtimeStatusBadge from '../Common/RealtimeStatusBadge';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Admin',
@@ -28,21 +30,49 @@ const navItems: NavItem[] = [
   { label: 'Metas', path: '/metas', icon: <Target size={15} />, emoji: '🎯' },
 ];
 
+const NAV_SECTION: Record<string, AppSection> = {
+  '/': 'inicio',
+  '/finanzas': 'finanzas_gastos',
+  '/vehiculos': 'vehiculos',
+  '/operaciones': 'operaciones',
+  '/reportes': 'reportes',
+  '/metas': 'metas',
+};
+
 const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, profile, logout, isFinancialOperador } = useAuth();
   const { executeUndo, latestLabel, undoRunning, lastAction } = useUndoManager();
-  const { toast } = useRegistrosContext();
+  const { toast, gastosRealtimeConnected } = useRegistrosContext();
+
+  const permissionUser = permissionUserFromAuth(user, profile?.email ?? null);
+  const visibleNavItems = isFinancialOperador
+    ? [
+        {
+          label: 'Conciliación',
+          path: '/finanzas/gastos',
+          icon: <DollarSign size={15} />,
+          emoji: '⏳',
+        },
+      ]
+    : navItems.filter((item) => canViewSection(permissionUser, NAV_SECTION[item.path] ?? 'inicio'));
 
   const hasUndo = Boolean(lastAction);
   const undoDisabled = !hasUndo || undoRunning;
-  const undoTitle = hasUndo
-    ? `Revertir última acción: ${latestLabel}. Disponible durante esta sesión.`
-    : 'No hay acción reciente para deshacer.';
+  const undoTitle = undoRunning
+    ? 'Revirtiendo última acción…'
+    : hasUndo
+      ? `Revertir última acción: ${latestLabel}`
+      : 'No hay acciones para deshacer';
+
+  const undoButtonClass = hasUndo
+    ? 'border-indigo-200 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-100/80 hover:bg-indigo-100/90'
+    : 'border-gray-200 bg-gray-50/90 text-gray-400';
 
   const handleGlobalUndo = async () => {
+    if (undoDisabled) return;
     const label = latestLabel;
     const res = await executeUndo();
     if (res === 'ok') {
@@ -73,7 +103,7 @@ const Header: React.FC = () => {
               🪙
             </button>
             <nav className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto lg:flex [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {navItems.map(item => (
+              {visibleNavItems.map(item => (
                 <button
                   key={item.path}
                   type="button"
@@ -109,29 +139,32 @@ const Header: React.FC = () => {
 
           {/* Derecha: acciones (orden fijo; en móvil el deshacer lleva más contraste si hay acción pendiente) */}
           <div className="relative z-20 flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5">
-            {hasUndo && (
-              <button
-                type="button"
-                onClick={() => void handleGlobalUndo()}
-                disabled={undoDisabled}
-                className="flex max-w-[11rem] sm:max-w-[14rem] flex-shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-indigo-800 shadow-sm ring-1 ring-indigo-100/80 transition-colors hover:bg-indigo-100/90 disabled:opacity-60 sm:px-2.5 sm:py-2"
-                aria-label={undoTitle}
-                title={undoTitle}
-              >
-                <Undo2
-                  size={16}
-                  strokeWidth={2.25}
-                  className={`flex-shrink-0 ${undoRunning ? 'animate-pulse' : ''}`}
-                />
-                <span className="hidden min-w-0 flex-col items-start text-left leading-tight sm:flex">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-500/90">
-                    Última acción
-                  </span>
-                  <span className="truncate text-xs font-semibold">{latestLabel}</span>
+            <RealtimeStatusBadge connected={gastosRealtimeConnected} />
+            <button
+              type="button"
+              onClick={() => void handleGlobalUndo()}
+              disabled={undoDisabled}
+              className={`flex max-w-[11rem] sm:max-w-[14rem] flex-shrink-0 items-center gap-1.5 rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none sm:px-2.5 sm:py-2 ${undoButtonClass}`}
+              aria-label={undoTitle}
+              title={undoTitle}
+            >
+              {undoRunning ? (
+                <Loader2 size={16} className="flex-shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <Undo2 size={16} strokeWidth={2.25} className="flex-shrink-0" />
+              )}
+              <span className="hidden min-w-0 flex-col items-start text-left leading-tight sm:flex">
+                <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+                  {undoRunning ? 'Revirtiendo…' : 'Deshacer'}
                 </span>
-                <span className="text-xs font-semibold sm:hidden">Deshacer</span>
-              </button>
-            )}
+                {hasUndo && !undoRunning ? (
+                  <span className="max-w-[9rem] truncate text-xs font-semibold">{latestLabel}</span>
+                ) : null}
+              </span>
+              <span className="text-xs font-semibold sm:hidden">
+                {undoRunning ? 'Revirtiendo…' : 'Deshacer'}
+              </span>
+            </button>
             <button
               type="button"
               className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-50"
@@ -186,26 +219,26 @@ const Header: React.FC = () => {
 
       {mobileOpen && (
         <div className="border-t border-gray-100 bg-white px-4 py-3 animate-scale-in lg:hidden">
-          {hasUndo && (
-            <div className="mb-3 flex flex-col items-end gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleGlobalUndo();
-                  setMobileOpen(false);
-                }}
-                disabled={undoDisabled}
-                className="inline-flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 disabled:opacity-60"
-                title={undoTitle}
-              >
-                <Undo2 size={16} />
-                Deshacer
-              </button>
-              <p className="text-[10px] text-gray-400">Disponible durante esta sesión</p>
-            </div>
-          )}
+          <div className="mb-3 flex flex-col items-stretch gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                void handleGlobalUndo();
+                setMobileOpen(false);
+              }}
+              disabled={undoDisabled}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:pointer-events-none ${undoButtonClass}`}
+              title={undoTitle}
+            >
+              {undoRunning ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />}
+              {undoRunning ? 'Revirtiendo…' : 'Deshacer'}
+            </button>
+            {hasUndo && !undoRunning ? (
+              <p className="text-center text-[10px] text-gray-400">Disponible durante esta sesión</p>
+            ) : null}
+          </div>
           <nav className="grid grid-cols-3 gap-2">
-            {navItems.map(item => (
+            {visibleNavItems.map(item => (
               <button
                 key={item.path}
                 type="button"

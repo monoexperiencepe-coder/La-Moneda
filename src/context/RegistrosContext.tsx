@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, ReactNode, useCallback, useMemo } from 'react';
 import { useRegistros } from '../hooks/useRegistros';
 import { useToast } from '../hooks/useToast';
 import { ToastMessage } from '../components/Common/Toast';
@@ -24,6 +24,8 @@ import {
 import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
 import { useAuth } from './AuthContext';
+import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
+import { useGastosRealtime } from '../hooks/useGastosRealtime';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
 import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
@@ -35,6 +37,11 @@ import {
   undoDeleteGasto,
   undoDeleteIngreso,
   undoUpdateConductor,
+  undoCreateKilometraje,
+  undoDeleteKilometraje,
+  undoCreatePendiente,
+  undoDeletePendiente,
+  undoUpdatePendiente,
 } from '../undo/factories';
 
 interface RegistrosContextValue {
@@ -131,6 +138,8 @@ interface RegistrosContextValue {
   registrosBootstrapLoading: boolean;
   /** `true` desde que arranca el ciclo post-auth hasta marcar complete. */
   registrosBootstrapStarted: boolean;
+  /** Suscripción realtime activa en tabla gastos. */
+  gastosRealtimeConnected: boolean;
 }
 
 const RegistrosContext = createContext<RegistrosContextValue | null>(null);
@@ -138,8 +147,44 @@ const RegistrosContext = createContext<RegistrosContextValue | null>(null);
 export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const registros = useRegistros();
   const toastHook = useToast();
-  const { role } = useAuth();
+  const { role, user, profile, isAuthenticated } = useAuth();
   const undoManager = useUndoManager();
+
+  const permissionUser = useMemo(
+    () => permissionUserFromAuth(user, profile?.email ?? null),
+    [user, profile?.email],
+  );
+
+  const visibleGastos = useMemo(
+    () => filterGastosForUser(permissionUser, registros.gastos),
+    [permissionUser, registros.gastos],
+  );
+
+  const handleRemoteGastosActivity = useCallback(
+    ({ count, hadConflict }: { count: number; hadConflict: boolean }) => {
+      if (hadConflict) {
+        toastHook.info(
+          'Registro actualizado por otra cuenta',
+          'Tenías este gasto abierto; revisa los datos antes de guardar.',
+        );
+        return;
+      }
+      if (count === 1) {
+        toastHook.info('Sincronizado', 'Un gasto se actualizó desde otra cuenta.');
+      } else if (count > 1) {
+        toastHook.info('Sincronizado', `${count} gastos actualizados desde otra cuenta.`);
+      }
+    },
+    [toastHook],
+  );
+
+  const { connected: gastosRealtimeConnected } = useGastosRealtime({
+    enabled: isAuthenticated && registros.registrosBootstrapComplete,
+    permissionUser,
+    upsertGasto: registros.upsertGasto,
+    removeGastoLocal: registros.removeGastoLocal,
+    onRemoteActivity: handleRemoteGastosActivity,
+  });
 
   const showUndoToast = useMemo(
     () =>
@@ -181,6 +226,10 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const handleAddGasto = async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
+    if (!canViewGastoTipo(permissionUser, data.tipo_gasto ?? null)) {
+      toastHook.error('Sin permiso', 'No puedes registrar gastos en esa categoría.');
+      return null;
+    }
     try {
       const result = await registros.addGasto(data);
       showUndoToast({
@@ -380,7 +429,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
       const result = await registros.addKilometraje(data);
       if (result) {
-        toastHook.success('🛣️ Kilometraje registrado', `Auto #${data.vehicleId}`);
+        showUndoToast({
+          message: 'Kilometraje registrado',
+          detail: `Auto #${data.vehicleId}`,
+          undoAction: undoCreateKilometraje(result, (id) => registros.deleteKilometraje(id)),
+        });
       }
       return result;
     } catch (e) {
@@ -400,8 +453,16 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const handleDeleteKilometraje = async (id: number): Promise<boolean> => {
+    const snapshot = registros.kilometrajes.find((k) => k.id === id);
     try {
       await registros.deleteKilometraje(id);
+      if (snapshot) {
+        showUndoToast({
+          message: 'Kilometraje eliminado',
+          detail: `Auto #${snapshot.vehicleId}`,
+          undoAction: undoDeleteKilometraje(snapshot, registros.mergeKilometraje),
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar', e instanceof Error ? e.message : '');
@@ -413,7 +474,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
       const result = await registros.addPendiente(data);
       if (result) {
-        toastHook.success('📌 Pendiente registrado', data.descripcion.slice(0, 80));
+        showUndoToast({
+          message: 'Pendiente registrado',
+          detail: data.descripcion.slice(0, 80),
+          undoAction: undoCreatePendiente(result, (pid) => registros.deletePendiente(pid)),
+        });
       }
       return result;
     } catch (e) {
@@ -426,11 +491,19 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     id: number,
     patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>,
   ) => {
+    const before = registros.pendientes.find((p) => p.id === id);
     try {
       const result = await registros.updatePendiente(id, patch);
       if (!result) {
         toastHook.error('No se pudo actualizar', 'Registro no encontrado o error en Supabase.');
         return null;
+      }
+      if (before) {
+        showUndoToast({
+          message: 'Pendiente actualizado',
+          detail: before.descripcion.slice(0, 60),
+          undoAction: undoUpdatePendiente(before, registros.mergePendiente),
+        });
       }
       return result;
     } catch (e) {
@@ -440,8 +513,15 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const handleDeletePendiente = async (id: number): Promise<boolean> => {
+    const snapshot = registros.pendientes.find((p) => p.id === id);
     try {
       await registros.deletePendiente(id);
+      if (snapshot) {
+        showUndoToast({
+          message: 'Pendiente eliminado',
+          undoAction: undoDeletePendiente(snapshot, registros.mergePendiente),
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar', e instanceof Error ? e.message : '');
@@ -494,8 +574,10 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     <RegistrosContext.Provider value={{
       vehicles: registros.vehicles,
       ingresos: registros.ingresos,
-      gastos: registros.gastos,
-      gastosPendientesRevision: registros.gastosPendientesRevision,
+      gastos: visibleGastos,
+      gastosPendientesRevision: registros.gastosPendientesRevision.filter((g) =>
+        canViewGastoTipo(permissionUser, g.tipo_gasto ?? null),
+      ),
       descuentos: registros.descuentos,
       prestamos: registros.prestamos,
       prestamoAbonos: registros.prestamoAbonos,
@@ -564,6 +646,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       registrosBootstrapComplete: registros.registrosBootstrapComplete,
       registrosBootstrapLoading: registros.registrosBootstrapLoading,
       registrosBootstrapStarted: registros.registrosBootstrapStarted,
+      gastosRealtimeConnected,
     }}>
       {children}
     </RegistrosContext.Provider>

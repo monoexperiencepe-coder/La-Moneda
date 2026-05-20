@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 type MenuItem = {
   emoji: string;
@@ -45,6 +46,7 @@ const MENU_ITEMS: MenuItem[] = [
 
 const FloatingRegistrosMenu: React.FC = () => {
   const navigate = useNavigate();
+  const { isFinancialOperador } = useAuth();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -55,6 +57,8 @@ const FloatingRegistrosMenu: React.FC = () => {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
+
+  if (isFinancialOperador) return null;
 
   const go = (path: string) => {
     navigate(path);

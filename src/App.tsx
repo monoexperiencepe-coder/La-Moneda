@@ -7,6 +7,7 @@ import { ToastContainer } from './components/Common/Toast';
 import { RegistrosProvider, useRegistrosContext } from './context/RegistrosContext';
 import { UndoManagerProvider } from './context/UndoManagerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import SectionGuard from './components/Common/SectionGuard';
 
 // Auth
 const Login = lazy(() => import('./pages/Auth/Login'));
@@ -77,6 +78,27 @@ const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+/** Inicio: operador restringido va directo a gastos permitidos. */
+const HomeEntry: React.FC = () => {
+  const { isFinancialOperador } = useAuth();
+  if (isFinancialOperador) return <Navigate to="/finanzas/gastos" replace />;
+  return (
+    <SectionGuard section="inicio">
+      <Inicio />
+    </SectionGuard>
+  );
+};
+
+const FinanzasHubEntry: React.FC = () => {
+  const { isFinancialOperador } = useAuth();
+  if (isFinancialOperador) return <Navigate to="/finanzas/gastos" replace />;
+  return (
+    <SectionGuard section="finanzas">
+      <FinanzasHub />
+    </SectionGuard>
+  );
+};
+
 const AppContent: React.FC = () => {
   const { toasts, removeToast } = useRegistrosContext();
 
@@ -97,50 +119,50 @@ const AppContent: React.FC = () => {
                     <Suspense fallback={<RoutePageSkeleton />}>
                       <Routes>
                         {/* Dashboard */}
-                        <Route path="/" element={<Inicio />} />
+                        <Route path="/" element={<HomeEntry />} />
 
                         {/* Finanzas */}
-                        <Route path="/finanzas" element={<FinanzasHub />} />
-                        <Route path="/finanzas/ingresos" element={<Ingresos />} />
-                        <Route path="/finanzas/gastos" element={<Gastos />} />
-                        <Route path="/finanzas/inversiones" element={<Inversiones />} />
-                        <Route path="/finanzas/inversiones/utilidad" element={<InversionesUtilidad />} />
-                        <Route path="/finanzas/inversiones/generales" element={<InversionesGenerales />} />
-                        <Route path="/finanzas/gastos-caja" element={<GastosCaja />} />
-                        <Route path="/finanzas/caja-negocio" element={<CajaNegocio />} />
-                        <Route path="/finanzas/descuentos" element={<Descuentos />} />
-                        <Route path="/finanzas/financiamiento" element={<Financiamiento />} />
-                        <Route path="/finanzas/financiamiento/prestamos" element={<FinanciamientoPrestamos />} />
-                        <Route path="/finanzas/financiamiento/aportes" element={<FinanciamientoAportes />} />
-                        <Route path="/finanzas/prestamos" element={<Prestamos />} />
-                        <Route path="/finanzas/reportes" element={<ReportesHub />} />
-                        <Route path="/finanzas/resumen" element={<Resumen />} />
-                        <Route path="/finanzas/revision-clasificacion" element={<RevisionClasificacion />} />
+                        <Route path="/finanzas" element={<FinanzasHubEntry />} />
+                        <Route path="/finanzas/ingresos" element={<SectionGuard section="finanzas_ingresos"><Ingresos /></SectionGuard>} />
+                        <Route path="/finanzas/gastos" element={<SectionGuard section="finanzas_gastos"><Gastos /></SectionGuard>} />
+                        <Route path="/finanzas/inversiones" element={<SectionGuard section="finanzas_inversiones"><Inversiones /></SectionGuard>} />
+                        <Route path="/finanzas/inversiones/utilidad" element={<SectionGuard section="finanzas_inversiones"><InversionesUtilidad /></SectionGuard>} />
+                        <Route path="/finanzas/inversiones/generales" element={<SectionGuard section="finanzas_inversiones"><InversionesGenerales /></SectionGuard>} />
+                        <Route path="/finanzas/gastos-caja" element={<SectionGuard section="finanzas_caja"><GastosCaja /></SectionGuard>} />
+                        <Route path="/finanzas/caja-negocio" element={<SectionGuard section="finanzas_caja"><CajaNegocio /></SectionGuard>} />
+                        <Route path="/finanzas/descuentos" element={<SectionGuard section="finanzas"><Descuentos /></SectionGuard>} />
+                        <Route path="/finanzas/financiamiento" element={<SectionGuard section="finanzas_financiamiento"><Financiamiento /></SectionGuard>} />
+                        <Route path="/finanzas/financiamiento/prestamos" element={<SectionGuard section="finanzas_financiamiento"><FinanciamientoPrestamos /></SectionGuard>} />
+                        <Route path="/finanzas/financiamiento/aportes" element={<SectionGuard section="finanzas_financiamiento"><FinanciamientoAportes /></SectionGuard>} />
+                        <Route path="/finanzas/prestamos" element={<SectionGuard section="finanzas_financiamiento"><Prestamos /></SectionGuard>} />
+                        <Route path="/finanzas/reportes" element={<SectionGuard section="finanzas_reportes"><ReportesHub /></SectionGuard>} />
+                        <Route path="/finanzas/resumen" element={<SectionGuard section="finanzas_resumen"><Resumen /></SectionGuard>} />
+                        <Route path="/finanzas/revision-clasificacion" element={<SectionGuard section="finanzas"><RevisionClasificacion /></SectionGuard>} />
 
                         {/* Vehículos */}
-                        <Route path="/vehiculos" element={<VehiculosHub />} />
-                        <Route path="/vehiculos/inventario" element={<Inventario />} />
-                        <Route path="/vehiculos/rentabilidad" element={<ReportesHub />} />
-                        <Route path="/vehiculos/:id" element={<VehiculoDetalle />} />
+                        <Route path="/vehiculos" element={<SectionGuard section="vehiculos"><VehiculosHub /></SectionGuard>} />
+                        <Route path="/vehiculos/inventario" element={<SectionGuard section="vehiculos"><Inventario /></SectionGuard>} />
+                        <Route path="/vehiculos/rentabilidad" element={<SectionGuard section="reportes"><ReportesHub /></SectionGuard>} />
+                        <Route path="/vehiculos/:id" element={<SectionGuard section="vehiculos"><VehiculoDetalle /></SectionGuard>} />
 
                         {/* Operaciones */}
-                        <Route path="/operaciones" element={<OperacionesHub />} />
-                        <Route path="/operaciones/mantenimiento" element={<Mantenimiento />} />
-                        <Route path="/operaciones/docs" element={<Documentacion />} />
-                        <Route path="/operaciones/control-global" element={<ControlGlobal />} />
-                        <Route path="/operaciones/tiempo" element={<RegistroTiempo />} />
-                        <Route path="/operaciones/conductores" element={<Conductores />} />
-                        <Route path="/operaciones/pendientes" element={<Pendientes />} />
+                        <Route path="/operaciones" element={<SectionGuard section="operaciones"><OperacionesHub /></SectionGuard>} />
+                        <Route path="/operaciones/mantenimiento" element={<SectionGuard section="operaciones"><Mantenimiento /></SectionGuard>} />
+                        <Route path="/operaciones/docs" element={<SectionGuard section="operaciones"><Documentacion /></SectionGuard>} />
+                        <Route path="/operaciones/control-global" element={<SectionGuard section="operaciones"><ControlGlobal /></SectionGuard>} />
+                        <Route path="/operaciones/tiempo" element={<SectionGuard section="operaciones"><RegistroTiempo /></SectionGuard>} />
+                        <Route path="/operaciones/conductores" element={<SectionGuard section="operaciones"><Conductores /></SectionGuard>} />
+                        <Route path="/operaciones/pendientes" element={<SectionGuard section="operaciones"><Pendientes /></SectionGuard>} />
 
                         {/* Reportes */}
-                        <Route path="/reportes" element={<ReportesHub />} />
+                        <Route path="/reportes" element={<SectionGuard section="reportes"><ReportesHub /></SectionGuard>} />
 
                         {/* Metas */}
-                        <Route path="/metas" element={<Metas />} />
+                        <Route path="/metas" element={<SectionGuard section="metas"><Metas /></SectionGuard>} />
                         <Route path="/logros" element={<Navigate to="/metas" replace />} />
 
                         {/* Config */}
-                        <Route path="/configuracion" element={<Configuracion />} />
+                        <Route path="/configuracion" element={<SectionGuard section="configuracion"><Configuracion /></SectionGuard>} />
                         <Route
                           path="/admin/historial-sistema"
                           element={
