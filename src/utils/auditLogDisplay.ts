@@ -1,6 +1,9 @@
 import type { FinancialAuditLog } from '../data/types';
 import type { Vehicle } from '../data/types';
 import { toDateOnlyString } from './formatting';
+import { labelTipoGastoFinanciero } from './tipoGastoLabels';
+import { getSubtipoFinancieroLabel } from './subtipoFinancieroLabel';
+import { vehicleIdAuditScalar } from './uuidColumn';
 
 function vehicleLabel(vehicles: Vehicle[], vehicleId: unknown): string {
   if (vehicleId == null || vehicleId === '') return '—';
@@ -70,6 +73,91 @@ export function formatAuditEntitySummary(log: FinancialAuditLog, vehicles: Vehic
     return `${typeTag} · #${log.entityId.slice(0, 8)}…`;
   }
   return line;
+}
+
+const GENERIC_MOVE_REASON_RE =
+  /mover gasto de categor[ií]a|conciliaci[oó]n pendiente|correcci[oó]n manual/i;
+
+function isGenericMoveReason(reason: string): boolean {
+  return GENERIC_MOVE_REASON_RE.test(reason);
+}
+
+/** Resumen legible del cambio (columna «Cambio realizado» en historial del sistema). */
+export function formatAuditChangeSummary(log: FinancialAuditLog, vehicles: Vehicle[]): string {
+  const before = log.oldData ?? {};
+  const after = log.newData ?? {};
+
+  if (log.actionType === 'move_category' || log.actionType === 'undo_move_category') {
+    const parts: string[] = [];
+    const fromTipo = labelTipoGastoFinanciero(before.tipo_gasto as string | null | undefined);
+    const toTipo = labelTipoGastoFinanciero(after.tipo_gasto as string | null | undefined);
+    if (fromTipo !== toTipo) {
+      parts.push(`${fromTipo} → ${toTipo}`);
+    } else if (toTipo !== '—') {
+      parts.push(toTipo);
+    }
+
+    const beforeVeh = vehicleIdAuditScalar(before.vehicle_id);
+    const afterVeh = vehicleIdAuditScalar(after.vehicle_id);
+    if (beforeVeh !== afterVeh) {
+      const fromLbl = vehicleLabel(vehicles, beforeVeh);
+      const toLbl = vehicleLabel(vehicles, afterVeh);
+      if (toLbl !== '—') {
+        parts.push(beforeVeh != null && fromLbl !== toLbl ? `Vehículo: ${fromLbl} → ${toLbl}` : `Vehículo: ${toLbl}`);
+      } else if (fromLbl !== '—') {
+        parts.push(`Vehículo: ${fromLbl} → —`);
+      }
+    } else if (afterVeh != null) {
+      const vl = vehicleLabel(vehicles, afterVeh);
+      if (vl !== '—') parts.push(`Vehículo: ${vl}`);
+    }
+
+    const toSub = getSubtipoFinancieroLabel(
+      after.subtipo_gasto as string | null | undefined,
+      after.tipo_gasto as string | null | undefined,
+    );
+    const fromSub = getSubtipoFinancieroLabel(
+      before.subtipo_gasto as string | null | undefined,
+      before.tipo_gasto as string | null | undefined,
+    );
+    if (toSub !== '—' || fromSub !== '—') {
+      if (fromSub !== toSub && fromSub !== '—') {
+        parts.push(`Subtipo: ${fromSub} → ${toSub}`);
+      } else if (toSub !== '—') {
+        parts.push(`Subtipo: ${toSub}`);
+      }
+    }
+
+    const motivo = log.reason?.trim();
+    if (motivo && !isGenericMoveReason(motivo)) {
+      parts.push(motivo);
+    }
+    return parts.length > 0 ? parts.join(' · ') : (motivo || '—');
+  }
+
+  if (log.actionType === 'change_vehicle_id') {
+    const o = log.oldData?.vehicle_id ?? before.vehicle_id;
+    const n = log.newData?.vehicle_id ?? after.vehicle_id;
+    return `${vehicleLabel(vehicles, o)} → ${vehicleLabel(vehicles, n)}`;
+  }
+
+  if (log.actionType === 'change_amount') {
+    const om = log.oldData?.monto ?? before.monto;
+    const nm = log.newData?.monto ?? after.monto;
+    const fmt = (x: unknown) => {
+      const v = Number(x);
+      return Number.isNaN(v) ? '?' : v.toLocaleString('es-PE', { maximumFractionDigits: 2 });
+    };
+    return `S/${fmt(om)} → S/${fmt(nm)}`;
+  }
+
+  if (log.actionType === 'fix_classification') {
+    const fromTipo = labelTipoGastoFinanciero(before.tipo_gasto as string | null | undefined);
+    const toTipo = labelTipoGastoFinanciero(after.tipo_gasto as string | null | undefined);
+    if (fromTipo !== toTipo) return `${fromTipo} → ${toTipo}`;
+  }
+
+  return log.reason?.trim() || '—';
 }
 
 export function formatAuditUserDisplay(userId: string, lookup: Map<string, { name: string; email: string }>): string {

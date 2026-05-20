@@ -252,7 +252,10 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                 revisado_por: gasto.revisado_por ?? null,
                 origen_clasificacion: gasto.origen_clasificacion ?? null,
               },
-              { reason: 'Deshacer conciliación rápida' },
+              {
+                reason: 'Deshacer conciliación rápida',
+                sourceAction: 'undo_move_category',
+              },
             );
             if (!rev.ok) throw new Error('undo_failed');
             upsertGasto(rev.gasto);

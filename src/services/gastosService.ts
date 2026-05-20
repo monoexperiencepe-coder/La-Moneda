@@ -47,8 +47,13 @@ export type GastoCategoriaManualPatch = Partial<{
   excel_extra: Record<string, unknown> | null;
 }>;
 
+/** Origen de la operación para decidir qué fila(s) de auditoría crear. */
+export type GastoAuditSourceAction = 'move_category' | 'undo_move_category';
+
 export interface GastoAuditMeta {
   reason?: string | null;
+  /** Flujo «mover categoría» / deshacer: una sola fila consolidada en historial. */
+  sourceAction?: GastoAuditSourceAction;
 }
 
 export type UpdateGastoCategoriaManualFailure = {
@@ -98,6 +103,10 @@ export function debugMoveGastoPayload(
   });
 }
 
+/**
+ * Una sola fila de auditoría al mover/revertir categoría (sin logs hijos de edición o vehículo).
+ * old_data / new_data conservan el snapshot completo para trazabilidad.
+ */
 async function auditGastoMoveCategoryLogs(
   id: string,
   before: Record<string, unknown> | null,
@@ -110,68 +119,23 @@ async function auditGastoMoveCategoryLogs(
       console.warn('[gastos] Sin usuario de auth válido para audit; el gasto ya fue actualizado.');
       return;
     }
-    const reasonBase = meta.reason ?? 'Mover gasto de categoría';
-    const run = async (label: string, insertFn: () => Promise<boolean>) => {
-      try {
-        const ok = await insertFn();
-        if (!ok) console.warn(`[gastos] audit "${label}": insert devolvió false (el gasto ya está actualizado).`);
-      } catch (e) {
-        console.warn(`[gastos] audit "${label}" excepción (el gasto ya está actualizado):`, e);
-      }
-    };
     if (!before) return;
-    await run('move_category', () =>
-      insertFinancialAuditLog({
-        user_id: auditUserId,
-        action_type: 'move_category',
-        entity_type: 'gasto',
-        entity_id: String(id),
-        old_data: before,
-        new_data: afterRow,
-        reason: reasonBase,
-      }),
-    );
-    const beforeVeh = vehicleIdAuditScalar(before.vehicle_id);
-    const afterVeh = vehicleIdAuditScalar(afterRow.vehicle_id);
-    if (beforeVeh !== afterVeh) {
-      await run('change_vehicle_id', () =>
-        insertFinancialAuditLog({
-          user_id: auditUserId,
-          action_type: 'change_vehicle_id',
-          entity_type: 'gasto',
-          entity_id: String(id),
-          old_data: { vehicle_id: beforeVeh },
-          new_data: { vehicle_id: afterVeh },
-          reason: reasonBase,
-        }),
-      );
+    const isUndo = meta.sourceAction === 'undo_move_category';
+    const actionType = isUndo ? 'undo_move_category' : 'move_category';
+    const reasonDefault = isUndo ? 'Deshacer mover categoría' : 'Mover gasto de categoría';
+    const reason = meta.reason?.trim() || reasonDefault;
+    const ok = await insertFinancialAuditLog({
+      user_id: auditUserId,
+      action_type: actionType,
+      entity_type: 'gasto',
+      entity_id: String(id),
+      old_data: before,
+      new_data: afterRow,
+      reason,
+    });
+    if (!ok) {
+      console.warn(`[gastos] audit "${actionType}": insert devolvió false (el gasto ya está actualizado).`);
     }
-    const beforeMonto = Number(before.monto ?? 0);
-    const afterMonto = Number(afterRow.monto ?? 0);
-    if (beforeMonto !== afterMonto) {
-      await run('change_amount', () =>
-        insertFinancialAuditLog({
-          user_id: auditUserId,
-          action_type: 'change_amount',
-          entity_type: 'gasto',
-          entity_id: String(id),
-          old_data: { monto: beforeMonto },
-          new_data: { monto: afterMonto },
-          reason: reasonBase,
-        }),
-      );
-    }
-    await run('edit_expense', () =>
-      insertFinancialAuditLog({
-        user_id: auditUserId,
-        action_type: 'edit_expense',
-        entity_type: 'gasto',
-        entity_id: String(id),
-        old_data: before,
-        new_data: afterRow,
-        reason: reasonBase,
-      }),
-    );
   } catch (e) {
     console.warn('[gastos] auditoría post-move_category: error global (gasto ya actualizado):', e);
   }
@@ -247,14 +211,50 @@ function gastoDetalleManualPatchToRow(patch: GastoDetalleManualPatch): Record<st
   return row;
 }
 
+function gastoDetallePatchTouchesOnlyVehicle(patch: GastoDetalleManualPatch): boolean {
+  if (patch.vehicleId === undefined) return false;
+  const otherKeys: (keyof GastoDetalleManualPatch)[] = [
+    'fecha',
+    'fechaRegistro',
+    'tipo',
+    'subTipo',
+    'categoria',
+    'motivo',
+    'metodoPago',
+    'metodoPagoDetalle',
+    'monto',
+    'comentarios',
+  ];
+  return !otherKeys.some((k) => patch[k] !== undefined);
+}
+
 async function auditGastoDetalleManualAfterUpdate(
   id: string,
   before: Record<string, unknown> | null,
   afterRow: Record<string, unknown>,
+  patch: GastoDetalleManualPatch,
 ): Promise<void> {
   try {
     const auditUserId = await getAuthenticatedUserIdForAudit();
     if (!auditUserId || !before) return;
+
+    const beforeVeh = vehicleIdAuditScalar(before.vehicle_id);
+    const afterVeh = vehicleIdAuditScalar(afterRow.vehicle_id);
+    const vehicleOnly = gastoDetallePatchTouchesOnlyVehicle(patch) && beforeVeh !== afterVeh;
+
+    if (vehicleOnly) {
+      await insertFinancialAuditLog({
+        user_id: auditUserId,
+        action_type: 'change_vehicle_id',
+        entity_type: 'gasto',
+        entity_id: String(id),
+        old_data: { vehicle_id: beforeVeh, ...before },
+        new_data: { vehicle_id: afterVeh, ...afterRow },
+        reason: 'Cambio de vehículo desde historial de gastos',
+      });
+      return;
+    }
+
     await insertFinancialAuditLog({
       user_id: auditUserId,
       action_type: 'edit_expense',
@@ -337,7 +337,7 @@ export async function updateGastoDetalleManual(
   }
 
   const afterRow = data as Record<string, unknown>;
-  void auditGastoDetalleManualAfterUpdate(idNorm, before, afterRow);
+  void auditGastoDetalleManualAfterUpdate(idNorm, before, afterRow, patch);
 
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }

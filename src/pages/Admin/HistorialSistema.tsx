@@ -16,7 +16,11 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdminRole } from '../../utils/roles';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { fetchUserProfilesLookup } from '../../services/userProfilesService';
-import { formatAuditEntitySummary, formatAuditUserDisplay } from '../../utils/auditLogDisplay';
+import {
+  formatAuditChangeSummary,
+  formatAuditEntitySummary,
+  formatAuditUserDisplay,
+} from '../../utils/auditLogDisplay';
 
 /** Etiquetas en español para action_type (incluye legados). */
 const ACTION_LABELS: Record<string, string> = {
@@ -28,6 +32,7 @@ const ACTION_LABELS: Record<string, string> = {
   delete_expense: 'Eliminó gasto',
   fix_classification: 'Corrigió clasificación',
   move_category: 'Movió categoría',
+  undo_move_category: 'Revirtió mover categoría',
   change_vehicle_id: 'Cambió vehículo del gasto',
   change_amount: 'Cambió monto del gasto',
   delete_record: 'Eliminó gasto',
@@ -219,7 +224,9 @@ const HistorialSistema: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                rows.map((r) => {
+                  const changeSummary = formatAuditChangeSummary(r, vehicles);
+                  return (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td
                       className="px-3 py-3 text-sm text-gray-700 max-w-[180px] truncate"
@@ -235,8 +242,8 @@ const HistorialSistema: React.FC = () => {
                       <span className="line-clamp-2">{formatAuditEntitySummary(r, vehicles)}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[420px]">
-                      <span className="line-clamp-2" title={r.reason ?? ''}>
-                        {r.reason ?? 'Sin motivo'}
+                      <span className="line-clamp-2" title={changeSummary}>
+                        {changeSummary}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
@@ -260,7 +267,8 @@ const HistorialSistema: React.FC = () => {
                       </td>
                     )}
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

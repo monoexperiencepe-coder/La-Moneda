@@ -76,7 +76,10 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
       origen_clasificacion: 'correccion_manual_ui',
       excel_extra: excelExtraNext,
     },
-    { reason: motivo.trim() || 'Conciliación pendiente de revisión' },
+    {
+      reason: motivo.trim() || 'Conciliación pendiente de revisión',
+      sourceAction: 'move_category',
+    },
   );
 
   if (!result.ok) {

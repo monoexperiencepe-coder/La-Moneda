@@ -819,6 +819,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         excel_extra: excelExtraNext,
       }, {
         reason: moveMotivo.trim() || 'Mover gasto de categoría desde UI',
+        sourceAction: 'move_category',
       });
       if (!result.ok) {
         console.error('[Mover categoría] Detalle técnico', {
@@ -864,7 +865,10 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                 origen_clasificacion: prevOrigen,
                 excel_extra: Object.keys(excelExtraBefore).length > 0 ? excelExtraBefore : null,
               },
-              { reason: 'Deshacer mover categoría' },
+              {
+                reason: 'Deshacer mover categoría',
+                sourceAction: 'undo_move_category',
+              },
             );
             if (!rev.ok) throw new Error('undo_failed');
             upsertGasto(rev.gasto);
