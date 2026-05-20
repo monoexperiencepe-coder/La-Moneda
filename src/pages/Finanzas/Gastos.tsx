@@ -17,9 +17,9 @@ import { REVISION_USER_LABEL } from '../../config/app';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { useAuth } from '../../context/AuthContext';
 import {
-  canMovePendienteToTipo,
+  canMoveGastoToTipo,
   canViewGlobalTotals,
-  OPERADOR_MOVE_TARGET_TIPO_GASTO,
+  getMoveTargetGastoTipoGastoForUser,
   permissionUserFromAuth,
 } from '../../utils/permissions';
 import { gastoMatchesTipoGasto, tipoGastoUiCanonical } from '../../utils/gastosTipoGasto';
@@ -119,6 +119,7 @@ const GASTO_CATEGORIAS_PARA_MOVIMIENTO: GastoTabDef[] = [
   ...GASTO_TABS.slice(0, 5),
   INVERSION_GASTO_TAB,
   ...GASTO_TABS.slice(5),
+  PENDIENTE_REVISION_TAB,
 ];
 
 /** Franja superior en la tarjeta de resumen (acento por categoría). */
@@ -620,17 +621,15 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const conciliacionCuadra = Math.abs(sumaConciliacionVisual - totalFlota) < 0.02;
 
   const categoriaOptions = useMemo(() => {
-    const all = GASTO_CATEGORIAS_PARA_MOVIMIENTO.map((t) => ({
+    const moveTargets = new Set(getMoveTargetGastoTipoGastoForUser(permissionUser));
+    return GASTO_CATEGORIAS_PARA_MOVIMIENTO.filter((t) => moveTargets.has(t.tipo_gasto)).map((t) => ({
       value: t.tipo_gasto,
       label: `${t.emoji} ${t.label}`,
     }));
-    if (!isFinancialOperador) return all;
-    const allowed = new Set<string>(OPERADOR_MOVE_TARGET_TIPO_GASTO);
-    return all.filter((o) => allowed.has(o.value));
-  }, [isFinancialOperador]);
+  }, [permissionUser]);
 
   const canMoveToTipo = useCallback(
-    (tipo: string) => canMovePendienteToTipo(permissionUser, tipo),
+    (tipo: string) => canMoveGastoToTipo(permissionUser, tipo),
     [permissionUser],
   );
 
