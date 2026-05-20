@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { FilterState, Ingreso, Gasto } from '../data/types';
+import { buildSearchHaystack, matchesSearchHaystack } from '../utils/recordSearch';
 
 const defaultFilters: FilterState = {
   mes: null,
@@ -65,13 +66,15 @@ export const useSearch = <T extends Record<string, unknown>>(
 
   const filtered = useMemo(() => {
     if (!query.trim()) return items;
-    const lower = query.toLowerCase();
-    return items.filter(item =>
-      searchKeys.some(key => {
+    return items.filter((item) => {
+      const parts = searchKeys.map((key) => {
         const val = item[key];
-        return typeof val === 'string' && val.toLowerCase().includes(lower);
-      })
-    );
+        if (typeof val === 'string') return val;
+        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+        return '';
+      });
+      return matchesSearchHaystack(buildSearchHaystack(...parts), query);
+    });
   }, [items, query, searchKeys]);
 
   return { query, setQuery, filtered };

@@ -32,6 +32,7 @@ import { cleanMojibakeText, displayConductorField } from '../../utils/cleanMojib
 import { isValidConductorId, logConductorIdDiagnostics } from '../../utils/conductorId';
 import { RegistroCountLabel, SkeletonTableRows, UpdatingChrome } from '../../components/Loading';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
+import { buildSearchHaystack, matchesSearchHaystack, normalizeSearchText } from '../../utils/recordSearch';
 
 type ConductorEditState = {
   driverId: string;
@@ -310,7 +311,7 @@ const Conductores: React.FC = () => {
   );
 
   const filtered = useMemo(() => {
-    const s = deferredFilters.q.trim().toLowerCase();
+    const qNorm = normalizeSearchText(deferredFilters.q);
     const list = conductores.filter((c) => {
       if (deferredFilters.estadoFilter !== 'TODOS' && c.estado !== deferredFilters.estadoFilter) return false;
       // fecha de registro (createdAt)
@@ -330,25 +331,26 @@ const Conductores: React.FC = () => {
         const y = c.createdAt.slice(0, 4);
         if (y !== deferredFilters.anioFiltro) return false;
       }
-      if (!s) return true;
+      if (!qNorm) return true;
       const v = vehicleMap.get(c.vehicleId ?? -1);
-      const haystack = [
-        c.nombres,
-        c.apellidos,
-        c.numeroDocumento,
-        c.celular,
-        c.domicilio,
-        c.estado,
-        c.cochera,
-        c.numeroEmergencia,
-        c.direccion,
-        String(c.vehicleId ?? ''),
-        v ? `${v.marca} ${v.modelo} ${v.placa}` : '',
-      ]
-        .map((part) => cleanMojibakeText(part, { emptyAs: null }).toLowerCase())
-        .filter(Boolean)
-        .join(' ');
-      return haystack.includes(s);
+      return matchesSearchHaystack(
+        buildSearchHaystack(
+          c.id,
+          cleanMojibakeText(c.nombres, { emptyAs: null }),
+          cleanMojibakeText(c.apellidos, { emptyAs: null }),
+          cleanMojibakeText(c.numeroDocumento, { emptyAs: null }),
+          cleanMojibakeText(c.celular, { emptyAs: null }),
+          cleanMojibakeText(c.domicilio, { emptyAs: null }),
+          cleanMojibakeText(c.estado, { emptyAs: null }),
+          cleanMojibakeText(c.cochera, { emptyAs: null }),
+          cleanMojibakeText(c.numeroEmergencia, { emptyAs: null }),
+          cleanMojibakeText(c.direccion, { emptyAs: null }),
+          cleanMojibakeText(c.comentarios, { emptyAs: null }),
+          String(c.vehicleId ?? ''),
+          v ? `${v.marca} ${v.modelo} ${v.placa}` : '',
+        ),
+        deferredFilters.q,
+      );
     });
 
     list.sort((a, b) => {
@@ -458,7 +460,7 @@ const Conductores: React.FC = () => {
             {/* search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={13} />
-              <input type="search" placeholder="Nombre, documento o carro" value={q}
+              <input type="search" placeholder="Nombre, documento, comentarios o carro" value={q}
                 onChange={(e) => setQ(e.target.value)}
                 className="pl-8 pr-3 py-2 w-44 sm:w-60 rounded-xl border border-gray-200 bg-gray-50 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all" />
             </div>

@@ -49,6 +49,7 @@ import {
 } from '../../utils/gastoMoveCategoriaDefaults';
 import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
+import { gastoComentariosForSearch } from '../../utils/recordSearch';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
 
@@ -150,10 +151,7 @@ const TAB_BAR_GRADIENT: Record<string, { from: string; to: string }> = {
 
 /** Misma limpieza que el detalle del registro (RegistrosTable). */
 function formatGastoObservacionesModal(comentarios: string | null | undefined): string {
-  const cleaned = (comentarios ?? '')
-    .replace(/\[\s*migraci[oó]n\s+gastos_caja\s+final\s*\]\s*/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const cleaned = gastoComentariosForSearch(comentarios);
   return cleaned || 'Sin observaciones';
 }
 

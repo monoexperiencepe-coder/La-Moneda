@@ -10,6 +10,7 @@ import type {
 import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { Loader2 } from 'lucide-react';
+import { matchesSearchQuery } from '../../utils/recordSearch';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -193,14 +194,29 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
   }, [tramosModal]);
 
   const filas = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
     const filtered = detalle.filter(({ prestamo: p }) => {
       if (estado !== 'todos' && p.estado !== estado) return false;
       if (moneda !== 'todos' && p.monedaCapital !== moneda) return false;
       if (modalidad !== 'todos' && p.modalidadPago !== modalidad) return false;
-      if (q) {
-        const blob = `${p.codigo} ${p.prestamista} ${p.titulo}`.toLowerCase();
-        if (!blob.includes(q)) return false;
+      if (busqueda.trim()) {
+        if (
+          !matchesSearchQuery(
+            [
+              p.id,
+              p.codigo,
+              p.prestamista,
+              p.titulo,
+              p.notas,
+              p.observaciones,
+              p.estado,
+              p.monedaCapital,
+              p.modalidadPago,
+            ],
+            busqueda,
+          )
+        ) {
+          return false;
+        }
       }
       return true;
     });

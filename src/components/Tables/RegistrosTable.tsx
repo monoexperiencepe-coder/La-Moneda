@@ -34,6 +34,12 @@ import { sumGastosHistorialPEN, sumIngresosHistorialPEN } from '../../utils/hist
 import { useBootstrapPending } from '../../hooks/useBootstrapPending';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { RegistroCountLabel, SkeletonTableRows, TableBodySurface, UpdatingChrome } from '../Loading';
+import {
+  gastoComentariosForSearch,
+  gastoSearchHaystack,
+  ingresoSearchHaystack,
+  matchesSearchHaystack,
+} from '../../utils/recordSearch';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -109,11 +115,7 @@ const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number
 };
 
 function cleanGastoComentario(text: string | null | undefined): string {
-  if (!text) return '';
-  return text
-    .replace(/\[\s*migraci[oó]n\s+gastos_caja\s+final\s*\]\s*/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return gastoComentariosForSearch(text);
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -460,7 +462,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
     /* ── Búsqueda libre ── */
     if (!deferredQuery.trim()) return data;
-    const lower = deferredQuery.toLowerCase();
     const idSet = new Set(deferredVehicleSearchIds);
 
     return data.filter(item => {
@@ -472,40 +473,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         return byVehicleId;
       }
 
-      const vehicleLabel = getVehicleLabel('vehicleId' in item ? item.vehicleId : null).toLowerCase();
+      const vehicleLabel = getVehicleLabel('vehicleId' in item ? item.vehicleId : null);
       if (mode === 'ingresos') {
-        const i = item as Ingreso;
-        return (
-          byVehicleId ||
-          i.tipo.toLowerCase().includes(lower) ||
-          (i.subTipo ?? '').toLowerCase().includes(lower) ||
-          `${i.metodoPago} ${i.metodoPagoDetalle} ${i.celularMetodo ?? ''}`.toLowerCase().includes(lower) ||
-          i.comentarios.toLowerCase().includes(lower) ||
-          (i.detalleOperativo ?? '').toLowerCase().includes(lower) ||
-          (i.tipoOperacion ?? '').toLowerCase().includes(lower) ||
-          (i.estadoPago ?? '').toLowerCase().includes(lower) ||
-          i.fecha.includes(lower) ||
-          vehicleLabel.includes(lower)
-        );
-      } else {
-        const g = item as Gasto;
-        return (
-          byVehicleId ||
-          `${g.tipo} ${g.subTipo ?? ''}`.toLowerCase().includes(lower) ||
-          g.categoria.toLowerCase().includes(lower) ||
-          g.motivo.toLowerCase().includes(lower) ||
-          g.pagadoA.toLowerCase().includes(lower) ||
-          `${g.metodoPago} ${g.metodoPagoDetalle} ${g.celularMetodo ?? ''}`.toLowerCase().includes(lower) ||
-          g.comentarios.toLowerCase().includes(lower) ||
-          (g.detalleOperativo ?? '').toLowerCase().includes(lower) ||
-          (g.categoriaReal ?? '').toLowerCase().includes(lower) ||
-          (g.tipo_gasto ?? '').toLowerCase().includes(lower) ||
-          (g.subtipo_gasto ?? '').toLowerCase().includes(lower) ||
-          (g.origen_clasificacion ?? '').toLowerCase().includes(lower) ||
-          g.fecha.includes(lower) ||
-          vehicleLabel.includes(lower)
-        );
+        const haystack = ingresoSearchHaystack(item as Ingreso, vehicleLabel);
+        return byVehicleId || matchesSearchHaystack(haystack, deferredQuery);
       }
+      const haystack = gastoSearchHaystack(item as Gasto, vehicleLabel);
+      return byVehicleId || matchesSearchHaystack(haystack, deferredQuery);
     });
   }, [rawData, deferredQuery, deferredEstadoPago, mode, vehicles, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict]);
 
@@ -617,8 +591,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             onChange={e => { setQuery(e.target.value); setPage(1); }}
             placeholder={
               mode === 'ingresos'
-                ? 'Buscar ingresos (texto, fecha, #3, carro 5, placa…)'
-                : 'Buscar gastos (texto, fecha, #3, carro 5, placa…)'
+                ? 'Buscar ingresos (texto, observaciones, fecha, #3, carro 5, placa…)'
+                : 'Buscar gastos (texto, observaciones, fecha, #3, carro 5, placa…)'
             }
             className="input-field pl-9 text-sm"
             aria-describedby={vehicleSearchIds.length > 0 ? 'registros-busqueda-vehiculo' : undefined}
