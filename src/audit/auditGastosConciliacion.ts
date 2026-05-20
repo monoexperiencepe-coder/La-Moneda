@@ -9,7 +9,8 @@ import { filterRowsByYearMonth } from '../utils/filterByYearMonth';
 
 /** Mismas pestañas que Gastos.tsx (sin inversión en la parrilla). */
 const GASTO_TABS_TIPO: { id: string; label: string; tipo_gasto: string }[] = [
-  { id: 'op', label: 'Operativos', tipo_gasto: 'operativo_vehiculo' },
+  { id: 'op', label: 'Operativos por vehículo', tipo_gasto: 'operativo_vehiculo' },
+  { id: 'opf', label: 'Operativo flota general', tipo_gasto: 'operativo_flota_general' },
   { id: 'adm', label: 'Administrativos', tipo_gasto: 'administrativo_empresa' },
   { id: 'fin', label: 'Financieros', tipo_gasto: 'financiero_prestamo' },
   { id: 'pla', label: 'Planilla', tipo_gasto: 'planilla_laboral' },

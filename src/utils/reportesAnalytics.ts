@@ -1,11 +1,13 @@
 import type { Gasto, Ingreso } from '../data/types';
 import { toDateOnlyString } from './formatting';
 import { ingresoMontoPEN } from './moneda';
+import { matchesOperativoTipoNormalized } from './operativoTipoGasto';
 
 export type ReportesPeriodPreset = 'anio_actual' | 'todo' | 'personalizado';
 
 export const TIPO_GASTO_LABELS: Record<string, string> = {
-  operativo_vehiculo: 'Operativos',
+  operativo_vehiculo: 'Operativos por vehículo',
+  operativo_flota_general: 'Operativo flota general',
   administrativo_empresa: 'Administrativos',
   financiero_prestamo: 'Financieros',
   planilla_laboral: 'Planilla',
@@ -28,6 +30,11 @@ export function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: b
     return 'representacion_interna';
   }
   return mapped;
+}
+
+/** Gasto operativo (unidad o flota general) según tipo normalizado. */
+export function isOperativoGastoNormalized(normalizedTipo: string): boolean {
+  return matchesOperativoTipoNormalized(normalizedTipo);
 }
 
 export function fechaEnPeriodo(fecha: string, desde: string, hasta: string): boolean {

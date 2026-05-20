@@ -21,13 +21,15 @@ import { normKey } from '../../utils/subtipoFinancieroLabel';
 import {
   getDefaultSubtipoForTipoGasto,
   normalizeSubtipoForTipoGasto,
+  tipoGastoUsaSubtipoOperativo,
 } from '../../utils/gastoMoveCategoriaDefaults';
 import { getOperativoSubtipoOptions } from '../../utils/operativoSubtipo';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 
 const TIPO_OPCIONES = [
-  { value: 'operativo_vehiculo', label: 'Operativo vehículo' },
-  { value: 'operativo_flota_global', label: 'Operativo flota global' },
+  { value: 'operativo_vehiculo', label: 'Operativo por vehículo' },
+  { value: 'operativo_flota_general', label: 'Operativo flota general' },
+  { value: 'operativo_flota_global', label: 'Operativo flota global (legacy → globales)' },
   { value: 'gastos_globales', label: 'Gastos globales' },
   { value: 'administrativo_empresa', label: 'Administrativo empresa' },
   { value: 'planilla_laboral', label: 'Planilla laboral' },
@@ -62,8 +64,8 @@ function normalizeSubtipo(raw: string | null | undefined, tipoFinanza: string): 
   if (tipoFinanza === 'representacion_interna') {
     return normalizeSubtipoForTipoGasto('representacion_interna', r0);
   }
-  if (tipoFinanza === 'operativo_vehiculo') {
-    return normalizeSubtipoForTipoGasto('operativo_vehiculo', r0);
+  if (tipoGastoUsaSubtipoOperativo(tipoFinanza)) {
+    return normalizeSubtipoForTipoGasto(tipoFinanza, r0);
   }
   const r = normKey(r0) === 'bateria' ? 'bateria' : r0;
   if (r && SUBTIPO_OPCIONES.some((o) => o.value === r)) return r;

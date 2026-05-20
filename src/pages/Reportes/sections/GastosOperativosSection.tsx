@@ -7,6 +7,7 @@ import { getOperativoSubtipoLabel, resolveOperativoSubtipoGastoCanon } from '../
 import {
   filterGastosPeriod,
   getReportesPeriodRange,
+  isOperativoGastoNormalized,
   normalizeTipoGasto,
   topEntries,
   TIPO_GASTO_LABELS,
@@ -41,8 +42,8 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
 
   const operativos = useMemo(
     () =>
-      gastosPeriod.filter(
-        (g) => normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null) === 'operativo_vehiculo',
+      gastosPeriod.filter((g) =>
+        isOperativoGastoNormalized(normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null)),
       ),
     [gastosPeriod],
   );

@@ -1,4 +1,5 @@
 import type { Gasto } from '../data/types';
+import { isOperativoFlotaGeneralTipoGasto, isOperativoVehiculoTipoGasto } from './operativoTipoGasto';
 
 /** Verde ≥0.9 · amarillo 0.6–0.89 · rojo &lt;0.6 (o sin dato). */
 export type ConfianzaVisualTier = 'alta' | 'media' | 'baja';
@@ -19,7 +20,12 @@ export function confianzaBadgeVariant(tier: ConfianzaVisualTier): 'success' | 'w
 
 /** Gastos con tipo_gasto operativo de unidad (no reemplaza filtros legacy). */
 export function gastosOperativoVehiculo(gastos: Gasto[]): Gasto[] {
-  return gastos.filter((g) => g.tipo_gasto === 'operativo_vehiculo');
+  return gastos.filter((g) => isOperativoVehiculoTipoGasto(g.tipo_gasto));
+}
+
+/** Gastos operativos de flota sin vehículo obligatorio. */
+export function gastosOperativoFlotaGeneral(gastos: Gasto[]): Gasto[] {
+  return gastos.filter((g) => isOperativoFlotaGeneralTipoGasto(g.tipo_gasto));
 }
 
 export function gastosFinancieros(gastos: Gasto[]): Gasto[] {

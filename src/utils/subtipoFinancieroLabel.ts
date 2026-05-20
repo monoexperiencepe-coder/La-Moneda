@@ -6,6 +6,7 @@ import {
   getOperativoSubtipoLabel,
   resolveOperativoSubtipoGastoCanon,
 } from './operativoSubtipo';
+import { tipoGastoUsaSubtipoOperativo } from './gastoMoveCategoriaDefaults';
 
 /** Valor interno de filtro: agrupa cuota / préstamo / interés sin tocar BD. */
 export const SUBTIPO_FILTRO_PRESTAMO_FUSION = '__ui_prestamo_cuota_interes__';
@@ -40,7 +41,7 @@ export function getSubtipoFinancieroLabel(
     const repCanon = normalizeRepresentacionInternaSubtipo(s);
     if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
   }
-  if (tg === 'operativo_vehiculo') {
+  if (tipoGastoUsaSubtipoOperativo(tg)) {
     const c = resolveOperativoSubtipoGastoCanon(s);
     return c ? getOperativoSubtipoLabel(c) : '—';
   }
@@ -61,7 +62,7 @@ export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string |
   if (tabTipoGasto === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(t) || '';
   }
-  if (tabTipoGasto === 'operativo_vehiculo') {
+  if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(t) ?? '';
   }
   if (tabTipoGasto === 'financiero_prestamo' && isPrestamoFinancieroFusionRaw(t)) {
@@ -82,7 +83,7 @@ export function gastoMatchesSubtipoFinancieroFilter(
   if (tabTipoGasto === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(subtipoGasto) === filterValue;
   }
-  if (tabTipoGasto === 'operativo_vehiculo') {
+  if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
   }
   return (subtipoGasto ?? '').trim() === filterValue;

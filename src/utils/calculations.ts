@@ -1,6 +1,7 @@
 import { Ingreso, Gasto, Descuento, Vehicle, KPIData, VehicleRentability } from '../data/types';
 import { ingresoMontoPEN } from './moneda';
 import { gastosOperativosSolamente } from './cajaNegocio';
+import { matchesOperativoTipoNormalized } from './operativoTipoGasto';
 
 /** KPIs por `tipo_gasto` financiero (no sustituye `calculateKPIs` legacy). */
 export interface FinancialKPIData {
@@ -48,7 +49,7 @@ export function calculateFinancialKPIs(ingresos: Ingreso[], gastos: Gasto[]): Fi
   for (const g of gastos) {
     const t = canonicalTipoGastoFinanciero(g);
     const m = g.monto;
-    if (t === 'operativo_vehiculo') gastos_operativos += m;
+    if (matchesOperativoTipoNormalized(t)) gastos_operativos += m;
     else if (t === 'financiero_prestamo') gastos_financieros += m;
     else if (t === 'administrativo_empresa' || t === 'planilla_laboral') gastos_administrativos += m;
     else if (t === 'inversion_compra') gastos_inversion += m;

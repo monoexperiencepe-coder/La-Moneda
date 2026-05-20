@@ -19,6 +19,7 @@ import {
 } from '../../utils/gastoMoveCategoriaDefaults';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { getOperativoSubtipoLabel } from '../../utils/operativoSubtipo';
+import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 import Select from '../Common/Select';
 import Button from '../Common/Button';
@@ -55,7 +56,7 @@ type Props = {
 
 function subtipoLabel(tipo: string, sub: string): string {
   if (tipo === 'representacion_interna') return getRepresentacionInternaSubtipoLabel(sub);
-  if (tipo === 'operativo_vehiculo') return getOperativoSubtipoLabel(sub);
+  if (tipoGastoUsaSubtipoOperativo(tipo)) return getOperativoSubtipoLabel(sub);
   return getSubtipoFinancieroLabel(sub, tipo);
 }
 

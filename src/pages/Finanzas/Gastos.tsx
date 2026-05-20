@@ -45,6 +45,7 @@ import {
   getValidSubtiposForTipoGastoFinanza,
   normalizeSubtipoForTipoGasto,
   tipoGastoRequiereVehiculo,
+  tipoGastoUsaSubtipoOperativo,
 } from '../../utils/gastoMoveCategoriaDefaults';
 import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
@@ -78,7 +79,15 @@ const GASTOS_TREND_YEAR_MIN = 2009;
 
 /** Tabs por tipo_gasto en la pantalla Gastos (sin inversiones; van a `/finanzas/inversiones`). */
 const GASTO_TABS: GastoTabDef[] = [
-  { id: 'op', label: 'Operativos', tipo_gasto: 'operativo_vehiculo', emoji: '🔧', gradient: 'from-red-500/10 to-rose-500/10', border: 'border-red-200 hover:border-red-400' },
+  { id: 'op', label: 'Operativos por vehículo', tipo_gasto: 'operativo_vehiculo', emoji: '🔧', gradient: 'from-red-500/10 to-rose-500/10', border: 'border-red-200 hover:border-red-400' },
+  {
+    id: 'opf',
+    label: 'Operativo flota general',
+    tipo_gasto: 'operativo_flota_general',
+    emoji: '🚛',
+    gradient: 'from-orange-500/10 to-amber-500/10',
+    border: 'border-orange-200 hover:border-orange-400',
+  },
   { id: 'adm', label: 'Administrativos', tipo_gasto: 'administrativo_empresa', emoji: '🏢', gradient: 'from-slate-500/10 to-gray-500/10', border: 'border-slate-200 hover:border-slate-400' },
   { id: 'fin', label: 'Financieros', tipo_gasto: 'financiero_prestamo', emoji: '🏦', gradient: 'from-amber-500/10 to-orange-500/10', border: 'border-amber-200 hover:border-amber-400' },
   { id: 'pla', label: 'Planilla', tipo_gasto: 'planilla_laboral', emoji: '👥', gradient: 'from-indigo-500/10 to-blue-500/10', border: 'border-indigo-200 hover:border-indigo-400' },
@@ -96,7 +105,7 @@ const PENDIENTE_REVISION_TAB: GastoTabDef = {
   border: 'border-amber-300 hover:border-amber-500',
 };
 
-/** Parrilla Gastos: 6 categorías + pendiente (inversión va en tarjeta aparte → Finanzas → Inversiones). */
+/** Parrilla Gastos: categorías financieras + pendiente (inversión va en tarjeta aparte → Finanzas → Inversiones). */
 const GASTO_PARILLA_TABS: GastoTabDef[] = [...GASTO_TABS, PENDIENTE_REVISION_TAB];
 
 /** Parrilla visible para cuenta operador restringida. */
@@ -107,14 +116,15 @@ const OPERADOR_GASTO_PARILLA_TABS: GastoTabDef[] = [
 
 /** Orden para el modal «mover categoría» (incluye inversiones). */
 const GASTO_CATEGORIAS_PARA_MOVIMIENTO: GastoTabDef[] = [
-  ...GASTO_TABS.slice(0, 4),
+  ...GASTO_TABS.slice(0, 5),
   INVERSION_GASTO_TAB,
-  ...GASTO_TABS.slice(4),
+  ...GASTO_TABS.slice(5),
 ];
 
 /** Franja superior en la tarjeta de resumen (acento por categoría). */
 const TAB_ACCENT_STRIP: Record<string, string> = {
   op: 'from-red-500 via-rose-500 to-red-700',
+  opf: 'from-orange-500 via-amber-500 to-orange-700',
   adm: 'from-slate-500 via-gray-600 to-slate-800',
   fin: 'from-amber-500 via-orange-500 to-amber-700',
   pla: 'from-indigo-500 via-blue-600 to-indigo-800',
@@ -127,6 +137,7 @@ const TAB_ACCENT_STRIP: Record<string, string> = {
 /** Degradado de barras del gráfico mensual (coherente con la categoría). */
 const TAB_BAR_GRADIENT: Record<string, { from: string; to: string }> = {
   op: { from: '#FB7185', to: '#B91C1C' },
+  opf: { from: '#FB923C', to: '#C2410C' },
   adm: { from: '#94A3B8', to: '#475569' },
   fin: { from: '#FBBF24', to: '#C2410C' },
   pla: { from: '#818CF8', to: '#3730A3' },
@@ -496,7 +507,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         ...ordered.map((c) => ({ value: c, label: getRepresentacionInternaSubtipoLabel(c) })),
       ];
     }
-    if (tab?.tipo_gasto === 'operativo_vehiculo') {
+    if (tab?.tipo_gasto && tipoGastoUsaSubtipoOperativo(tab.tipo_gasto)) {
       const fromData = new Set<string>();
       for (const g of gastosHistorialFiltrados) {
         const c = resolveOperativoSubtipoGastoCanon(g.subtipo_gasto);
@@ -587,14 +598,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [vehicles],
   );
 
-  const sumaSeisCategorias = useMemo(
+  const sumaCategoriasParrilla = useMemo(
     () => GASTO_TABS.reduce((s, t) => s + (resumenPorCategoria[t.tipo_gasto]?.monto ?? 0), 0),
     [resumenPorCategoria],
   );
 
   const sumaConciliacionVisual = useMemo(
-    () => sumaSeisCategorias + statsInversionesGastos.monto + statsPendienteRevision.monto,
-    [sumaSeisCategorias, statsInversionesGastos.monto, statsPendienteRevision.monto],
+    () => sumaCategoriasParrilla + statsInversionesGastos.monto + statsPendienteRevision.monto,
+    [sumaCategoriasParrilla, statsInversionesGastos.monto, statsPendienteRevision.monto],
   );
 
   const conciliacionCuadra = Math.abs(sumaConciliacionVisual - totalFlota) < 0.02;
@@ -683,7 +694,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     setMoveMotivo('');
   };
 
-  const isOperativoTarget = moveTipo === 'operativo_vehiculo';
+  const isOperativoVehiculoTarget = moveTipo === 'operativo_vehiculo';
+  const isOperativoFlotaTarget = moveTipo === 'operativo_flota_general';
   const isInversionTarget = moveTipo === 'inversion_compra';
   const targetNeedsVehicle = tipoGastoRequiereVehiculo(moveTipo);
   const currentEffectiveTipo = moveTarget ? (tipoGastoUiCanonical(moveTarget) ?? 'gastos_globales') : '';
@@ -905,7 +917,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                   ? 'Compras e inversión en flota (tipo_gasto inversion_compra). «Caja negocio» sigue en Finanzas → Caja negocio.'
                   : isFinancialOperador
                     ? 'Acceso restringido: Gastos globales y Pendiente de revisión.'
-                    : '6 categorías + Inversión + Pendiente de revisión = total tabla. Inversiones: Finanzas → Inversiones.'}
+                    : 'Categorías de la parrilla + Inversión + Pendiente de revisión = total tabla. Inversiones: Finanzas → Inversiones.'}
               </p>
             </div>
           </div>
@@ -1008,7 +1020,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         >
           <p className="font-semibold">Suma visible = total tabla</p>
           <p className="mt-0.5 tabular-nums">
-            6 categorías ({formatCurrency(sumaSeisCategorias)}) + Inversión (
+            Categorías ({formatCurrency(sumaCategoriasParrilla)}) + Inversión (
             {formatCurrency(statsInversionesGastos.monto)}) + Pendiente revisión (
             {formatCurrency(statsPendienteRevision.monto)}) ={' '}
             <span className="font-bold">{formatCurrency(sumaConciliacionVisual)}</span>
@@ -1372,6 +1384,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               onChange={setMoveSubtipo}
             />
 
+            {isOperativoFlotaTarget && (
+              <p className="text-xs text-orange-900 rounded-lg border border-orange-200 bg-orange-50/90 px-3 py-2 leading-snug">
+                Operativo flota general / sin vehículo específico. Usar cuando el gasto corresponde a varios
+                vehículos o no hay trazabilidad exacta. No se exige N° de unidad.
+              </p>
+            )}
+
             {isInversionTarget && (
               <p className="text-xs text-violet-800 rounded-lg border border-violet-100 bg-violet-50/90 px-3 py-2">
                 Inversión con utilidad: el gasto debe quedar asociado a un vehículo.
@@ -1380,15 +1399,19 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
             {targetNeedsVehicle && (
               <Select
-                label={isInversionTarget ? 'Vehículo (obligatorio para inversión con utilidad)' : 'Vehículo (obligatorio para operativo)'}
+                label={
+                  isInversionTarget
+                    ? 'Vehículo (obligatorio para inversión con utilidad)'
+                    : 'Vehículo (obligatorio para operativo por vehículo)'
+                }
                 options={vehicleOptions}
                 value={moveVehicleId}
                 onChange={setMoveVehicleId}
               />
             )}
 
-            {isOperativoTarget && !moveVehicleId && (
-              <p className="text-xs text-amber-700">Debes seleccionar un vehículo para categoría operativo_vehiculo.</p>
+            {isOperativoVehiculoTarget && !moveVehicleId && (
+              <p className="text-xs text-amber-700">Debes seleccionar un vehículo para operativo por vehículo.</p>
             )}
             {isInversionTarget && !moveVehicleId && (
               <p className="text-xs text-amber-700">Debes seleccionar un vehículo para inversión con utilidad.</p>

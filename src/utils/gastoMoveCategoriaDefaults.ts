@@ -3,9 +3,16 @@ import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/
 import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
 import { getOperativoCanonSet, normalizeOperativoSubtipo } from './operativoSubtipo';
+import {
+  TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
+  TIPO_GASTO_OPERATIVO_VEHICULO,
+  isOperativoFlotaGeneralTipoGasto,
+  isOperativoVehiculoTipoGasto,
+} from './operativoTipoGasto';
 
 const FINANZA_TAB_TIPOS = new Set<string>([
-  'operativo_vehiculo',
+  TIPO_GASTO_OPERATIVO_VEHICULO,
+  TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   'administrativo_empresa',
   'financiero_prestamo',
   'planilla_laboral',
@@ -17,12 +24,19 @@ const FINANZA_TAB_TIPOS = new Set<string>([
 /** Categorías financieras que no deben llevar `vehicle_id` en gastos (flota global). */
 export function tipoGastoRequiereVehiculo(tipoGasto: string): boolean {
   const t = tipoGasto.trim();
-  return t === 'operativo_vehiculo' || t === 'inversion_compra';
+  return isOperativoVehiculoTipoGasto(t) || t === 'inversion_compra';
+}
+
+export function tipoGastoUsaSubtipoOperativo(tipoGasto: string): boolean {
+  const t = tipoGasto.trim();
+  return isOperativoVehiculoTipoGasto(t) || isOperativoFlotaGeneralTipoGasto(t);
 }
 
 function catalogSubtiposUnionForFinanza(cat: FinanzaGastoRegistroValue): Set<string> {
   const out = new Set<string>();
-  if (cat === 'operativo_vehiculo') return getOperativoCanonSet();
+  if (cat === TIPO_GASTO_OPERATIVO_VEHICULO || cat === TIPO_GASTO_OPERATIVO_FLOTA_GENERAL) {
+    return getOperativoCanonSet();
+  }
   for (const factTipo of getFactTiposForFinanza(cat)) {
     for (const s of getSubtiposGasto(factTipo)) {
       if (s.trim()) out.add(s);
@@ -71,7 +85,8 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
       return 'inversion_compra';
     case 'gastos_globales':
       return 'global_no_asignado';
-    case 'operativo_vehiculo':
+    case TIPO_GASTO_OPERATIVO_VEHICULO:
+    case TIPO_GASTO_OPERATIVO_FLOTA_GENERAL:
       return 'motor';
     case 'planilla_laboral': {
       const cat = t as FinanzaGastoRegistroValue;
@@ -100,7 +115,7 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
-  if (tipoGasto.trim() === 'operativo_vehiculo') {
+  if (tipoGastoUsaSubtipoOperativo(tipoGasto)) {
     const n = normalizeOperativoSubtipo(trimmed);
     if (n && valid.has(n)) return n;
     const lower = trimmed.toLowerCase();

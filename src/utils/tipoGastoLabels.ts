@@ -2,7 +2,8 @@
  * Etiquetas visibles para `tipo_gasto` (sin cambiar valores persistidos).
  */
 const TIPO_GASTO_LABEL: Record<string, string> = {
-  operativo_vehiculo: 'Operativos',
+  operativo_vehiculo: 'Operativos por vehículo',
+  operativo_flota_general: 'Operativo flota general',
   administrativo_empresa: 'Administrativos',
   financiero_prestamo: 'Financieros',
   planilla_laboral: 'Planilla',

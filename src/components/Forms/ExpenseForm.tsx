@@ -34,6 +34,7 @@ import {
   getOperativoSubtipoOptions,
 } from '../../utils/operativoSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
+import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
 import { todayStr } from '../../utils/formatting';
 
 /** Orden visual (arriba → abajo) para llevar al usuario al primer error. */
@@ -224,7 +225,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       if (!form.subtipoRepresentacion.trim()) {
         newErrors.subtipoRepresentacion = 'Elige subtipo de representación interna';
       }
-    } else if (form.categoriaFinanciera === 'operativo_vehiculo') {
+    } else if (
+      form.categoriaFinanciera &&
+      tipoGastoUsaSubtipoOperativo(form.categoriaFinanciera)
+    ) {
       if (!form.subtipoOperativoCanon.trim()) {
         newErrors.subtipoOperativoCanon = 'Elige subtipo operativo';
       }
@@ -243,7 +247,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       newErrors.vehicleId =
         form.categoriaFinanciera === 'inversion_compra'
           ? 'Indica el vehículo (inversión con utilidad va por unidad).'
-          : 'Operativo: indica el vehículo (N° unidad)';
+          : 'Operativo por vehículo: indica el N° de unidad.';
     }
     return newErrors;
   };
@@ -263,20 +267,20 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     try {
       const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
       const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
-      const esGlobal = catFin === 'gastos_globales';
+      const esGlobal = catFin === 'gastos_globales' || catFin === 'operativo_flota_general';
       const esRep = catFin === 'representacion_interna';
       const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
       const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
       const subtipoFin = esRep
         ? form.subtipoRepresentacion.trim()
-        : catFin === 'operativo_vehiculo'
+        : tipoGastoUsaSubtipoOperativo(catFin)
           ? form.subtipoOperativoCanon.trim()
           : (form.subTipo || null)
             ? form.subTipo.trim()
             : null;
       const motivoFin = esRep
         ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
-        : catFin === 'operativo_vehiculo' && form.subtipoOperativoCanon.trim()
+        : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
           ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
           : (form.subTipo || form.tipo);
       const rawM = Number(Number(form.monto).toFixed(2));
@@ -373,7 +377,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   vehicleId: p.vehicleId,
                 };
               }
-              if (cat === 'operativo_vehiculo') {
+              if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
                 const canon = 'motor';
                 const { tipo: tOp, subTipo: sOp } = getDefaultFactTipoSubtipoForOperativoCanon(canon);
                 return {
@@ -383,7 +387,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   subTipo: sOp,
                   subtipoOperativoCanon: canon,
                   subtipoRepresentacion: '',
-                  vehicleId: p.vehicleId,
+                  vehicleId: cat === 'operativo_flota_general' ? '' : p.vehicleId,
                 };
               }
               const tipo0 = firstFactTipoForFinanza(cat);
@@ -449,6 +453,14 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   <p className="text-[11px] font-medium text-teal-900">Globales: sin unidad asignada</p>
                   <p className="mt-0.5 text-[11px] text-teal-800/90">
                     El gasto queda como flota general (campo es_global_flota). No uses N° vehículo aquí.
+                  </p>
+                </div>
+              ) : form.categoriaFinanciera === 'operativo_flota_general' ? (
+                <div className="rounded-lg border border-orange-200 bg-orange-50/70 px-3 py-2 sm:col-span-2">
+                  <p className="text-[11px] font-medium text-orange-950">Operativo flota general / sin vehículo específico</p>
+                  <p className="mt-0.5 text-[11px] text-orange-900/95 leading-snug">
+                    Usar cuando el gasto corresponde a varios vehículos o no hay trazabilidad exacta. No se exige N° de
+                    unidad y no entra en ranking por vehículo.
                   </p>
                 </div>
               ) : (
@@ -527,7 +539,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   disabled={seleccionesBloqueadas}
                   helper="Tipo Fact fijo (OTROS GASTOS · REPRESENTACIÓN) para no duplicar selección."
                 />
-              ) : form.categoriaFinanciera === 'operativo_vehiculo' ? (
+              ) : form.categoriaFinanciera && tipoGastoUsaSubtipoOperativo(form.categoriaFinanciera) ? (
                 <>
                   <Select
                     id="expense-field-subtipo-operativo"

@@ -7,11 +7,13 @@ import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatti
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import type { Gasto, Ingreso } from '../../data/types';
+import { matchesOperativoTipoNormalized } from '../../utils/operativoTipoGasto';
 
 type ResumenPreset = 'mes_actual' | 'mes_anterior' | 'anio_actual' | 'todo' | 'personalizado';
 
 const CATEGORIA_MAP = [
-  { key: 'operativo_vehiculo', label: 'Operativos' },
+  { key: 'operativo_vehiculo', label: 'Operativos por vehículo' },
+  { key: 'operativo_flota_general', label: 'Operativo flota general' },
   { key: 'administrativo_empresa', label: 'Administrativos' },
   { key: 'financiero_prestamo', label: 'Financieros' },
   { key: 'planilla_laboral', label: 'Planilla' },
@@ -250,7 +252,9 @@ function buildPeriodInsights(input: {
     cobrosPendientesCount,
     cobrosPendientesMonto,
   } = input;
-  const op = distribucion.find((d) => d.key === 'operativo_vehiculo');
+  const opVeh = distribucion.find((d) => d.key === 'operativo_vehiculo');
+  const opFlota = distribucion.find((d) => d.key === 'operativo_flota_general');
+  const opMonto = (opVeh?.monto ?? 0) + (opFlota?.monto ?? 0);
   const top = distribucion[0];
   const picks: PeriodInsight[] = [];
   const add = (item: PeriodInsight) => {
@@ -282,8 +286,8 @@ function buildPeriodInsights(input: {
         text: `El gasto total subió ${Math.round(dGas)}% respecto al período anterior.`,
       });
     }
-    if (op && prevOperativoMonto > 0) {
-      const dOp = pctDelta(op.monto, prevOperativoMonto);
+    if (opMonto > 0 && prevOperativoMonto > 0) {
+      const dOp = pctDelta(opMonto, prevOperativoMonto);
       if (dOp != null && dOp >= 15) {
         add({
           tone: 'warn',
@@ -308,10 +312,10 @@ function buildPeriodInsights(input: {
     });
   }
 
-  if (op && cur.gastos > 0 && op.monto / cur.gastos >= 0.5) {
+  if (opMonto > 0 && cur.gastos > 0 && opMonto / cur.gastos >= 0.5) {
     add({
       tone: 'warn',
-      text: 'Más de la mitad del gasto del período es operativo por vehículo.',
+      text: 'Más de la mitad del gasto del período es operativo (unidad y/o flota general).',
     });
   }
 
@@ -346,7 +350,7 @@ function sumOperativoGastos(gastos: Gasto[], desde: string, hasta: string): numb
   for (const g of gastos) {
     const d = toDateOnlyString(g.fecha);
     if (!d || d < desde || d > hasta) continue;
-    if (normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null) !== 'operativo_vehiculo') continue;
+    if (!matchesOperativoTipoNormalized(normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null))) continue;
     s += g.monto;
   }
   return s;
@@ -577,7 +581,8 @@ const Resumen: React.FC = () => {
 
   const alertas = useMemo((): ResumenAlert[] => {
     const out: ResumenAlert[] = [];
-    const op = byKey.operativo_vehiculo ?? 0;
+    const op =
+      (byKey.operativo_vehiculo ?? 0) + (byKey.operativo_flota_general ?? 0);
 
     if (cobrosPendientesGlobal.length > 0) {
       const alto = cobrosPendientesMonto >= 500 || cobrosPendientesGlobal.length >= 3;
@@ -624,7 +629,7 @@ const Resumen: React.FC = () => {
         id: 'exceso-operativo',
         tone: 'warning',
         title: 'Mucho gasto operativo',
-        text: 'Más de la mitad del gasto del período es operativo por vehículo.',
+        text: 'Más de la mitad del gasto del período es operativo (unidad y/o flota general).',
         href: '/finanzas/gastos',
       });
     }
@@ -903,7 +908,7 @@ const Resumen: React.FC = () => {
 
       <Card
         title="Vehículos que más gastaron"
-        subtitle="Solo gastos operativos del período."
+        subtitle="Solo operativos por vehículo (excluye operativo flota general)."
         compact
       >
         {topOperativosVehiculo.length === 0 ? (

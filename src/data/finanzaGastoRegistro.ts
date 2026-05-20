@@ -7,6 +7,7 @@ import { REPRESENTACION_INTERNA_FACT_TIPO } from './representacionInterna';
 
 export type FinanzaGastoRegistroValue =
   | 'operativo_vehiculo'
+  | 'operativo_flota_general'
   | 'administrativo_empresa'
   | 'financiero_prestamo'
   | 'planilla_laboral'
@@ -22,9 +23,15 @@ export const FINANZA_GASTO_REGISTRO_OPTIONS: {
 }[] = [
   {
     value: 'operativo_vehiculo',
-    label: 'Operativos',
+    label: 'Operativos por vehículo',
     emoji: '🔧',
-    hint: 'Gasto por unidad: taller, repuestos, SOAT de unidad, combustible, etc.',
+    hint: 'Gasto por unidad: taller, repuestos, SOAT de unidad, combustible, etc. Requiere N° vehículo.',
+  },
+  {
+    value: 'operativo_flota_general',
+    label: 'Operativo flota general',
+    emoji: '🚛',
+    hint: 'Varios vehículos o sin trazabilidad exacta de unidad. No asignes un carro si distorsiona KPIs por unidad.',
   },
   {
     value: 'administrativo_empresa',
@@ -77,6 +84,16 @@ export const FACT_TIPOS_POR_FINANZA_GASTO: Record<FinanzaGastoRegistroValue, rea
     'IMPLEMENTACIÓN',
     'DOCUMENTOS',
     'SEGUROS /DOCUMENTOS',
+  ],
+  operativo_flota_general: [
+    'MECÁNICOS',
+    'ABASTECIMIENTO DE COMBUSTIBLE',
+    'ACCESORIOS',
+    'GNV',
+    'IMPLEMENTACIÓN',
+    'DOCUMENTOS',
+    'SEGUROS /DOCUMENTOS',
+    'OTROS GASTOS',
   ],
   administrativo_empresa: [
     'TRIBUTARIOS / NOTARIALES',
