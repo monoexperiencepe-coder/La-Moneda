@@ -147,6 +147,15 @@ const TAB_BAR_GRADIENT: Record<string, { from: string; to: string }> = {
   rev: { from: '#FBBF24', to: '#C2410C' },
 };
 
+/** Misma limpieza que el detalle del registro (RegistrosTable). */
+function formatGastoObservacionesModal(comentarios: string | null | undefined): string {
+  const cleaned = (comentarios ?? '')
+    .replace(/\[\s*migraci[oó]n\s+gastos_caja\s+final\s*\]\s*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'Sin observaciones';
+}
+
 const PERIODO_SUBTIPO_OPTIONS: { value: 'ALL' | 'YEAR' | 'MONTH'; label: string }[] = [
   { value: 'ALL', label: 'Histórico completo' },
   { value: 'YEAR', label: 'Un año entero' },
@@ -1354,8 +1363,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         {!moveTarget ? null : (
           <div className="space-y-4">
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-1.5">
-              <p className="text-sm text-gray-800">
-                <span className="font-semibold">Descripción:</span> {moveTarget.motivo || moveTarget.comentarios || 'Sin descripción'}
+              <p className="text-sm text-gray-800 break-words">
+                <span className="font-semibold">Descripción:</span>{' '}
+                {moveTarget.motivo?.trim() || moveTarget.subtipo_gasto?.trim() || 'Sin descripción'}
+              </p>
+              <p className="text-sm text-gray-800 break-words whitespace-pre-wrap leading-snug">
+                <span className="font-semibold">Observaciones:</span>{' '}
+                {formatGastoObservacionesModal(moveTarget.comentarios)}
               </p>
               <p className="text-sm text-gray-700">
                 <span className="font-semibold">Monto:</span> {formatCurrency(moveTarget.monto)}
