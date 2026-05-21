@@ -25,7 +25,7 @@ import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
 import { useAuth } from './AuthContext';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
-import { useGastosRealtime } from '../hooks/useGastosRealtime';
+import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
 import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
@@ -138,7 +138,9 @@ interface RegistrosContextValue {
   registrosBootstrapLoading: boolean;
   /** `true` desde que arranca el ciclo post-auth hasta marcar complete. */
   registrosBootstrapStarted: boolean;
-  /** Suscripción realtime activa en tabla gastos. */
+  /** Suscripción realtime activa (registros de la empresa en Supabase). */
+  registrosRealtimeConnected: boolean;
+  /** @deprecated Usar registrosRealtimeConnected */
   gastosRealtimeConnected: boolean;
 }
 
@@ -160,30 +162,75 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     [permissionUser, registros.gastos],
   );
 
-  const handleRemoteGastosActivity = useCallback(
-    ({ count, hadConflict }: { count: number; hadConflict: boolean }) => {
-      if (hadConflict) {
-        toastHook.info(
-          'Registro actualizado por otra cuenta',
-          'Tenías este gasto abierto; revisa los datos antes de guardar.',
-        );
-        return;
-      }
+  const realtimeHandlers = useMemo(
+    () => ({
+      upsertGasto: registros.upsertGasto,
+      removeGastoLocal: registros.removeGastoLocal,
+      upsertIngreso: registros.upsertIngreso,
+      removeIngresoLocal: registros.removeIngresoLocal,
+      upsertConductor: registros.upsertConductor,
+      removeConductorLocal: registros.removeConductorLocal,
+      upsertUnidad: registros.upsertUnidad,
+      removeUnidadLocal: registros.removeUnidadLocal,
+      upsertVehicle: registros.upsertVehicle,
+      removeVehicleLocal: registros.removeVehicleLocal,
+      mergeKilometraje: registros.mergeKilometraje,
+      removeKilometrajeLocal: registros.removeKilometrajeLocal,
+      mergePendiente: registros.mergePendiente,
+      removePendienteLocal: registros.removePendienteLocal,
+      upsertRegistroTiempo: registros.upsertRegistroTiempo,
+      removeRegistroTiempoLocal: registros.removeRegistroTiempoLocal,
+      upsertInversionVehiculo: registros.upsertInversionVehiculo,
+      removeInversionVehiculoLocal: registros.removeInversionVehiculoLocal,
+      upsertGastoCaja: registros.upsertGastoCaja,
+      removeGastoCajaLocal: registros.removeGastoCajaLocal,
+      upsertCajaNegocio: registros.upsertCajaNegocio,
+      removeCajaNegocioLocal: registros.removeCajaNegocioLocal,
+      refreshControlFechasViews: registros.refreshControlFechasViews,
+    }),
+    [
+      registros.upsertGasto,
+      registros.removeGastoLocal,
+      registros.upsertIngreso,
+      registros.removeIngresoLocal,
+      registros.upsertConductor,
+      registros.removeConductorLocal,
+      registros.upsertUnidad,
+      registros.removeUnidadLocal,
+      registros.upsertVehicle,
+      registros.removeVehicleLocal,
+      registros.mergeKilometraje,
+      registros.removeKilometrajeLocal,
+      registros.mergePendiente,
+      registros.removePendienteLocal,
+      registros.upsertRegistroTiempo,
+      registros.removeRegistroTiempoLocal,
+      registros.upsertInversionVehiculo,
+      registros.removeInversionVehiculoLocal,
+      registros.upsertGastoCaja,
+      registros.removeGastoCajaLocal,
+      registros.upsertCajaNegocio,
+      registros.removeCajaNegocioLocal,
+      registros.refreshControlFechasViews,
+    ],
+  );
+
+  const handleRemoteRegistrosActivity = useCallback(
+    ({ count }: { count: number }) => {
       if (count === 1) {
-        toastHook.info('Sincronizado', 'Un gasto se actualizó desde otra cuenta.');
+        toastHook.info('Sincronizado', 'Un registro se actualizó desde otra cuenta.');
       } else if (count > 1) {
-        toastHook.info('Sincronizado', `${count} gastos actualizados desde otra cuenta.`);
+        toastHook.info('Sincronizado', `${count} cambios aplicados desde otra cuenta.`);
       }
     },
     [toastHook],
   );
 
-  const { connected: gastosRealtimeConnected } = useGastosRealtime({
+  const { connected: registrosRealtimeConnected } = useEmpresaRegistrosRealtime({
     enabled: isAuthenticated && registros.registrosBootstrapComplete,
     permissionUser,
-    upsertGasto: registros.upsertGasto,
-    removeGastoLocal: registros.removeGastoLocal,
-    onRemoteActivity: handleRemoteGastosActivity,
+    handlers: realtimeHandlers,
+    onRemoteActivity: handleRemoteRegistrosActivity,
   });
 
   const showUndoToast = useMemo(
@@ -646,7 +693,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       registrosBootstrapComplete: registros.registrosBootstrapComplete,
       registrosBootstrapLoading: registros.registrosBootstrapLoading,
       registrosBootstrapStarted: registros.registrosBootstrapStarted,
-      gastosRealtimeConnected,
+      registrosRealtimeConnected,
+      gastosRealtimeConnected: registrosRealtimeConnected,
     }}>
       {children}
     </RegistrosContext.Provider>

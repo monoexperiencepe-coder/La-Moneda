@@ -134,6 +134,38 @@ function mergeRegistroTiempoSorted(prev: RegistroTiempo[], row: RegistroTiempo):
   return next;
 }
 
+function mergeVehicleSorted(prev: Vehicle[], row: Vehicle): Vehicle[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  return [...without, row].sort((a, b) => a.id - b.id);
+}
+
+function mergeInversionVehiculoSorted(prev: InversionVehiculo[], row: InversionVehiculo): InversionVehiculo[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  return [...without, row].sort((a, b) => a.id - b.id);
+}
+
+function mergeGastoCajaSorted(prev: GastoCaja[], row: GastoCaja): GastoCaja[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
+function mergeCajaNegocioSorted(prev: CajaNegocioVehiculo[], row: CajaNegocioVehiculo): CajaNegocioVehiculo[] {
+  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
+  const next = [...without, row];
+  next.sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return b.id - a.id;
+  });
+  return next;
+}
+
 export const useRegistros = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
@@ -162,7 +194,7 @@ export const useRegistros = () => {
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const gastosAuditRef = useRef(gastos);
   gastosAuditRef.current = gastos;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, profile } = useAuth();
   /**
    * Tras login / sesión restaurada: `false` hasta terminar refresh + margen mínimo UI.
    * Con sesión cerrada: `true` (no bloquea overlay).
@@ -268,7 +300,7 @@ export const useRegistros = () => {
     }
     const runner = (async () => {
       const [v, u, c, i, g, latest, km, pen, rt, inv, cn] = await Promise.all([
-        fetchVehiculos(),
+        fetchVehiculos(profile?.empresa_id),
         fetchUnidades(),
         fetchConductores(),
         fetchIngresos(),
@@ -332,7 +364,7 @@ export const useRegistros = () => {
     } finally {
       refreshInFlightRef.current = null;
     }
-  }, [loadControlFechasHistory]);
+  }, [loadControlFechasHistory, profile?.empresa_id]);
 
   /**
    * Sin sesión: listo (no overlay). Con sesión: incompleto antes de pintar el dashboard,
@@ -671,6 +703,70 @@ export const useRegistros = () => {
     setConductores((prev) => mergeConductorSorted(prev, row));
   }, []);
 
+  const removeIngresoLocal = useCallback((id: string) => {
+    setIngresos((prev) => prev.filter((i) => i.id !== id));
+  }, []);
+
+  const removeConductorLocal = useCallback((id: string) => {
+    setConductores((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const upsertUnidad = useCallback((row: UnidadRegistro) => {
+    setUnidades((prev) => mergeUnidadSorted(prev, row));
+  }, []);
+
+  const removeUnidadLocal = useCallback((id: string) => {
+    setUnidades((prev) => prev.filter((u) => u.id !== id));
+  }, []);
+
+  const upsertVehicle = useCallback((row: Vehicle) => {
+    setVehicles((prev) => mergeVehicleSorted(prev, row));
+  }, []);
+
+  const removeVehicleLocal = useCallback((id: number) => {
+    setVehicles((prev) => prev.filter((v) => v.id !== id));
+  }, []);
+
+  const removeKilometrajeLocal = useCallback((id: number) => {
+    setKilometrajes((prev) => prev.filter((k) => k.id !== id));
+  }, []);
+
+  const removePendienteLocal = useCallback((id: number) => {
+    setPendientes((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  const upsertRegistroTiempo = useCallback((row: RegistroTiempo) => {
+    setRegistrosTiempo((prev) => mergeRegistroTiempoSorted(prev, row));
+  }, []);
+
+  const removeRegistroTiempoLocal = useCallback((id: number) => {
+    setRegistrosTiempo((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const upsertInversionVehiculo = useCallback((row: InversionVehiculo) => {
+    setInversionesVehiculo((prev) => mergeInversionVehiculoSorted(prev, row));
+  }, []);
+
+  const removeInversionVehiculoLocal = useCallback((id: number) => {
+    setInversionesVehiculo((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const upsertGastoCaja = useCallback((row: GastoCaja) => {
+    setGastosCaja((prev) => mergeGastoCajaSorted(prev, row));
+  }, []);
+
+  const removeGastoCajaLocal = useCallback((id: number) => {
+    setGastosCaja((prev) => prev.filter((g) => g.id !== id));
+  }, []);
+
+  const upsertCajaNegocio = useCallback((row: CajaNegocioVehiculo) => {
+    setCajaNegocioVehiculo((prev) => mergeCajaNegocioSorted(prev, row));
+  }, []);
+
+  const removeCajaNegocioLocal = useCallback((id: number) => {
+    setCajaNegocioVehiculo((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   const deleteDescuento = useCallback((id: number) => {
     setDescuentos((prev) => prev.filter((d) => d.id !== id));
   }, []);
@@ -831,7 +927,24 @@ export const useRegistros = () => {
     upsertGasto,
     removeGastoLocal,
     upsertIngreso,
+    removeIngresoLocal,
     upsertConductor,
+    removeConductorLocal,
+    upsertUnidad,
+    removeUnidadLocal,
+    upsertVehicle,
+    removeVehicleLocal,
+    removeKilometrajeLocal,
+    removePendienteLocal,
+    upsertRegistroTiempo,
+    removeRegistroTiempoLocal,
+    upsertInversionVehiculo,
+    removeInversionVehiculoLocal,
+    upsertGastoCaja,
+    removeGastoCajaLocal,
+    upsertCajaNegocio,
+    removeCajaNegocioLocal,
+    refreshControlFechasViews,
     deleteDescuento,
     deletePrestamo,
     deleteUnidad,

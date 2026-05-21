@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { EMPRESA_ID } from '../config/app';
 import type { FinancialAuditLog } from '../data/types';
 import { isValidAuditUserId } from './authAuditUser';
 import { cleanUuid, deepStripZeroIdFields } from '../utils/uuidColumn';
@@ -11,6 +12,8 @@ export interface FinancialAuditLogInsert {
   old_data?: Record<string, unknown> | null;
   new_data?: Record<string, unknown> | null;
   reason?: string | null;
+  /** Tenant; obligatorio tras migration_rls_preparation.sql */
+  empresa_id?: string | null;
 }
 
 /** Log detallado de errores PostgREST / Supabase (diagnóstico). */
@@ -34,7 +37,14 @@ function mapFinancialAuditRow(r: Record<string, unknown>): FinancialAuditLog {
     newData: (r.new_data as Record<string, unknown> | null) ?? null,
     reason: (r.reason as string | null) ?? null,
     createdAt: String(r.created_at ?? ''),
+    empresaId: (r.empresa_id as string | null) ?? null,
   };
+}
+
+function resolveAuditEmpresaId(explicit?: string | null): string | null {
+  const fromArg = cleanUuid(explicit ?? null);
+  if (fromArg) return fromArg;
+  return cleanUuid(EMPRESA_ID);
 }
 
 export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Promise<boolean> {
@@ -46,9 +56,15 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
     console.warn('No authenticated user for audit log', { user_id: row.user_id });
     return true;
   }
+  const empresaId = resolveAuditEmpresaId(row.empresa_id);
+  if (!empresaId) {
+    console.warn('[financial_audit_logs] Sin empresa_id; omitiendo insert hasta migración RLS prep.');
+    return true;
+  }
   const sanitized: FinancialAuditLogInsert = {
     ...row,
     user_id: uid,
+    empresa_id: empresaId,
     old_data: row.old_data
       ? (deepStripZeroIdFields(row.old_data) as Record<string, unknown>)
       : row.old_data,
@@ -56,7 +72,12 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
       ? (deepStripZeroIdFields(row.new_data) as Record<string, unknown>)
       : row.new_data,
   };
-  const { error } = await supabase.from('financial_audit_logs').insert(sanitized);
+  let { error } = await supabase.from('financial_audit_logs').insert(sanitized);
+  if (error && /empresa_id/i.test(error.message)) {
+    const { empresa_id: _omit, ...withoutEmpresa } = sanitized;
+    void _omit;
+    ({ error } = await supabase.from('financial_audit_logs').insert(withoutEmpresa));
+  }
   if (error) {
     logPostgrestError('financial_audit_logs insert', error);
     return false;
@@ -65,11 +86,21 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
 }
 
 export async function fetchFinancialAuditLogs(limit = 200): Promise<FinancialAuditLog[]> {
-  const { data, error } = await supabase
-    .from('financial_audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const empresaId = resolveAuditEmpresaId(null);
+  let q = supabase.from('financial_audit_logs').select('*');
+  if (empresaId) {
+    q = q.eq('empresa_id', empresaId);
+  }
+  let { data, error } = await q.order('created_at', { ascending: false }).limit(limit);
+  if (error && /empresa_id/i.test(error.message)) {
+    const fallback = await supabase
+      .from('financial_audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) {
     logPostgrestError('financial_audit_logs fetch', error);
     return [];

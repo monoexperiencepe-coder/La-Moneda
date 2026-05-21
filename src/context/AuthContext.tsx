@@ -7,6 +7,7 @@ import React, {
   useCallback,
 } from 'react';
 import { supabase } from '../lib/supabase';
+import { EMPRESA_ID } from '../config/app';
 import type { Session } from '@supabase/supabase-js';
 import type { AppRole, AppUserProfile } from '../data/types';
 import { canAccessOperativo, canEditFinances, canViewFinances, isAdminRole } from '../utils/roles';
@@ -21,6 +22,8 @@ export interface UserProfile {
   name: string;
   role: AppRole;
   is_active: boolean;
+  /** Tenant Supabase (RLS prep); alineado con empresas.id */
+  empresa_id: string;
 }
 
 interface AuthContextValue {
@@ -55,20 +58,45 @@ const FALLBACK_USER: AppUserProfile = { id: 'guest', name: 'Usuario', role: 'ope
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function fetchProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
+function profileFromRow(
+  d: Record<string, unknown>,
+  empresaId: string,
+): UserProfile {
+  return {
+    id: d.id as string,
+    email: d.email as string,
+    name: (d.name as string) || (d.email as string),
+    role: normalizeRole(d.role as string),
+    is_active: (d.is_active as boolean) ?? true,
+    empresa_id: empresaId,
+  };
+}
+
+async function fetchProfileLegacy(userId: string): Promise<UserProfile | null> {
+  const legacy = await supabase
     .from('user_profiles')
     .select('id, email, name, role, is_active')
     .eq('id', userId)
     .single();
-  if (error || !data) return null;
-  return {
-    id: data.id as string,
-    email: data.email as string,
-    name: (data.name as string) || (data.email as string),
-    role: normalizeRole(data.role as string),
-    is_active: (data.is_active as boolean) ?? true,
-  };
+  if (legacy.error || !legacy.data) return null;
+  return profileFromRow(legacy.data as Record<string, unknown>, EMPRESA_ID || '');
+}
+
+async function fetchProfile(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('id, email, name, role, is_active, empresa_id')
+    .eq('id', userId)
+    .single();
+  if (error || !data) {
+    // Tras prep RLS: columna nueva, caché PostgREST o esquema parcial — no bloquear login/permisos.
+    if (error) return fetchProfileLegacy(userId);
+    return null;
+  }
+  return profileFromRow(
+    data as Record<string, unknown>,
+    String(data.empresa_id ?? EMPRESA_ID ?? ''),
+  );
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -124,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: profile.name || profile.email,
         role: effectiveRole,
         email: profile.email,
+        empresaId: profile.empresa_id || null,
       };
     }
     return FALLBACK_USER;

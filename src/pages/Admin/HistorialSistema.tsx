@@ -21,6 +21,7 @@ import {
   formatAuditEntitySummary,
   formatAuditUserDisplay,
 } from '../../utils/auditLogDisplay';
+import { AUDIT_LOGS_REALTIME_EVENT } from '../../hooks/useEmpresaRegistrosRealtime';
 
 /** Etiquetas en español para action_type (incluye legados). */
 const ACTION_LABELS: Record<string, string> = {
@@ -75,6 +76,12 @@ const HistorialSistema: React.FC = () => {
   useEffect(() => {
     void reload();
   }, [reload, reloadNonce]);
+
+  useEffect(() => {
+    const onRemoteAudit = () => setReloadNonce((n) => n + 1);
+    window.addEventListener(AUDIT_LOGS_REALTIME_EVENT, onRemoteAudit);
+    return () => window.removeEventListener(AUDIT_LOGS_REALTIME_EVENT, onRemoteAudit);
+  }, []);
 
   const runDeleteOne = async () => {
     if (!confirmModal || confirmModal.kind !== 'one') return;

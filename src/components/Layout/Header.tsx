@@ -45,7 +45,7 @@ const Header: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile, logout, isFinancialOperador } = useAuth();
   const { executeUndo, latestLabel, undoRunning, lastAction } = useUndoManager();
-  const { toast, gastosRealtimeConnected } = useRegistrosContext();
+  const { toast, registrosRealtimeConnected } = useRegistrosContext();
 
   const permissionUser = permissionUserFromAuth(user, profile?.email ?? null);
   const visibleNavItems = isFinancialOperador
@@ -139,7 +139,7 @@ const Header: React.FC = () => {
 
           {/* Derecha: acciones (orden fijo; en móvil el deshacer lleva más contraste si hay acción pendiente) */}
           <div className="relative z-20 flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5">
-            <RealtimeStatusBadge connected={gastosRealtimeConnected} />
+            <RealtimeStatusBadge connected={registrosRealtimeConnected} />
             <button
               type="button"
               onClick={() => void handleGlobalUndo()}

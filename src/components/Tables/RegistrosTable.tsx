@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom';
 import {
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
-  Loader2,
+  Pencil, Loader2,
 } from 'lucide-react';
 import Badge from '../Common/Badge';
 import Button from '../Common/Button';
@@ -286,6 +286,30 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     }
   }, []);
 
+  /** Abre el modal de detalle en modo edición (misma condición que el botón «Editar» del footer). */
+  const beginOpenGastoEdit = useCallback(
+    (item: Gasto) => {
+      if (!onGastoDetalleSaved) return;
+      if (openingDetailRef.current) return;
+      openingDetailRef.current = true;
+      try {
+        const d = gastoToEditDraft(item);
+        flushSync(() => {
+          setDetailLoading(false);
+          setGastoSaveBusy(false);
+          setViewItem(item);
+          setGastoEditBaseline(item);
+          setGastoEditDraft(d);
+          gastoEditInitialSerialized.current = JSON.stringify(d);
+          setGastoDetailEditing(true);
+        });
+      } finally {
+        openingDetailRef.current = false;
+      }
+    },
+    [onGastoDetalleSaved],
+  );
+
   const getVehicleLabel = useCallback((vehicleId: number | string | null) => {
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
@@ -405,15 +429,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         detail: 'Los cambios se guardaron en Supabase.',
         undoAction: undoUpdateGastoDetalle(gastoEditBaseline, onGastoDetalleSaved),
       });
-      setViewItem(res.gasto);
-      setGastoDetailEditing(false);
-      setGastoEditBaseline(null);
-      setGastoEditDraft(null);
-      gastoEditInitialSerialized.current = '';
+      closeDetail();
     } finally {
       setGastoSaveBusy(false);
     }
-  }, [gastoEditBaseline, gastoEditDraft, gastoSaveBusy, onGastoDetalleSaved, toast, showUndoToast]);
+  }, [gastoEditBaseline, gastoEditDraft, gastoSaveBusy, onGastoDetalleSaved, toast, showUndoToast, closeDetail]);
 
   const rawData = mode === 'ingresos' ? ingresos : gastos;
   const bootstrapPending = useBootstrapPending();
@@ -782,6 +802,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       <ArrowRightLeft size={14} />
                     </button>
                   )}
+                  {gastoDetalleEditable && (
+                    <button
+                      type="button"
+                      onClick={() => beginOpenGastoEdit(item as Gasto)}
+                      className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
+                      title="Editar gasto"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => beginOpenDetail(item)}
@@ -968,6 +998,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                           title="Mover categoría"
                         >
                           <ArrowRightLeft size={15} />
+                        </button>
+                      )}
+                      {gastoDetalleEditable && (
+                        <button
+                          type="button"
+                          onClick={() => beginOpenGastoEdit(item as Gasto)}
+                          className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
+                          title="Editar gasto"
+                        >
+                          <Pencil size={15} />
                         </button>
                       )}
                       <button

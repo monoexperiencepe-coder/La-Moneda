@@ -491,6 +491,7 @@ const PrestamosPanel: React.FC = () => {
           event: '*',
           schema: 'public',
           table: 'prestamos_tramos',
+          filter: `empresa_id=eq.${EMPRESA_ID}`,
         },
         () => {
           scheduleBackgroundReload();

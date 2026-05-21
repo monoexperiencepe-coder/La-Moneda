@@ -15,6 +15,8 @@ export interface AppUserProfile {
   name: string;
   role: AppRole;
   email?: string | null;
+  /** Tenant del usuario (user_profiles.empresa_id); prep RLS */
+  empresaId?: string | null;
 }
 
 /** Moneda de registro (préstamos, ingresos multimoneda). */
@@ -317,6 +319,7 @@ export interface FinancialAuditLog {
   newData: Record<string, unknown> | null;
   reason: string | null;
   createdAt: string;
+  empresaId?: string | null;
 }
 
 /**
