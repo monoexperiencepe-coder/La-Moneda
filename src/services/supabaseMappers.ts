@@ -166,7 +166,8 @@ export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
     id: ingresoPrimaryKeyFromRow(r.id),
     fecha: toDateOnlyString(r.fecha),
     fechaRegistro: toDateOnlyString(r.fecha_registro ?? r.fecha),
-    vehicleId: num(r.vehicle_id),
+    vehicleId: r.vehicle_id != null && r.vehicle_id !== '' ? num(r.vehicle_id) : null,
+    esExtraordinario: Boolean(r.es_extraordinario),
     tipo: str(r.tipo),
     subTipo: strOrNull(r.sub_tipo),
     fechaDesde: strOrNull(r.fecha_desde),
@@ -432,6 +433,7 @@ export function ingresoToInsert(
     fecha: row.fecha,
     fecha_registro: row.fechaRegistro,
     vehicle_id: row.vehicleId,
+    es_extraordinario: row.esExtraordinario ?? false,
     tipo: row.tipo,
     sub_tipo: row.subTipo,
     fecha_desde: row.fechaDesde,
@@ -447,7 +449,7 @@ export function ingresoToInsert(
     comentarios: row.comentarios,
     detalle_operativo: row.detalleOperativo ?? null,
     tipo_operacion: row.tipoOperacion ?? null,
-    estado_pago: row.estadoPago ?? null,
+    estado_pago: row.estadoPago ?? 'PAGADO',
     excel_extra: row.excelExtra ?? null,
   };
 }

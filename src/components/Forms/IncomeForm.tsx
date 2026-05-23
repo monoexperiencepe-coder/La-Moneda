@@ -13,24 +13,31 @@ import {
   getDetalleMetodoByLabel,
   getDetallesMetodoPago,
 } from '../../data/factCatalog';
+import {
+  ALCANCE_INGRESO_OPTIONS,
+  CATEGORIAS_INGRESO_EXTRAORDINARIO,
+  TIPO_INGRESO_EXTRAORDINARIO,
+  type AlcanceIngreso,
+  type CategoriaIngresoExtraordinario,
+} from '../../data/ingresoAlcanceCatalog';
 import { todayStr } from '../../utils/formatting';
 
 interface IncomeFormProps {
   vehicles: Vehicle[];
   ingresos?: Ingreso[];
   onSubmit: (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => void | Promise<void>;
-  /** Sin tarjeta exterior (p. ej. dentro de un modal con título propio). */
   noCard?: boolean;
-  /** Preselecciona N° vehículo al montar o al cambiar el id. */
   prefillVehicleId?: number | null;
   onLoadingChange?: (loading: boolean) => void;
 }
 
 interface FormState {
+  alcanceIngreso: AlcanceIngreso;
   fecha: string;
   vehicleId: string;
   tipo: string;
   subTipo: string;
+  categoriaExtraordinaria: CategoriaIngresoExtraordinario;
   fechaDesde: string;
   fechaHasta: string;
   metodoPago: string;
@@ -45,10 +52,12 @@ function emptyForm(): FormState {
   const t = TIPOS_INGRESO_FACT.includes('ALQUILER') ? 'ALQUILER' : (TIPOS_INGRESO_FACT[0] ?? '');
   const y = getDetallesMetodoPago('Yape')[0];
   return {
+    alcanceIngreso: 'vehicular',
     fecha: todayStr(),
     vehicleId: '',
     tipo: t,
     subTipo: getSubtiposIngreso(t)[0] ?? '',
+    categoriaExtraordinaria: CATEGORIAS_INGRESO_EXTRAORDINARIO[0].value,
     fechaDesde: '',
     fechaHasta: '',
     metodoPago: 'Yape',
@@ -77,23 +86,36 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
   }, [loading, onLoadingChange]);
   const [periodoOpen, setPeriodoOpen] = useState(false);
 
-  const activeVehicles = vehicles.filter(v => v.activo);
+  const activeVehicles = vehicles.filter((v) => v.activo);
+  const esVehicular = form.alcanceIngreso === 'vehicular';
+  const esExtraordinario = form.alcanceIngreso === 'extraordinario';
 
   useEffect(() => {
-    if (prefillVehicleId != null && Number.isFinite(prefillVehicleId) && prefillVehicleId > 0) {
-      setForm(f => ({ ...f, vehicleId: String(prefillVehicleId) }));
-      setErrors(e => ({ ...e, vehicleId: '' }));
+    if (
+      esVehicular &&
+      prefillVehicleId != null &&
+      Number.isFinite(prefillVehicleId) &&
+      prefillVehicleId > 0
+    ) {
+      setForm((f) => ({ ...f, vehicleId: String(prefillVehicleId) }));
+      setErrors((e) => ({ ...e, vehicleId: '' }));
     }
-  }, [prefillVehicleId]);
+  }, [prefillVehicleId, esVehicular]);
 
   const subtipos = useMemo(() => getSubtiposIngreso(form.tipo), [form.tipo]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
     if (!form.fecha) newErrors.fecha = 'La fecha de movimiento / pago es requerida';
-    if (!form.vehicleId) newErrors.vehicleId = 'Selecciona un vehículo';
-    if (!form.tipo) newErrors.tipo = 'Selecciona un tipo de ingreso';
-    if (subtipos.length > 0 && !form.subTipo) newErrors.subTipo = 'Selecciona sub tipo';
+    if (esVehicular) {
+      if (!form.vehicleId) newErrors.vehicleId = 'Selecciona un vehículo';
+      if (!form.tipo) newErrors.tipo = 'Selecciona un tipo de ingreso';
+      if (subtipos.length > 0 && !form.subTipo) newErrors.subTipo = 'Selecciona sub tipo';
+    } else {
+      if (!form.categoriaExtraordinaria) {
+        newErrors.categoriaExtraordinaria = 'Selecciona la categoría';
+      }
+    }
     if (!form.monto || Number(form.monto) <= 0) newErrors.monto = 'Ingresa un monto válido';
     if (form.moneda === 'USD') {
       const tc = Number(form.tipoCambio);
@@ -125,15 +147,20 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
         moneda === 'USD' && tipoCambio != null && tipoCambio > 0
           ? Number((rawM * tipoCambio).toFixed(2))
           : rawM;
+
+      const tipo = esExtraordinario ? TIPO_INGRESO_EXTRAORDINARIO : form.tipo;
+      const subTipo = esExtraordinario ? form.categoriaExtraordinaria : form.subTipo || null;
+
       await Promise.resolve(
         onSubmit({
           fecha: form.fecha,
           fechaRegistro: todayStr(),
-          vehicleId: Number(form.vehicleId),
-          tipo: form.tipo,
-          subTipo: form.subTipo || null,
-          fechaDesde: form.fechaDesde.trim() || null,
-          fechaHasta: form.fechaHasta.trim() || null,
+          vehicleId: esVehicular ? Number(form.vehicleId) : null,
+          esExtraordinario,
+          tipo,
+          subTipo,
+          fechaDesde: esVehicular ? form.fechaDesde.trim() || null : null,
+          fechaHasta: esVehicular ? form.fechaHasta.trim() || null : null,
           metodoPago: form.metodoPago,
           metodoPagoDetalle: form.metodoPagoDetalle.trim(),
           celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
@@ -154,7 +181,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
 
   const getVehicleDetail = (vehicleId: string) => {
     if (!vehicleId) return '';
-    const v = vehicles.find(v => v.id === Number(vehicleId));
+    const v = vehicles.find((v) => v.id === Number(vehicleId));
     return v ? `${v.marca} ${v.modelo} — ${v.placa}` : '';
   };
 
@@ -166,205 +193,254 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
         : null;
 
   const inner = (
-      <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Fecha de movimiento / pago"
-            type="date"
-            value={form.fecha}
-            onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))}
-            error={errors.fecha}
-            required
-          />
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
-            <p className="text-xs font-medium text-gray-600">Fecha registro (Fact)</p>
-            <p className="text-sm text-gray-800 mt-0.5">
-              Se guarda como columna <strong>fecha_registro</strong> al enviar (por defecto{' '}
-              <strong>{todayStr()}</strong>). Distinta de la hora de creación en base de datos.
-            </p>
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Tipo de ingreso</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {ALCANCE_INGRESO_OPTIONS.map((opt) => {
+            const active = form.alcanceIngreso === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  setForm((p) => ({
+                    ...p,
+                    alcanceIngreso: opt.value,
+                    vehicleId: opt.value === 'vehicular' ? p.vehicleId : '',
+                  }));
+                  setErrors({});
+                }}
+                className={`text-left rounded-xl border-2 px-3 py-2.5 transition-colors ${
+                  active
+                    ? 'border-emerald-500 bg-emerald-50/90 shadow-sm'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <p className={`text-sm font-bold ${active ? 'text-emerald-900' : 'text-slate-800'}`}>
+                  {opt.label}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{opt.hint}</p>
+              </button>
+            );
+          })}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
-            label="N° Vehículo"
-            options={activeVehicles.map(v => ({
-              value: v.id,
-              label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
-            }))}
-            value={form.vehicleId}
-            placeholder="Seleccionar vehículo..."
-            onChange={v => {
-              setForm(p => ({ ...p, vehicleId: v }));
-              setErrors(p => ({ ...p, vehicleId: '' }));
-            }}
-            error={errors.vehicleId}
-            required
-          />
-          <div className="flex flex-col justify-end">
-            <button
-              type="button"
-              onClick={() => setPeriodoOpen(true)}
-              className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
-            >
-              <CalendarRange size={18} className="text-emerald-600 shrink-0" />
-              <span className="truncate">
-                {periodoLabel ? `Período: ${periodoLabel}` : 'Período del pago (opcional)'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <PeriodoPagoModal
-          isOpen={periodoOpen}
-          onClose={() => setPeriodoOpen(false)}
-          fechaDesde={form.fechaDesde}
-          fechaHasta={form.fechaHasta}
-          onGuardar={(desde, hasta) => {
-            setForm(p => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
-          }}
-        />
-
-        {form.vehicleId && (
-          <div className="bg-primary-50 rounded-lg px-4 py-2.5">
-            <p className="text-xs text-primary-600 font-medium">
-              📋 Detalle: {getVehicleDetail(form.vehicleId)}
-            </p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
-            label="Tipo (Fact)"
-            options={TIPOS_INGRESO_FACT.map(t => ({ value: t, label: t }))}
-            value={form.tipo}
-            placeholder="Seleccionar tipo..."
-            onChange={v => {
-              const subs = getSubtiposIngreso(v);
-              setForm(p => ({
-                ...p,
-                tipo: v,
-                subTipo: subs[0] ?? '',
-              }));
-              setErrors(p => ({ ...p, tipo: '', subTipo: '' }));
-            }}
-            error={errors.tipo}
-            required
-          />
-          <Select
-            label="Sub tipo"
-            options={subtipos.map(s => ({ value: s, label: s }))}
-            value={form.subTipo}
-            placeholder={subtipos.length ? 'Seleccionar...' : '—'}
-            onChange={v => {
-              setForm(p => ({ ...p, subTipo: v }));
-              setErrors(p => ({ ...p, subTipo: '' }));
-            }}
-            error={errors.subTipo}
-            disabled={subtipos.length === 0}
-            required={subtipos.length > 0}
-          />
-        </div>
-
-        <PagoRapidoIngreso
-          metodoPago={form.metodoPago}
-          metodoPagoDetalle={form.metodoPagoDetalle}
-          ingresos={ingresos}
-          onChange={({ metodoPago, metodoPagoDetalle }) => {
-            setForm(p => ({
-              ...p,
-              metodoPago,
-              metodoPagoDetalle,
-            }));
-            setErrors(e => ({ ...e, metodoPagoDetalle: '' }));
-          }}
-        />
-        {errors.metodoPagoDetalle && (
-          <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Select
-            label="Moneda del ingreso"
-            options={[
-              { value: 'PEN', label: 'Soles (PEN)' },
-              { value: 'USD', label: 'Dólares (USD)' },
-            ]}
-            value={form.moneda}
-            onChange={v => {
-              setForm(p => ({
-                ...p,
-                moneda: v as Moneda,
-                tipoCambio: v === 'PEN' ? '' : p.tipoCambio,
-              }));
-              setErrors(e => ({ ...e, tipoCambio: '', monto: '' }));
-            }}
-            required
-          />
-          <Input
-            label={`Tipo de cambio (S/ por US$)${form.moneda === 'PEN' ? ' — opcional' : ''}`}
-            type="number"
-            min="0"
-            step="0.0001"
-            value={form.tipoCambio}
-            onChange={e => {
-              setForm(p => ({ ...p, tipoCambio: e.target.value }));
-              setErrors(p => ({ ...p, tipoCambio: '' }));
-            }}
-            error={errors.tipoCambio}
-            placeholder="3.75"
-            helper={form.moneda === 'USD' ? 'Obligatorio para reflejar el ingreso en KPIs (soles).' : 'Referencia del día si aplica.'}
-          />
-          <Input
-            label={form.moneda === 'USD' ? 'Monto (US$)' : 'Monto (S/)'}
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.monto}
-            onChange={e => {
-              setForm(p => ({ ...p, monto: e.target.value }));
-              setErrors(p => ({ ...p, monto: '' }));
-            }}
-            error={errors.monto}
-            placeholder="0.00"
-            required
-          />
-        </div>
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
-          label="Comentarios (OBS)"
-          type="text"
-          value={form.comentarios}
-          onChange={e => setForm(p => ({ ...p, comentarios: e.target.value }))}
-          placeholder="Observaciones adicionales..."
+          label="Fecha de movimiento / pago"
+          type="date"
+          value={form.fecha}
+          onChange={(e) => setForm((p) => ({ ...p, fecha: e.target.value }))}
+          error={errors.fecha}
+          required
         />
-
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setForm(emptyForm());
-              setErrors({});
-            }}
-          >
-            Limpiar
-          </Button>
-          <Button
-            type="submit"
-            loading={loading}
-            icon={<PlusCircle size={16} />}
-          >
-            Registrar Ingreso
-          </Button>
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
+          <p className="text-xs font-medium text-gray-600">Fecha registro (Fact)</p>
+          <p className="text-sm text-gray-800 mt-0.5">
+            Se guarda al enviar (por defecto <strong>{todayStr()}</strong>).
+          </p>
         </div>
-      </form>
+      </div>
+
+      {esVehicular ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="N° Vehículo"
+              options={activeVehicles.map((v) => ({
+                value: v.id,
+                label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+              }))}
+              value={form.vehicleId}
+              placeholder="Seleccionar vehículo..."
+              onChange={(v) => {
+                setForm((p) => ({ ...p, vehicleId: v }));
+                setErrors((p) => ({ ...p, vehicleId: '' }));
+              }}
+              error={errors.vehicleId}
+              required
+            />
+            <div className="flex flex-col justify-end">
+              <button
+                type="button"
+                onClick={() => setPeriodoOpen(true)}
+                className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+              >
+                <CalendarRange size={18} className="text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  {periodoLabel ? `Período: ${periodoLabel}` : 'Período del pago (opcional)'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <PeriodoPagoModal
+            isOpen={periodoOpen}
+            onClose={() => setPeriodoOpen(false)}
+            fechaDesde={form.fechaDesde}
+            fechaHasta={form.fechaHasta}
+            onGuardar={(desde, hasta) => {
+              setForm((p) => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
+            }}
+          />
+
+          {form.vehicleId && (
+            <div className="bg-primary-50 rounded-lg px-4 py-2.5">
+              <p className="text-xs text-primary-600 font-medium">📋 Detalle: {getVehicleDetail(form.vehicleId)}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Tipo (Fact)"
+              options={TIPOS_INGRESO_FACT.map((t) => ({ value: t, label: t }))}
+              value={form.tipo}
+              placeholder="Seleccionar tipo..."
+              onChange={(v) => {
+                const subs = getSubtiposIngreso(v);
+                setForm((p) => ({
+                  ...p,
+                  tipo: v,
+                  subTipo: subs[0] ?? '',
+                }));
+                setErrors((p) => ({ ...p, tipo: '', subTipo: '' }));
+              }}
+              error={errors.tipo}
+              required
+            />
+            <Select
+              label="Sub tipo"
+              options={subtipos.map((s) => ({ value: s, label: s }))}
+              value={form.subTipo}
+              placeholder={subtipos.length ? 'Seleccionar...' : '—'}
+              onChange={(v) => {
+                setForm((p) => ({ ...p, subTipo: v }));
+                setErrors((p) => ({ ...p, subTipo: '' }));
+              }}
+              error={errors.subTipo}
+              disabled={subtipos.length === 0}
+              required={subtipos.length > 0}
+            />
+          </div>
+        </>
+      ) : (
+        <Select
+          label="Categoría extraordinaria"
+          options={CATEGORIAS_INGRESO_EXTRAORDINARIO.map((c) => ({ value: c.value, label: c.label }))}
+          value={form.categoriaExtraordinaria}
+          onChange={(v) => {
+            setForm((p) => ({ ...p, categoriaExtraordinaria: v as CategoriaIngresoExtraordinario }));
+            setErrors((p) => ({ ...p, categoriaExtraordinaria: '' }));
+          }}
+          error={errors.categoriaExtraordinaria}
+          required
+        />
+      )}
+
+      <PagoRapidoIngreso
+        metodoPago={form.metodoPago}
+        metodoPagoDetalle={form.metodoPagoDetalle}
+        ingresos={ingresos}
+        onChange={({ metodoPago, metodoPagoDetalle }) => {
+          setForm((p) => ({
+            ...p,
+            metodoPago,
+            metodoPagoDetalle,
+          }));
+          setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
+        }}
+      />
+      {errors.metodoPagoDetalle && <p className="text-xs text-red-500">{errors.metodoPagoDetalle}</p>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Select
+          label="Moneda del ingreso"
+          options={[
+            { value: 'PEN', label: 'Soles (PEN)' },
+            { value: 'USD', label: 'Dólares (USD)' },
+          ]}
+          value={form.moneda}
+          onChange={(v) => {
+            setForm((p) => ({
+              ...p,
+              moneda: v as Moneda,
+              tipoCambio: v === 'PEN' ? '' : p.tipoCambio,
+            }));
+            setErrors((e) => ({ ...e, tipoCambio: '', monto: '' }));
+          }}
+          required
+        />
+        <Input
+          label={`Tipo de cambio (S/ por US$)${form.moneda === 'PEN' ? ' — opcional' : ''}`}
+          type="number"
+          min="0"
+          step="0.0001"
+          value={form.tipoCambio}
+          onChange={(e) => {
+            setForm((p) => ({ ...p, tipoCambio: e.target.value }));
+            setErrors((p) => ({ ...p, tipoCambio: '' }));
+          }}
+          error={errors.tipoCambio}
+          placeholder="3.75"
+          helper={
+            form.moneda === 'USD' ? 'Obligatorio para reflejar el ingreso en KPIs (soles).' : 'Referencia del día si aplica.'
+          }
+        />
+        <Input
+          label={form.moneda === 'USD' ? 'Monto (US$)' : 'Monto (S/)'}
+          type="number"
+          min="0"
+          step="0.01"
+          value={form.monto}
+          onChange={(e) => {
+            setForm((p) => ({ ...p, monto: e.target.value }));
+            setErrors((p) => ({ ...p, monto: '' }));
+          }}
+          error={errors.monto}
+          placeholder="0.00"
+          required
+        />
+      </div>
+
+      <Input
+        label={esExtraordinario ? 'Descripción / comentario' : 'Comentarios (OBS)'}
+        type="text"
+        value={form.comentarios}
+        onChange={(e) => setForm((p) => ({ ...p, comentarios: e.target.value }))}
+        placeholder={
+          esExtraordinario
+            ? 'Ej. restante de multa, compensación con taller…'
+            : 'Observaciones adicionales...'
+        }
+      />
+
+      <div className="flex items-center justify-end gap-3 pt-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            setForm(emptyForm());
+            setErrors({});
+          }}
+        >
+          Limpiar
+        </Button>
+        <Button type="submit" loading={loading} icon={<PlusCircle size={16} />}>
+          {esExtraordinario ? 'Registrar ingreso extraordinario' : 'Registrar ingreso'}
+        </Button>
+      </div>
+    </form>
   );
 
   if (noCard) return inner;
 
   return (
-    <Card title="Registrar Ingreso" subtitle="Fecha de movimiento/pago, pago por cuenta/celular, período cubierto opcional">
+    <Card
+      title="Registrar ingreso"
+      subtitle="Vehicular (unidad) o extraordinario (empresa sin vehículo)"
+    >
       {inner}
     </Card>
   );

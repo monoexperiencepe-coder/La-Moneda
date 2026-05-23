@@ -33,8 +33,11 @@ export interface Ingreso {
   id: string;
   fecha: string;
   fechaRegistro: string;
-  vehicleId: number;
-  /** Tipo maestro (Dim_Tipo INGRESOS): ALQUILER, GARANTÍAS, etc. */
+  /** Unidad; null en ingresos extraordinarios de empresa. */
+  vehicleId: number | null;
+  /** true cuando el ingreso no está ligado a vehículo (columna `es_extraordinario`). */
+  esExtraordinario?: boolean;
+  /** Tipo maestro (Dim_Tipo INGRESOS): ALQUILER, GARANTÍAS, EXTRAORDINARIO, etc. */
   tipo: string;
   /** Sub Tipo (Dim_SubTipo): p. ej. Día, Semana para ALQUILER */
   subTipo: string | null;
@@ -58,7 +61,7 @@ export interface Ingreso {
   detalleOperativo?: string | null;
   /** Línea operativa (tipo | subTipo). */
   tipoOperacion?: string | null;
-  /** P. ej. PENDIENTE / PAGADO inferido desde comentarios; null si no aplica. */
+  /** Legacy BD (`estado_pago`); la UI trata todo ingreso como confirmado. */
   estadoPago?: string | null;
   /** Columnas Excel no mapeadas a campos dedicados (Supabase: excel_extra). */
   excelExtra?: Record<string, unknown> | null;

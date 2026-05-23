@@ -1,5 +1,6 @@
 import type { Gasto, Ingreso } from '../data/types';
 import { ingresoMontoPEN } from './moneda';
+import { isIngresoExtraordinario } from './ingresoAlcance';
 
 function escapeCell(v: string | number | null | undefined): string {
   if (v == null) return '';
@@ -39,15 +40,15 @@ export function exportGastosCsv(gastos: Gasto[], suffix = ''): void {
 }
 
 export function exportIngresosCsv(ingresos: Ingreso[], suffix = ''): void {
-  const header = ['id', 'fecha', 'vehicle_id', 'tipo', 'subtipo', 'monto_pen', 'estado_pago', 'comentarios'];
+  const header = ['id', 'fecha', 'vehicle_id', 'es_extraordinario', 'tipo', 'subtipo', 'monto_pen', 'comentarios'];
   const rows = ingresos.map((i) => [
     i.id,
     i.fecha,
-    i.vehicleId,
+    i.vehicleId ?? '',
+    isIngresoExtraordinario(i) ? 'true' : 'false',
     i.tipo,
     i.subTipo ?? '',
     ingresoMontoPEN(i).toFixed(2),
-    i.estadoPago ?? '',
     i.comentarios,
   ]);
   downloadCsv(`ingresos${suffix}.csv`, header, rows);

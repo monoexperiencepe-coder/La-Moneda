@@ -249,8 +249,6 @@ function buildPeriodInsights(input: {
   hasCompare: boolean;
   distribucion: { label: string; monto: number; pct: number; key: string }[];
   prevOperativoMonto: number;
-  cobrosPendientesCount: number;
-  cobrosPendientesMonto: number;
 }): PeriodInsight[] {
   const {
     cur,
@@ -258,8 +256,6 @@ function buildPeriodInsights(input: {
     hasCompare,
     distribucion,
     prevOperativoMonto,
-    cobrosPendientesCount,
-    cobrosPendientesMonto,
   } = input;
   const opVeh = distribucion.find((d) => d.key === 'operativo_vehiculo');
   const opFlota = distribucion.find((d) => d.key === 'operativo_flota_general');
@@ -269,16 +265,6 @@ function buildPeriodInsights(input: {
   const add = (item: PeriodInsight) => {
     if (picks.length < 2) picks.push(item);
   };
-
-  if (cobrosPendientesCount >= 3 || cobrosPendientesMonto >= 800) {
-    add({
-      tone: 'warn',
-      text:
-        cobrosPendientesCount >= 3
-          ? `Hay ${cobrosPendientesCount} cobros pendientes acumulados (${formatCurrency(cobrosPendientesMonto)}).`
-          : `Hay ${formatCurrency(cobrosPendientesMonto)} por cobrar pendientes.`,
-    });
-  }
 
   if (cur.resultado < 0 && cur.hasMovement) {
     add({
@@ -538,15 +524,6 @@ const Resumen: React.FC = () => {
     gastosFinancialSummary,
   ]);
 
-  const cobrosPendientesGlobal = useMemo(
-    () => ingresos.filter((i) => (i.estadoPago ?? '').toUpperCase() === 'PENDIENTE'),
-    [ingresos],
-  );
-  const cobrosPendientesMonto = useMemo(
-    () => cobrosPendientesGlobal.reduce((s, i) => s + ingresoMontoPEN(i), 0),
-    [cobrosPendientesGlobal],
-  );
-
   const hasData =
     ingresosP.length > 0 ||
     gastosP.length > 0 ||
@@ -617,8 +594,6 @@ const Resumen: React.FC = () => {
         hasCompare: Boolean(previousRange && prevTotals),
         distribucion,
         prevOperativoMonto,
-        cobrosPendientesCount: cobrosPendientesGlobal.length,
-        cobrosPendientesMonto,
       }),
     [
       curTotals,
@@ -626,8 +601,6 @@ const Resumen: React.FC = () => {
       previousRange,
       distribucion,
       prevOperativoMonto,
-      cobrosPendientesGlobal.length,
-      cobrosPendientesMonto,
     ],
   );
 
@@ -654,20 +627,6 @@ const Resumen: React.FC = () => {
     const out: ResumenAlert[] = [];
     const op =
       (byKey.operativo_vehiculo ?? 0) + (byKey.operativo_flota_general ?? 0);
-
-    if (cobrosPendientesGlobal.length > 0) {
-      const alto = cobrosPendientesMonto >= 500 || cobrosPendientesGlobal.length >= 3;
-      out.push({
-        id: 'pendientes',
-        tone: alto ? 'danger' : 'warning',
-        title: 'Cobros pendientes',
-        text:
-          cobrosPendientesGlobal.length === 1
-            ? `Hay ${formatCurrency(cobrosPendientesMonto)} por cobrar.`
-            : `Hay ${cobrosPendientesGlobal.length} cobros por un total de ${formatCurrency(cobrosPendientesMonto)}.`,
-        href: '/finanzas/ingresos?cobro=pendiente',
-      });
-    }
 
     if (hasData && totalGastos > 0 && totalIngresos > 0 && totalGastos >= totalIngresos * 0.85) {
       out.push({
@@ -717,8 +676,6 @@ const Resumen: React.FC = () => {
     return out;
   }, [
     byKey,
-    cobrosPendientesGlobal.length,
-    cobrosPendientesMonto,
     hasData,
     hasResultado,
     periodHuman,
@@ -880,7 +837,7 @@ const Resumen: React.FC = () => {
             : null}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
         <KpiChip
           label="Ingresos"
           value={fmt(totalIngresos)}
@@ -902,13 +859,6 @@ const Resumen: React.FC = () => {
           value={resultadoNetoDisplay}
           tone="slate"
           tooltip="Ingresos del período menos gastos del período."
-        />
-        <KpiChip
-          label="Por cobrar"
-          value={cobrosPendientesGlobal.length > 0 ? formatCurrency(cobrosPendientesMonto) : '—'}
-          tone="amber"
-          tooltip="Cobros marcados como pendientes (todas las fechas). No depende del filtro de período."
-          href="/finanzas/ingresos?cobro=pendiente"
         />
       </div>
 

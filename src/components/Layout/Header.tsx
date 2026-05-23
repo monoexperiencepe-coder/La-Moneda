@@ -144,26 +144,15 @@ const Header: React.FC = () => {
               type="button"
               onClick={() => void handleGlobalUndo()}
               disabled={undoDisabled}
-              className={`flex max-w-[11rem] sm:max-w-[14rem] flex-shrink-0 items-center gap-1.5 rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none sm:px-2.5 sm:py-2 ${undoButtonClass}`}
+              className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border shadow-sm transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none ${undoButtonClass}`}
               aria-label={undoTitle}
               title={undoTitle}
             >
               {undoRunning ? (
-                <Loader2 size={16} className="flex-shrink-0 animate-spin" aria-hidden />
+                <Loader2 size={18} className="animate-spin" aria-hidden />
               ) : (
-                <Undo2 size={16} strokeWidth={2.25} className="flex-shrink-0" />
+                <Undo2 size={18} strokeWidth={2.25} aria-hidden />
               )}
-              <span className="hidden min-w-0 flex-col items-start text-left leading-tight sm:flex">
-                <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
-                  {undoRunning ? 'Revirtiendo…' : 'Deshacer'}
-                </span>
-                {hasUndo && !undoRunning ? (
-                  <span className="max-w-[9rem] truncate text-xs font-semibold">{latestLabel}</span>
-                ) : null}
-              </span>
-              <span className="text-xs font-semibold sm:hidden">
-                {undoRunning ? 'Revirtiendo…' : 'Deshacer'}
-              </span>
             </button>
             <button
               type="button"

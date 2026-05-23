@@ -71,25 +71,18 @@ export function filterGastosPeriod(gastos: Gasto[], desde: string | null, hasta:
   return gastos.filter((g) => fechaEnPeriodo(g.fecha, desde, hasta));
 }
 
-export function ingresosCobradosTotal(ingresos: Ingreso[]): number {
+export function ingresosPeriodTotal(ingresos: Ingreso[]): number {
   let s = 0;
   for (const i of ingresos) {
-    if ((i.estadoPago ?? '').toUpperCase() === 'PENDIENTE') continue;
     s += ingresoMontoPEN(i);
   }
   return s;
 }
 
-export function ingresosPendientesStats(ingresos: Ingreso[]): { count: number; total: number } {
-  let count = 0;
-  let total = 0;
-  for (const i of ingresos) {
-    if ((i.estadoPago ?? '').toUpperCase() !== 'PENDIENTE') continue;
-    count += 1;
-    total += ingresoMontoPEN(i);
-  }
-  return { count, total };
-}
+export { ingresosExtraordinariosTotal, ingresosVehicularesTotal } from './ingresoAlcance';
+
+/** @deprecated Alias de `ingresosPeriodTotal` (todos los ingresos son confirmados). */
+export const ingresosCobradosTotal = ingresosPeriodTotal;
 
 export function topEntries(
   totals: Record<string, number>,

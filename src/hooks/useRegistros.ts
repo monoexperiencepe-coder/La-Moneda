@@ -588,16 +588,23 @@ export const useRegistros = () => {
 
   const addIngreso = useCallback(
     async (ingreso: Omit<Ingreso, 'id' | 'createdAt'>) => {
-      const v = vehicles.find((x) => x.id === ingreso.vehicleId);
+      const esExtra = ingreso.esExtraordinario === true || ingreso.vehicleId == null;
+      const v =
+        !esExtra && ingreso.vehicleId != null
+          ? vehicles.find((x) => x.id === ingreso.vehicleId)
+          : undefined;
       const detalleDelAuto = v ? `${v.marca} ${v.modelo} — ${v.placa}` : null;
       const norm = normalizeIngresoMoneda({
         ...ingreso,
+        vehicleId: esExtra ? null : ingreso.vehicleId,
+        esExtraordinario: esExtra,
         ...enrichIngresoOperativo({
           comentarios: ingreso.comentarios,
           tipo: ingreso.tipo,
           subTipo: ingreso.subTipo,
           detalleDelAuto,
         }),
+        estadoPago: 'PAGADO',
       });
       const created = await insertIngreso(norm, profile?.empresa_id);
       if (!created) throw new Error('No se pudo guardar el ingreso en Supabase.');

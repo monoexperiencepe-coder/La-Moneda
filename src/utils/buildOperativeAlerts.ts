@@ -1,7 +1,6 @@
 import type { ControlFecha, Ingreso, Vehicle, KilometrajeRegistro } from '../data/types';
 import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
-import { formatCurrency, formatDate, todayStr } from './formatting';
-import { ingresoMontoPEN } from './moneda';
+import { formatDate, todayStr } from './formatting';
 import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
 
 /** Ventana para alertar vencimientos (control_fechas), alineado a Control Global. */
@@ -10,12 +9,11 @@ export const DIAS_ALERTA_VENCIMIENTO = 30;
 /** Sin ningún ingreso con fecha de movimiento >= hoy − N → alerta. */
 export const DIAS_SIN_INGRESOS_ALERTA = 14;
 
-const MAX_ALERTAS_INGRESO_PENDIENTE = 80;
 const MAX_ALERTAS_VENCIMIENTO = 150;
 const MAX_ALERTAS_SIN_INGRESOS = 60;
 const MAX_ALERTAS_KM_MANT = 40;
 
-export type OperativeAlertKind = 'INGRESO_PENDIENTE' | 'VENCIMIENTO' | 'SIN_INGRESOS' | 'KM_MANTENIMIENTO';
+export type OperativeAlertKind = 'VENCIMIENTO' | 'SIN_INGRESOS' | 'KM_MANTENIMIENTO';
 
 export interface OperativeAlertItem {
   kind: OperativeAlertKind;
@@ -56,24 +54,7 @@ export function buildOperativeAlerts(
   const activeVehicles = vehicles.filter((v) => v.activo);
   const byId = new Map(activeVehicles.map((v) => [v.id, v]));
 
-  /* 1) Ingresos con cobro/pago marcado pendiente */
-  const pendientesIng = ingresos.filter((i) => i.estadoPago === 'PENDIENTE');
-  pendientesIng.sort((a, b) => b.fecha.localeCompare(a.fecha));
-  for (const i of pendientesIng.slice(0, MAX_ALERTAS_INGRESO_PENDIENTE)) {
-    const v = byId.get(i.vehicleId);
-    const pen = ingresoMontoPEN(i);
-    const monedaLbl = i.moneda === 'USD' ? `≈ ${formatCurrency(pen)} ref.` : formatCurrency(i.monto);
-    out.push({
-      kind: 'INGRESO_PENDIENTE',
-      id: `ing-pend-${i.id}`,
-      severity: 'alta',
-      title: `${i.tipo} · ${vehicleLabel(v)}`,
-      detail: `${monedaLbl} · Mov. ${formatDate(i.fecha)}`,
-      href: '/finanzas/ingresos',
-    });
-  }
-
-  /* 2) Vencimientos próximos o ya vencidos (control_fechas) */
+  /* 1) Vencimientos próximos o ya vencidos (control_fechas) */
   const vencRows = controlFechas.filter((c) => {
     if (esControlFechaSinAlertaVencimiento(c.tipo)) return false;
     const d = diffDaysFromToday(c.fechaVencimiento);
@@ -95,10 +76,11 @@ export function buildOperativeAlerts(
     });
   }
 
-  /* 3) Vehículos activos sin ingreso reciente (por fecha de movimiento) */
+  /* 2) Vehículos activos sin ingreso reciente (por fecha de movimiento) */
   const cutoff = cutoffSinIngresos();
   const lastIngresoByVehicle = new Map<number, string>();
   for (const i of ingresos) {
+    if (i.vehicleId == null || !Number.isFinite(Number(i.vehicleId))) continue;
     const prev = lastIngresoByVehicle.get(i.vehicleId);
     const f = i.fecha.slice(0, 10);
     if (!prev || f > prev) lastIngresoByVehicle.set(i.vehicleId, f);
@@ -137,7 +119,7 @@ export function buildOperativeAlerts(
     });
   }
 
-  /* 4) Kilometraje: muchos km desde el último mantenimiento registrado */
+  /* 3) Kilometraje: muchos km desde el último mantenimiento registrado */
   const activeIds = new Set(activeVehicles.map((v) => v.id));
   const kmRows = buildKmControlRows(kilometrajes).filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
   kmRows.sort((a, b) => (b.variacion ?? 0) - (a.variacion ?? 0));
@@ -158,7 +140,6 @@ export function buildOperativeAlerts(
 
 export function countAlertsByKind(items: OperativeAlertItem[]): Record<OperativeAlertKind, number> {
   const init: Record<OperativeAlertKind, number> = {
-    INGRESO_PENDIENTE: 0,
     VENCIMIENTO: 0,
     SIN_INGRESOS: 0,
     KM_MANTENIMIENTO: 0,

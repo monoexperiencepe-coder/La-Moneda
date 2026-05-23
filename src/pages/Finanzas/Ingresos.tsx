@@ -10,6 +10,10 @@ import type { Ingreso } from '../../data/types';
 import Select from '../../components/Common/Select';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import {
+  ingresosExtraordinariosTotal,
+  ingresosVehicularesTotal,
+} from '../../utils/ingresoAlcance';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 
@@ -18,7 +22,6 @@ const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMe
 const Ingresos: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const cobroPendiente = searchParams.get('cobro') === 'pendiente';
   const { ingresos, vehicles, deleteIngreso, addIngreso, toast } = useRegistrosContext();
 
   /** Ranking por vehículo: mostrar toda la flota o solo unidades con al menos 1 ingreso en el período. */
@@ -58,10 +61,7 @@ const Ingresos: React.FC = () => {
     const created = await addIngreso(data);
     if (!created) return;
     const enPeriodo = filterRowsByYearMonth([created], historyYear, historyMonth).length > 0;
-    const estadoTabla = cobroPendiente ? 'PENDIENTE' : '';
-    const enEstado =
-      !estadoTabla || (created.estadoPago ?? '').toUpperCase() === estadoTabla.toUpperCase();
-    if (!enPeriodo || !enEstado) {
+    if (!enPeriodo) {
       toast.info('Registro guardado, pero no aparece por el filtro actual.');
     }
     closeRegistrarModal();
@@ -131,6 +131,14 @@ const Ingresos: React.FC = () => {
 
   const totalAnioGrafico = ingresosChartBase.reduce((s, i) => s + ingresoMontoPEN(i), 0);
   const totalVistaGrafico = ingresosVistaGrafico.reduce((s, i) => s + ingresoMontoPEN(i), 0);
+  const totalVehicularVista = useMemo(
+    () => ingresosVehicularesTotal(ingresosVistaGrafico),
+    [ingresosVistaGrafico],
+  );
+  const totalExtraordinarioVista = useMemo(
+    () => ingresosExtraordinariosTotal(ingresosVistaGrafico),
+    [ingresosVistaGrafico],
+  );
 
   useEffect(() => {
     const from = prevTotalRef.current;
@@ -262,17 +270,6 @@ const Ingresos: React.FC = () => {
     () => ingresos.filter((i) => i.fecha === todayStr()).reduce((s, i) => s + ingresoMontoPEN(i), 0),
     [ingresos],
   );
-
-  const pendientesStats = useMemo(() => {
-    let count = 0;
-    let total = 0;
-    for (const i of ingresos) {
-      if ((i.estadoPago ?? '').toUpperCase() !== 'PENDIENTE') continue;
-      count += 1;
-      total += ingresoMontoPEN(i);
-    }
-    return { count, total };
-  }, [ingresos]);
 
   const yearOptions = useMemo(
     () => availableYears.map((y) => ({ value: String(y), label: String(y) })),
@@ -435,18 +432,6 @@ const Ingresos: React.FC = () => {
     [displayedVehicleRows],
   );
 
-  const setCobroPendienteFilter = () => {
-    const next = new URLSearchParams(searchParams);
-    next.set('cobro', 'pendiente');
-    setSearchParams(next, { replace: true });
-  };
-
-  const clearCobroFilter = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('cobro');
-    setSearchParams(next, { replace: true });
-  };
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -464,31 +449,9 @@ const Ingresos: React.FC = () => {
             <p className="mt-0.5 text-sm text-slate-600">
               {ingresos.length} movimientos registrados
             </p>
-            {cobroPendiente ? (
-              <p className="mt-2 text-xs text-amber-900">
-                Mostrando solo cobros con estado{' '}
-                <span className="font-semibold">Pendiente</span> en la tabla inferior.{' '}
-                <button
-                  type="button"
-                  className="font-semibold text-emerald-700 underline decoration-emerald-700/30 hover:text-emerald-800"
-                  onClick={clearCobroFilter}
-                >
-                  Ver todos los estados
-                </button>
-              </p>
-            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          {!cobroPendiente && pendientesStats.count > 0 ? (
-            <button
-              type="button"
-              onClick={setCobroPendienteFilter}
-              className="rounded-xl border border-amber-200/90 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 shadow-sm transition hover:bg-amber-100"
-            >
-              Ver {pendientesStats.count} cobro{pendientesStats.count === 1 ? '' : 's'} pendiente{pendientesStats.count === 1 ? '' : 's'}
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={openRegistrarModal}
@@ -510,7 +473,7 @@ const Ingresos: React.FC = () => {
           <div className="mb-5 border-b border-slate-100 pb-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumen ejecutivo</p>
 
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{totalCardTitle}</p>
                 <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-emerald-900 sm:text-2xl">
@@ -583,34 +546,20 @@ const Ingresos: React.FC = () => {
                   {formatCurrency(todayTotal)}
                 </p>
               </div>
-              <div
-                className={`rounded-xl border p-3.5 shadow-sm sm:p-4 ${
-                  pendientesStats.count > 0
-                    ? 'border-amber-200/90 bg-gradient-to-br from-amber-50/95 to-white ring-1 ring-amber-900/[0.06]'
-                    : 'border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 ring-1 ring-slate-900/[0.03]'
-                }`}
-              >
-                <p
-                  className={`text-[11px] font-semibold uppercase tracking-wide ${
-                    pendientesStats.count > 0 ? 'text-amber-800/95' : 'text-slate-500'
-                  }`}
-                >
-                  Cobros pendientes
-                </p>
-                <p
-                  className={`mt-1.5 text-lg font-bold tabular-nums sm:text-xl ${
-                    pendientesStats.count > 0 ? 'text-amber-950' : 'text-slate-700'
-                  }`}
-                >
-                  {formatCurrency(pendientesStats.total)}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {pendientesStats.count} registro{pendientesStats.count === 1 ? '' : 's'}
-                </p>
-              </div>
             </div>
 
             {ingresos.length > 0 ? (
+              <>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 flex items-center justify-between gap-2">
+                  <span className="text-slate-600">Ingresos vehiculares</span>
+                  <span className="font-semibold tabular-nums text-emerald-800">{formatCurrency(totalVehicularVista)}</span>
+                </div>
+                <div className="rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2 flex items-center justify-between gap-2">
+                  <span className="text-violet-800">Ingresos extraordinarios</span>
+                  <span className="font-semibold tabular-nums text-violet-900">{formatCurrency(totalExtraordinarioVista)}</span>
+                </div>
+              </div>
               <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   Período del gráfico y del ranking
@@ -640,6 +589,7 @@ const Ingresos: React.FC = () => {
                   </span>
                 </p>
               </div>
+              </>
             ) : (
               <p className="mt-4 text-xs text-slate-400">Sin fechas para graficar.</p>
             )}
@@ -859,7 +809,6 @@ const Ingresos: React.FC = () => {
             ingresos={ingresosHistorialFiltrados}
             vehicles={vehicles}
             onDeleteIngreso={deleteIngreso}
-            initialEstadoPago={cobroPendiente ? 'PENDIENTE' : ''}
           />
         )}
       </div>

@@ -27,7 +27,15 @@ import {
   confianzaBadgeVariant,
 } from '../../utils/clasificacionGasto';
 import { useAuth } from '../../context/AuthContext';
-import { canMutateIngresos } from '../../utils/roles';
+import { canMutateIngresos, isAdminRole } from '../../utils/roles';
+import {
+  cleanIngresoComentarioParaUi,
+  cleanIngresoDetalleOperativoParaUi,
+  ingresoComentarioAuditRaw,
+  ingresoComentarioParaLista,
+} from '../../utils/ingresoImportComment';
+import { labelCategoriaIngresoExtraordinario } from '../../data/ingresoAlcanceCatalog';
+import { isIngresoExtraordinario, isIngresoVehicular } from '../../utils/ingresoAlcance';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
@@ -55,8 +63,6 @@ interface RegistrosTableProps {
   vehicles: Vehicle[];
   onDeleteIngreso?: (id: string) => Promise<boolean | void> | boolean | void;
   onDeleteGasto?: (id: string) => void;
-  /** Desde URL (ej. Inicio → cobros pendientes): preselecciona filtro estado de pago en ingresos. */
-  initialEstadoPago?: string;
   /** Muestra columna de capa financiera (tipo_gasto, confianza, etc.) en modo gastos. */
   showClasificacionFinanciera?: boolean;
   /** Acción opcional para mover un gasto de categoría desde UI. */
@@ -80,34 +86,6 @@ const PAGE_SIZE_OPTIONS = [
   { value: 25, label: '25 por página' },
   { value: 50, label: '50 por página' },
 ];
-
-const ESTADO_PAGO_OPTIONS = [
-  { value: '', label: 'Todos los estados' },
-  { value: 'PENDIENTE', label: 'Pendiente' },
-  { value: 'PAGADO', label: 'Pagado' },
-];
-
-/** Badge coloreado para estado_pago; null → no renderiza. */
-const EstadoPagoBadge: React.FC<{ estado: string | null | undefined }> = ({ estado }) => {
-  if (!estado) return null;
-  if (estado === 'PENDIENTE')
-    return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 uppercase tracking-wide">
-        Pendiente
-      </span>
-    );
-  if (estado === 'PAGADO')
-    return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 uppercase tracking-wide">
-        Pagado
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500 uppercase tracking-wide">
-      {estado}
-    </span>
-  );
-};
 
 /** Texto truncado con tooltip nativo si supera `maxLen` caracteres. */
 const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number; className?: string }> = ({
@@ -246,7 +224,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   vehicles,
   onDeleteIngreso,
   onDeleteGasto,
-  initialEstadoPago = '',
   showClasificacionFinanciera = false,
   onMoveCategoriaGasto,
   onGastoDetalleSaved,
@@ -259,10 +236,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const tenantEmpresaId = profile?.empresa_id;
   const colCount = 5;
   const [query, setQuery] = useState('');
-  const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
-  useEffect(() => {
-    if (mode === 'ingresos') setFilterEstadoPago(initialEstadoPago ?? '');
-  }, [mode, initialEstadoPago]);
   const [sortKey, setSortKey] = useState<string>('fecha');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
@@ -282,6 +255,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [gastoEditDraft, setGastoEditDraft] = useState<GastoEditDraft | null>(null);
   const [gastoSaveBusy, setGastoSaveBusy] = useState(false);
   const gastoEditInitialSerialized = useRef('');
+
+  const ingresoDetalleUi = useMemo(() => {
+    if (mode !== 'ingresos' || !viewItem) return null;
+    const ing = viewItem as Ingreso;
+    return {
+      comentario: cleanIngresoComentarioParaUi(ing.comentarios),
+      detalleOperativo: cleanIngresoDetalleOperativoParaUi(ing.detalleOperativo),
+      auditRaw: ingresoComentarioAuditRaw(ing.comentarios, ing.detalleOperativo),
+    };
+  }, [mode, viewItem]);
 
   const closeDetail = useCallback(() => {
     setViewItem(null);
@@ -473,12 +456,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const serverMode = Boolean(serverPagination);
 
   const filterInputs = useMemo(
-    () => ({ query, filterEstadoPago }),
-    [query, filterEstadoPago],
+    () => ({ query }),
+    [query],
   );
   const { deferred: deferredFilters, isRecalculating } = useDeferredRecalc(filterInputs);
   const deferredQuery = deferredFilters.query;
-  const deferredEstadoPago = deferredFilters.filterEstadoPago;
 
   const rawDataLenRef = useRef(rawData.length);
   useEffect(() => {
@@ -509,11 +491,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const filtered = useMemo(() => {
     let data = rawData;
 
-    /* ── Filtro estado_pago (solo ingresos) ── */
-    if (mode === 'ingresos' && deferredEstadoPago) {
-      data = (data as Ingreso[]).filter(i => i.estadoPago === deferredEstadoPago);
-    }
-
     /* ── Búsqueda libre ── */
     if (!deferredQuery.trim()) return data;
     const idSet = new Set(deferredVehicleSearchIds);
@@ -535,7 +512,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       const haystack = gastoSearchHaystack(item as Gasto, vehicleLabel);
       return byVehicleId || matchesSearchHaystack(haystack, deferredQuery);
     });
-  }, [rawData, deferredQuery, deferredEstadoPago, mode, vehicles, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict]);
+  }, [rawData, deferredQuery, mode, vehicles, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict]);
 
   const rowVehicleRank = (item: Ingreso | Gasto) =>
     vehicleIdSortRank('vehicleId' in item ? item.vehicleId : null);
@@ -623,7 +600,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
   const emptyMessage = (
     <div className="text-center py-10 text-gray-400 text-sm">
-      {query || filterEstadoPago
+      {query
         ? 'No se encontraron resultados para los filtros aplicados'
         : 'Sin registros disponibles'}
     </div>
@@ -688,16 +665,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           ) : null}
         </div>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-          {/* Filtro estado_pago — solo ingresos */}
-          {mode === 'ingresos' && (
-            <div className="w-full sm:w-44">
-              <Select
-                options={ESTADO_PAGO_OPTIONS}
-                value={filterEstadoPago}
-                onChange={v => { setFilterEstadoPago(String(v)); setPage(1); }}
-              />
-            </div>
-          )}
           <RegistroCountLabel
             count={filtered.length}
             pending={bootstrapPending}
@@ -741,12 +708,24 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           {paginated.map((item) => {
             const cubreIngresoMobile =
               mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+            const ingresoCommentMobile =
+              mode === 'ingresos' ? ingresoComentarioParaLista((item as Ingreso).comentarios) : null;
+            const ingresoSubtipoMobile =
+              mode === 'ingresos' ? (item as Ingreso).subTipo?.trim() : '';
+            const ingresoEsExtraordinarioMobile =
+              mode === 'ingresos' ? isIngresoExtraordinario(item as Ingreso) : false;
+            const ingresoCategoriaMobile =
+              mode === 'ingresos' && ingresoEsExtraordinarioMobile
+                ? labelCategoriaIngresoExtraordinario((item as Ingreso).subTipo)
+                : null;
             return (
             <div
               key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
               role="button"
               tabIndex={0}
-              className="w-full text-left rounded-xl border border-gray-100 bg-white p-3 shadow-sm active:scale-[0.995] transition-all cursor-pointer hover:border-gray-200 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
+              className={`w-full text-left rounded-xl border border-gray-100 bg-white shadow-sm active:scale-[0.995] transition-all cursor-pointer hover:border-gray-200 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 ${
+                mode === 'ingresos' ? 'p-2.5 space-y-1.5' : 'p-3'
+              }`}
               onClick={() => beginOpenDetail(item)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -760,21 +739,27 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   : `Abrir detalle del gasto del ${formatDate(item.fecha)}`
               }
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-gray-900">{formatDate(item.fecha)}</p>
-                  {mode === 'ingresos' && (
-                    <>
-                      {cubreIngresoMobile ? (
-                        <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
-                          Cubre: {cubreIngresoMobile}
-                        </p>
-                      ) : null}
-                    </>
+                  {mode === 'ingresos' && cubreIngresoMobile && !ingresoEsExtraordinarioMobile ? (
+                    <p className="text-[10px] text-emerald-700 font-medium mt-0.5 leading-snug">
+                      Cubre: {cubreIngresoMobile}
+                    </p>
+                  ) : null}
+                  {mode === 'ingresos' && ingresoEsExtraordinarioMobile ? (
+                    <p className="text-[10px] text-violet-700 font-medium mt-0.5 leading-snug">
+                      Ingreso de empresa
+                    </p>
+                  ) : mode === 'ingresos' ? (
+                    <p className="text-[11px] text-gray-600 mt-0.5 truncate leading-snug">
+                      {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-600 mt-0.5 truncate leading-snug">
+                      {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
+                    </p>
                   )}
-                  <p className="text-xs text-gray-600 mt-0.5 truncate">
-                    {getVehicleLabel('vehicleId' in item ? item.vehicleId : null)}
-                  </p>
                 </div>
                 <div className="shrink-0 text-right">
                   {mode === 'ingresos' ? (
@@ -793,27 +778,39 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               </div>
 
-              <div className="mt-2 flex items-start gap-2">
-                {mode === 'ingresos' ? (
-                  <Badge variant="success" size="sm">{(item as Ingreso).tipo}</Badge>
-                ) : (
-                  <p className="text-xs font-semibold text-gray-700">
-                    {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
+              {mode === 'ingresos' ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {ingresoEsExtraordinarioMobile ? (
+                    <>
+                      <Badge variant="secondary" size="sm">Extraordinario</Badge>
+                      {ingresoCategoriaMobile ? (
+                        <span className="text-[10px] text-gray-600 truncate max-w-[10rem]">{ingresoCategoriaMobile}</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <Badge variant="success" size="sm">{(item as Ingreso).tipo}</Badge>
+                      {ingresoSubtipoMobile ? (
+                        <span className="text-[10px] text-gray-500 truncate max-w-[10rem]">{ingresoSubtipoMobile}</span>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="mt-2 flex items-start gap-2">
+                    <p className="text-xs font-semibold text-gray-700">
+                      {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {(item as Gasto).motivo || (item as Gasto).categoriaReal || '—'}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Vehículo: {getVehicleIdPlaca('vehicleId' in item ? item.vehicleId : null)}
                   </p>
-                )}
-                {mode === 'ingresos' ? (
-                  (item as Ingreso).tipoOperacion?.trim() ? (
-                    <p className="text-xs text-gray-500 truncate">{(item as Ingreso).tipoOperacion}</p>
-                  ) : null
-                ) : (
-                  <p className="text-xs text-gray-500 truncate">
-                    {(item as Gasto).motivo || (item as Gasto).categoriaReal || '—'}
-                  </p>
-                )}
-              </div>
-              <p className="mt-1 text-[11px] text-gray-500">
-                Vehículo: {getVehicleIdPlaca('vehicleId' in item ? item.vehicleId : null)}
-              </p>
+                </>
+              )}
 
               {mode === 'gastos' && showClasificacionFinanciera && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -842,12 +839,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               )}
 
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <p className="text-[11px] text-gray-500 truncate">
-                  {mode === 'ingresos'
-                    ? ((item as Ingreso).comentarios || (item as Ingreso).detalleOperativo || 'Sin comentario')
-                    : ((item as Gasto).metodoPago || 'Sin método')}
-                </p>
+              <div className={`flex items-center gap-2 ${mode === 'ingresos' && !ingresoCommentMobile ? 'justify-end' : 'justify-between mt-2'}`}>
+                {mode === 'ingresos' ? (
+                  ingresoCommentMobile ? (
+                    <p className="text-[11px] text-gray-500 truncate min-w-0 flex-1">{ingresoCommentMobile}</p>
+                  ) : null
+                ) : (
+                  <p className="text-[11px] text-gray-500 truncate">
+                    {(item as Gasto).metodoPago || 'Sin método'}
+                  </p>
+                )}
                 <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {mode === 'gastos' && onMoveCategoriaGasto && (
                     <button
@@ -958,7 +959,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             ) : canShowEmpty && paginated.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="text-center py-12 text-gray-400 text-sm">
-                  {query || filterEstadoPago
+                  {query
                     ? 'No se encontraron resultados para los filtros aplicados'
                     : 'Sin registros disponibles'}
                 </td>
@@ -967,6 +968,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               paginated.map((item) => {
                 const cubreIngresoRow =
                   mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+                const ingresoEsExtraordinarioRow =
+                  mode === 'ingresos' ? isIngresoExtraordinario(item as Ingreso) : false;
+                const ingresoCategoriaRow =
+                  ingresoEsExtraordinarioRow
+                    ? labelCategoriaIngresoExtraordinario((item as Ingreso).subTipo)
+                    : null;
                 return (
                 <tr
                   key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
@@ -979,7 +986,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     {mode === 'ingresos' ? (
                       <div className="space-y-0.5">
                         <p className="font-semibold text-gray-900">{formatDate((item as Ingreso).fecha)}</p>
-                        {cubreIngresoRow ? (
+                        {cubreIngresoRow && !ingresoEsExtraordinarioRow ? (
                           <p className="text-[10px] text-emerald-800 font-medium leading-snug">
                             Cubre: {cubreIngresoRow}
                           </p>
@@ -994,10 +1001,24 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   <td className="px-2 py-3">
                     {mode === 'ingresos' ? (
                       <div>
-                        <Badge variant="success">{(item as Ingreso).tipo}</Badge>
-                        <p className="mt-0.5 inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 text-[11px] font-semibold">
-                          Vehículo: {getVehicleIdPlaca((item as Ingreso).vehicleId)}
-                        </p>
+                        {ingresoEsExtraordinarioRow ? (
+                          <>
+                            <Badge variant="secondary">Extraordinario</Badge>
+                            {ingresoCategoriaRow ? (
+                              <p className="mt-0.5 text-[11px] font-medium text-gray-700">{ingresoCategoriaRow}</p>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
+                            <Badge variant="success">{(item as Ingreso).tipo}</Badge>
+                            {(item as Ingreso).subTipo ? (
+                              <p className="mt-0.5 text-[11px] text-gray-500">{(item as Ingreso).subTipo}</p>
+                            ) : null}
+                            <p className="mt-0.5 inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 text-[11px] font-semibold">
+                              Vehículo: {getVehicleIdPlaca((item as Ingreso).vehicleId)}
+                            </p>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <div>
@@ -1388,12 +1409,28 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <dd className="text-sm text-gray-900">{formatDate(viewItem.fecha)}</dd>
               </div>
             )}
-            <div className="flex justify-between gap-4">
-              <dt className="text-xs text-gray-500 font-medium shrink-0">Vehículo</dt>
-              <dd className="text-sm text-gray-900 text-right">
-                {getVehicleIdPlaca('vehicleId' in viewItem ? viewItem.vehicleId : null)}
-              </dd>
-            </div>
+            {mode === 'ingresos' && isIngresoVehicular(viewItem as Ingreso) ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-xs text-gray-500 font-medium shrink-0">Vehículo</dt>
+                <dd className="text-sm text-gray-900 text-right">
+                  {getVehicleIdPlaca(viewItem.vehicleId)}
+                </dd>
+              </div>
+            ) : mode === 'ingresos' && isIngresoExtraordinario(viewItem as Ingreso) ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-xs text-gray-500 font-medium shrink-0">Alcance</dt>
+                <dd className="text-sm text-gray-900 text-right">
+                  <Badge variant="secondary" size="sm">Extraordinario</Badge>
+                </dd>
+              </div>
+            ) : mode === 'gastos' ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-xs text-gray-500 font-medium shrink-0">Vehículo</dt>
+                <dd className="text-sm text-gray-900 text-right">
+                  {getVehicleIdPlaca(viewItem.vehicleId)}
+                </dd>
+              </div>
+            ) : null}
 
             {mode === 'ingresos' ? (
               <>
@@ -1424,12 +1461,24 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 {/* ─ Tipo / subTipo ─ */}
                 <div className="flex justify-between gap-4">
                   <dt className="text-xs text-gray-500 font-medium shrink-0">Tipo</dt>
-                  <dd><Badge variant="success">{(viewItem as Ingreso).tipo}</Badge></dd>
+                  <dd>
+                    {isIngresoExtraordinario(viewItem as Ingreso) ? (
+                      <Badge variant="secondary">Extraordinario</Badge>
+                    ) : (
+                      <Badge variant="success">{(viewItem as Ingreso).tipo}</Badge>
+                    )}
+                  </dd>
                 </div>
                 {(viewItem as Ingreso).subTipo && (
                   <div className="flex justify-between gap-4">
-                    <dt className="text-xs text-gray-500 font-medium shrink-0">Sub tipo</dt>
-                    <dd className="text-sm text-gray-900 text-right">{(viewItem as Ingreso).subTipo}</dd>
+                    <dt className="text-xs text-gray-500 font-medium shrink-0">
+                      {isIngresoExtraordinario(viewItem as Ingreso) ? 'Categoría' : 'Sub tipo'}
+                    </dt>
+                    <dd className="text-sm text-gray-900 text-right">
+                      {isIngresoExtraordinario(viewItem as Ingreso)
+                        ? labelCategoriaIngresoExtraordinario((viewItem as Ingreso).subTipo)
+                        : (viewItem as Ingreso).subTipo}
+                    </dd>
                   </div>
                 )}
 
@@ -1440,17 +1489,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     <dd className="text-sm text-gray-900 text-right">{(viewItem as Ingreso).tipoOperacion}</dd>
                   </div>
                 )}
-                {(viewItem as Ingreso).estadoPago && (
-                  <div className="flex justify-between gap-4 items-center">
-                    <dt className="text-xs text-gray-500 font-medium shrink-0">Estado pago</dt>
-                    <dd><EstadoPagoBadge estado={(viewItem as Ingreso).estadoPago} /></dd>
-                  </div>
-                )}
-                {(viewItem as Ingreso).detalleOperativo && (
+                {ingresoDetalleUi?.detalleOperativo && (
                   <div>
                     <dt className="text-xs text-gray-500 font-medium mb-1">Detalle operativo</dt>
                     <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
-                      {(viewItem as Ingreso).detalleOperativo}
+                      {ingresoDetalleUi.detalleOperativo}
                     </dd>
                   </div>
                 )}
@@ -1591,15 +1634,31 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             </div>
 
             {/* ─ Comentarios ─ */}
-            {viewItem.comentarios?.trim() && (
+            {mode === 'ingresos' ? (
+              ingresoDetalleUi?.comentario ? (
+                <div>
+                  <dt className="text-xs text-gray-500 font-medium mb-1">Comentarios</dt>
+                  <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
+                    {ingresoDetalleUi.comentario}
+                  </dd>
+                </div>
+              ) : null
+            ) : (
+              viewItem.comentarios?.trim() && (
+                <div>
+                  <dt className="text-xs text-gray-500 font-medium mb-1">Observaciones</dt>
+                  <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
+                    {cleanGastoComentario((viewItem as Gasto).comentarios)}
+                  </dd>
+                </div>
+              )
+            )}
+
+            {mode === 'ingresos' && isAdminRole(role) && ingresoDetalleUi?.auditRaw && (
               <div>
-                <dt className="text-xs text-gray-500 font-medium mb-1">
-                  {mode === 'gastos' ? 'Observaciones' : 'Comentarios'}
-                </dt>
-                <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
-                  {mode === 'gastos'
-                    ? cleanGastoComentario((viewItem as Gasto).comentarios)
-                    : viewItem.comentarios}
+                <dt className="text-xs text-gray-500 font-medium mb-1">Notas técnicas (importación)</dt>
+                <dd className="text-xs text-gray-500 bg-slate-100 rounded-lg p-3 break-words font-mono whitespace-pre-wrap">
+                  {ingresoDetalleUi.auditRaw}
                 </dd>
               </div>
             )}

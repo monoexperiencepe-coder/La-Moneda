@@ -1,13 +1,5 @@
 import type { Gasto, Ingreso } from '../data/types';
 
-function inferEstadoPago(comentarios: string): string | null {
-  const u = comentarios.trim().toUpperCase();
-  if (!u) return null;
-  if (/(PENDIENTE|DEBE|POR COBRAR|POR PAGAR)/.test(u)) return 'PENDIENTE';
-  if (/(PAGADO|COBRADO|LIQUIDADO)/.test(u)) return 'PAGADO';
-  return null;
-}
-
 /** Une detalle de unidad (Excel o vehículo) con comentarios para no perder contexto. */
 export function joinDetalleOperativo(detalleDelAuto: string | null | undefined, comentarios: string): string | null {
   const a = (detalleDelAuto ?? '').trim();
@@ -23,12 +15,11 @@ export function enrichIngresoOperativo(input: {
   tipo: string;
   subTipo: string | null;
   detalleDelAuto?: string | null;
-}): Pick<Ingreso, 'detalleOperativo' | 'tipoOperacion' | 'estadoPago'> {
+}): Pick<Ingreso, 'detalleOperativo' | 'tipoOperacion'> {
   const tipoOperacion = [input.tipo.trim(), (input.subTipo ?? '').trim()].filter(Boolean).join(' | ') || null;
   return {
     detalleOperativo: joinDetalleOperativo(input.detalleDelAuto, input.comentarios),
     tipoOperacion,
-    estadoPago: inferEstadoPago(input.comentarios),
   };
 }
 

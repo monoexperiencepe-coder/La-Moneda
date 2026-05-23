@@ -174,23 +174,18 @@ const Inicio: React.FC = () => {
   );
 
   /* Alertas */
-  const cobrosPendientes = useMemo(
-    () => ingresos.filter((i) => (i.estadoPago ?? '').toUpperCase() === 'PENDIENTE'),
-    [ingresos],
-  );
   const queRevisar = useMemo(
     () => computeTodayReview(vehicles, controlFechas, ingresos, pendientes, DIAS_ALERTA_SIN_INGRESO, kilometrajes),
     [vehicles, controlFechas, ingresos, pendientes, kilometrajes],
   );
   const totalAlertas = useMemo(
     () =>
-      cobrosPendientes.length +
       queRevisar.vencidosCount +
       queRevisar.porVencerCount +
       queRevisar.sinIngresoCount +
       queRevisar.pendientesAltaActivosCount +
       queRevisar.kmMantVariacionAlertCount,
-    [cobrosPendientes, queRevisar],
+    [queRevisar],
   );
 
   /* Sugerencias del buscador */
@@ -222,11 +217,6 @@ const Inicio: React.FC = () => {
   };
 
   /* Datos para vista alertas */
-  const cobrosLines = useMemo(
-    () => cobrosPendientes.slice(0, 3).map((i) =>
-      `${getVehicleLabel(i.vehicleId)} · ${formatCurrency(ingresoMontoPEN(i))} · ${i.fecha}`),
-    [cobrosPendientes, getVehicleLabel],
-  );
   const vencidosLines  = useMemo(() => queRevisar.muestraVencidos.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
   const porVencerLines = useMemo(() => queRevisar.muestraPorVencer.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
   const sinIngresoLines = useMemo(() => queRevisar.muestraSinIngreso.slice(0, 3).map((it) => `${it.placa} · ${it.detail}`), [queRevisar]);
@@ -278,9 +268,6 @@ const Inicio: React.FC = () => {
           </div>
         </div>
 
-        <WorkBlock title="Cobros pendientes" count={cobrosPendientes.length}
-          subtitle="Ingresos con estado de pago pendiente" lines={cobrosLines}
-          onVer={() => navigate('/finanzas/ingresos?cobro=pendiente')} accent="amber" />
         <WorkBlock title="Documentos vencidos" count={queRevisar.vencidosCount}
           subtitle="Control de fechas ya vencidos" lines={vencidosLines}
           onVer={() => navigate('/operaciones/docs?doc=vencidos')} accent="red" />
@@ -481,7 +468,7 @@ const Inicio: React.FC = () => {
               <p className="text-[11px] text-gray-500 mt-0.5">
                 {totalAlertas > 0
                   ? `${totalAlertas} alerta${totalAlertas !== 1 ? 's' : ''} activa${totalAlertas !== 1 ? 's' : ''}`
-                  : 'Cobros · docs · pendientes'}
+                  : 'Docs · pendientes · flota'}
               </p>
             </div>
           </div>

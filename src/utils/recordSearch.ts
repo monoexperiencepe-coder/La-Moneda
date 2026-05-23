@@ -128,7 +128,6 @@ export function ingresoSearchHaystack(
     comentarios: string;
     detalleOperativo?: string | null;
     tipoOperacion?: string | null;
-    estadoPago?: string | null;
     moneda?: string | null;
     pagadoA?: string | null;
   },
@@ -146,7 +145,6 @@ export function ingresoSearchHaystack(
     i.comentarios,
     i.detalleOperativo,
     i.tipoOperacion,
-    i.estadoPago,
     i.moneda,
     i.pagadoA,
     vehicleLabel,

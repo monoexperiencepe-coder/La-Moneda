@@ -175,7 +175,7 @@ const ControlGlobal: React.FC = () => {
               {operativeAlerts.length !== 1 ? 's' : ''}
             </p>
             <p className="text-xs text-amber-800 mt-0.5">
-              {operativeAlertCounts.INGRESO_PENDIENTE} cobro(s) pendiente(s) · {operativeAlertCounts.VENCIMIENTO} vencimiento(s) ·{' '}
+              {operativeAlertCounts.VENCIMIENTO} vencimiento(s) ·{' '}
               {operativeAlertCounts.KM_MANTENIMIENTO} km sin mantenimiento · {operativeAlertCounts.SIN_INGRESOS} vehículo(s) sin ingresos recientes
             </p>
           </div>
