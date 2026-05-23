@@ -15,6 +15,7 @@ import {
   isFinancialOperadorRestricted,
   permissionUserFromAuth,
 } from '../utils/permissions';
+import { logRlsDebugContext } from '../services/rlsDebugService';
 
 export interface UserProfile {
   id: string;
@@ -112,6 +113,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const p = await fetchProfile(session.user.id);
     setProfile(p);
     setIsLoading(false);
+    if (import.meta.env.DEV && p) {
+      void logRlsDebugContext('post-login').catch(() => undefined);
+      console.info('[auth] perfil cargado', {
+        authUserId: session.user.id,
+        profileId: p.id,
+        profileEmpresaId: p.empresa_id,
+        profileRole: p.role,
+        profileEmail: p.email,
+        idsMatch: session.user.id === p.id,
+      });
+    }
   }, []);
 
   useEffect(() => {

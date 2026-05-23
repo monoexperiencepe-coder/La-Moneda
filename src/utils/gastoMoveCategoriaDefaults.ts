@@ -81,7 +81,7 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
   }
 }
 
-/** Ajusta `subtipo_gasto` al catálogo de la categoría destino (nunca deja valores de otra categoría). */
+/** Ajusta `subtipo_gasto` al catálogo de la categoría destino; preserva históricos reconocibles. */
 export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): string {
   const trimmed = raw.trim();
   const valid = getValidSubtiposForTipoGastoFinanza(tipoGasto);
@@ -90,6 +90,7 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
   if (tipoGasto.trim() === 'representacion_interna') {
     const n = normalizeRepresentacionInternaSubtipo(trimmed);
     if (n && valid.has(n)) return n;
+    if (trimmed) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
@@ -100,6 +101,7 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
     for (const v of valid) {
       if (v.toLowerCase() === lower) return v;
     }
+    if (trimmed) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
@@ -109,5 +111,5 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
   for (const v of valid) {
     if (v.toLowerCase() === lower) return v;
   }
-  return getDefaultSubtipoForTipoGasto(tipoGasto);
+  return trimmed;
 }

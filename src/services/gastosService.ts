@@ -7,6 +7,9 @@ import { devPerfAsync } from '../utils/devPerf';
 import { mapGastosFinancialSummaryRow, type GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
+import { logRlsDebugContext, fetchDebugCanUpdateGastoRow } from './rlsDebugService';
+import type { VehicleIdLike } from '../utils/vehicleId';
+import { normalizeGastoVehicleFkForDb } from '../utils/vehicleId';
 import { getDetalleMetodoByLabel } from '../data/factCatalog';
 import {
   deepSanitizeUuidPoisonInJson,
@@ -15,6 +18,7 @@ import {
   vehicleIdAuditScalar,
   cleanUuid,
 } from '../utils/uuidColumn';
+import { isOperadorVisibleTipoGasto } from '../utils/permissions';
 import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
 
 const MSG_GASTO_ID_INVALID =
@@ -63,6 +67,12 @@ export interface GastoAuditMeta {
   sourceAction?: GastoAuditSourceAction;
 }
 
+/** Opciones de ejecución (p. ej. clasificación operador sin SELECT post-move). */
+export type UpdateGastoCategoriaManualOptions = {
+  /** Operador: UPDATE sin `.select()` si destino no es tab visible (globales/pendiente). */
+  operatorClassifyMode?: boolean;
+};
+
 export type UpdateGastoCategoriaManualFailure = {
   ok: false;
   message: string;
@@ -80,7 +90,7 @@ export type UpdateGastoCategoriaManualFailure = {
 };
 
 export type UpdateGastoCategoriaManualResult =
-  | { ok: true; gasto: Gasto }
+  | { ok: true; gasto: Gasto; movedOutOfView?: boolean }
   | UpdateGastoCategoriaManualFailure;
 
 async function fetchGastoEmpresaIdForDiagnostics(id: string): Promise<string | null> {
@@ -446,14 +456,15 @@ function pickGastoCategoriaManualUpdatePayload(row: Record<string, unknown>): Re
   return out;
 }
 
-/** Diagnóstico temporal (dev + prod): detecta `0` / `"0"` en el payload del UPDATE. */
+/** Diagnóstico PRE-UPDATE: payload exacto enviado a PostgREST. */
 function logGastoCategoriaMoveUpdateDiagnostics(
   id: string,
+  empresaIdFilter: string,
   patch: GastoCategoriaManualPatch,
   updateRow: Record<string, unknown>,
+  extra?: { empresaIdFrontend?: string; empresaIdRow?: string | null },
 ): void {
-  const tipoDest = patch.tipo_gasto ?? '(sin tipo en patch)';
-  const subDest = patch.subtipo_gasto ?? '(sin subtipo en patch)';
+  const payloadKeys = Object.keys(updateRow);
   const zeroLike: { key: string; value: unknown; typeof: string }[] = [];
   for (const [k, v] of Object.entries(updateRow)) {
     if (v === 0 || v === '0' || (typeof v === 'bigint' && v === BigInt(0))) {
@@ -462,15 +473,35 @@ function logGastoCategoriaMoveUpdateDiagnostics(
   }
   const nestedZero = JSON.stringify(updateRow).includes('"vehicle_id":0')
     || JSON.stringify(updateRow).includes('"vehicle_id":"0"');
-  console.error('[updateGastoCategoriaManual PRE-UPDATE]', {
+
+  const entry = {
     id,
-    tipo_gasto_destino: tipoDest,
-    subtipo_gasto_destino: subDest,
+    empresa_id_filtro: empresaIdFilter,
+    empresaIdFrontend: extra?.empresaIdFrontend ?? null,
+    empresaIdRow: extra?.empresaIdRow ?? null,
+    updatePayload: updateRow,
+    payloadKeys,
+    payloadJson: JSON.stringify(updateRow),
+    tipo_gasto_destino: updateRow.tipo_gasto ?? patch.tipo_gasto ?? null,
+    subtipo_gasto_destino: updateRow.subtipo_gasto ?? patch.subtipo_gasto ?? null,
+    vehicle_id: updateRow.vehicle_id ?? null,
+    es_global_flota: updateRow.es_global_flota ?? null,
+    revisado_por: updateRow.revisado_por ?? null,
+    revisado_at: updateRow.revisado_at ?? null,
+    clasificacion_manual: updateRow.clasificacion_manual ?? null,
+    origen_clasificacion: updateRow.origen_clasificacion ?? null,
+    requiere_revision: updateRow.requiere_revision ?? null,
+    excel_extra_present: Object.prototype.hasOwnProperty.call(updateRow, 'excel_extra'),
+    excel_extra_keys:
+      updateRow.excel_extra != null && typeof updateRow.excel_extra === 'object'
+        ? Object.keys(updateRow.excel_extra as Record<string, unknown>)
+        : null,
     patch_recibido: patch,
-    updateRow_final: updateRow,
     claves_valor_0_o_string_0: zeroLike,
     posible_vehicle_id_cero_en_json: nestedZero,
-  });
+  };
+
+  console.warn('[updateGastoCategoriaManual PRE-UPDATE]', entry);
   if (zeroLike.length > 0) {
     console.table(zeroLike);
   }
@@ -580,6 +611,80 @@ export async function updateClasificacionGasto(
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
 
+function vehicleIdForClassifyRpc(v: unknown): number | null {
+  const n = normalizeGastoVehicleFkForDb(v as VehicleIdLike);
+  if (n == null) return null;
+  if (typeof n === 'number') return n;
+  if (typeof n === 'string' && /^[1-9]\d*$/.test(n)) return Number(n);
+  return null;
+}
+
+type ClassifyGastoRpcResult = {
+  ok: boolean;
+  moved_out_of_view?: boolean;
+  error?: string;
+  gasto_id?: string;
+  new_tipo?: string;
+  new_subtipo?: string | null;
+};
+
+async function classifyGastoViaOperadorRpc(
+  gastoId: string,
+  empresaId: string,
+  updatePayload: Record<string, unknown>,
+): Promise<{ ok: true; movedOutOfView: boolean } | { ok: false; message: string }> {
+  const tipo = String(updatePayload.tipo_gasto ?? '').trim();
+  if (!tipo) {
+    return { ok: false, message: 'tipo_gasto destino vacío' };
+  }
+
+  const { data, error } = await supabase.rpc('classify_gasto_operador', {
+    p_gasto_id: gastoId,
+    p_empresa_id: empresaId,
+    p_tipo_gasto: tipo,
+    p_subtipo_gasto:
+      updatePayload.subtipo_gasto != null ? String(updatePayload.subtipo_gasto) : null,
+    p_vehicle_id: vehicleIdForClassifyRpc(updatePayload.vehicle_id),
+    p_es_global_flota:
+      typeof updatePayload.es_global_flota === 'boolean' ? updatePayload.es_global_flota : true,
+    p_clasificacion_manual:
+      typeof updatePayload.clasificacion_manual === 'boolean'
+        ? updatePayload.clasificacion_manual
+        : null,
+    p_requiere_revision:
+      typeof updatePayload.requiere_revision === 'boolean' ? updatePayload.requiere_revision : null,
+    p_revisado_por:
+      updatePayload.revisado_por != null ? String(updatePayload.revisado_por) : null,
+    p_revisado_at:
+      updatePayload.revisado_at != null ? String(updatePayload.revisado_at) : null,
+    p_origen_clasificacion:
+      updatePayload.origen_clasificacion != null ? String(updatePayload.origen_clasificacion) : null,
+    p_excel_extra:
+      updatePayload.excel_extra != null
+        ? (updatePayload.excel_extra as Record<string, unknown>)
+        : null,
+  });
+
+  if (error) {
+    return { ok: false, message: error.message || 'RPC classify_gasto_operador falló' };
+  }
+
+  const row = (data ?? {}) as ClassifyGastoRpcResult;
+  if (!row.ok) {
+    return { ok: false, message: row.error || 'classify_gasto_operador rechazó la operación' };
+  }
+
+  return { ok: true, movedOutOfView: row.moved_out_of_view === true };
+}
+
+function synthesizeGastoRowAfterPatch(
+  before: Record<string, unknown>,
+  updatePayload: Record<string, unknown>,
+  id: string,
+): Gasto {
+  return mapGastoRow({ ...before, ...updatePayload, id });
+}
+
 /**
  * Corrige manualmente la categoría/subtipo/vehículo de un gasto existente.
  * No crea registros nuevos; solo actualiza la fila actual.
@@ -590,6 +695,7 @@ export async function updateGastoCategoriaManual(
   patch: GastoCategoriaManualPatch,
   meta: GastoAuditMeta = {},
   tenantEmpresaId?: string | null,
+  options?: UpdateGastoCategoriaManualOptions,
 ): Promise<UpdateGastoCategoriaManualResult> {
   const idNorm = normalizeGastoIdParam(id);
   const empresaIdFrontend = resolveTenantId(tenantEmpresaId) || '';
@@ -688,19 +794,94 @@ export async function updateGastoCategoriaManual(
 
   const before = await fetchGastoRawById(idNorm, empresaUuid);
 
-  logGastoCategoriaMoveUpdateDiagnostics(idNorm, patch, updatePayload);
+  logGastoCategoriaMoveUpdateDiagnostics(idNorm, empresaUuid, patch, updatePayload, {
+    empresaIdFrontend,
+    empresaIdRow,
+  });
   debugMoveGastoPayload(idNorm, patch, updatePayload);
 
-  const { data, error } = await supabase
-    .from('gastos')
-    .update(updatePayload)
-    .eq('id', idNorm)
-    .eq('empresa_id', empresaUuid)
-    .select('*')
-    .maybeSingle();
+  const operatorClassify = options?.operatorClassifyMode === true;
+  const destTipo =
+    patch.tipo_gasto != null && String(patch.tipo_gasto).trim() !== ''
+      ? String(patch.tipo_gasto).trim()
+      : before != null
+        ? String((before as Record<string, unknown>).tipo_gasto ?? '').trim()
+        : '';
+  const skipSelectForOperador =
+    operatorClassify && destTipo.length > 0 && !isOperadorVisibleTipoGasto(destTipo);
+
+  if (operatorClassify) {
+    const rpcRes = await classifyGastoViaOperadorRpc(idNorm, empresaUuid, updatePayload);
+    if (!rpcRes.ok) {
+      void fetchDebugCanUpdateGastoRow(
+        idNorm,
+        destTipo || 'operativo_flota_general',
+        patch.subtipo_gasto != null ? String(patch.subtipo_gasto) : null,
+      ).then((rowDiag) => {
+        console.warn('[updateGastoCategoriaManual RPC] debug_can_update_gasto_row', rowDiag);
+      }).catch(() => undefined);
+      return fail({
+        message: rpcRes.message,
+        gastoId: idNorm,
+        empresaIdFrontend,
+        empresaIdRow,
+        updatePayload,
+        patchSummary,
+      });
+    }
+    if (!before) {
+      return fail({
+        message: 'No se pudo cargar el gasto antes de clasificar (RLS o id incorrecto).',
+        gastoId: idNorm,
+        empresaIdFrontend,
+        empresaIdRow,
+        updatePayload,
+        patchSummary,
+      });
+    }
+    const afterSynthetic = { ...before, ...updatePayload };
+    await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+    return {
+      ok: true,
+      gasto: synthesizeGastoRowAfterPatch(before, updatePayload, idNorm),
+      movedOutOfView: rpcRes.movedOutOfView,
+    };
+  }
+
+  let data: Record<string, unknown> | null = null;
+  let error: { message: string; code?: string; details?: string; hint?: string } | null = null;
+
+  if (skipSelectForOperador) {
+    const res = await supabase
+      .from('gastos')
+      .update(updatePayload)
+      .eq('id', idNorm)
+      .eq('empresa_id', empresaUuid);
+    error = res.error;
+  } else {
+    const res = await supabase
+      .from('gastos')
+      .update(updatePayload)
+      .eq('id', idNorm)
+      .eq('empresa_id', empresaUuid)
+      .select('*')
+      .maybeSingle();
+    data = (res.data as Record<string, unknown> | null) ?? null;
+    error = res.error;
+  }
 
   if (error) {
     logPostgrestError('gastos updateGastoCategoriaManual UPDATE', error);
+    if (error.code === '42501' || /permission denied|403|row-level security/i.test(error.message)) {
+      void logRlsDebugContext('updateGastoCategoriaManual-403').catch(() => undefined);
+      void fetchDebugCanUpdateGastoRow(
+        idNorm,
+        destTipo || 'operativo_flota_general',
+        patch.subtipo_gasto != null ? String(patch.subtipo_gasto) : null,
+      ).then((rowDiag) => {
+        console.warn('[updateGastoCategoriaManual 403] debug_can_update_gasto_row', rowDiag);
+      }).catch(() => undefined);
+    }
     return fail({
       message: error.message || 'Error de Supabase al actualizar el gasto.',
       gastoId: idNorm,
@@ -718,6 +899,15 @@ export async function updateGastoCategoriaManual(
   }
 
   if (!data) {
+    if (skipSelectForOperador && before) {
+      const afterSynthetic = { ...before, ...updatePayload };
+      await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+      return {
+        ok: true,
+        gasto: synthesizeGastoRowAfterPatch(before, updatePayload, idNorm),
+        movedOutOfView: true,
+      };
+    }
     const hint =
       before == null
         ? 'No existe fila visible con este id y empresa_id (revisa RLS o que el id sea correcto).'
@@ -746,6 +936,8 @@ export function sqlTipoGastoVariants(canonicalTipo: string): string[] {
   switch (canonicalTipo) {
     case 'gastos_globales':
       return ['gastos_globales', 'operativo_flota_global'];
+    case 'operativo_flota_general':
+      return ['operativo_flota_general'];
     case 'financiero_prestamo':
       return ['financiero_prestamo', 'financiero'];
     case 'inversion_compra':

@@ -17,14 +17,16 @@ export type MoveGastoCategoriaInput = {
   vehicles: Vehicle[];
   /** Preferir `profile.empresa_id` (RLS). */
   tenantEmpresaId?: string | null;
+  /** Operador: UPDATE sin SELECT si destino no es visible en sus tabs. */
+  operatorClassifyMode?: boolean;
 };
 
 export type MoveGastoCategoriaResult =
-  | { ok: true; gasto: Gasto; prevTipo: string | null; prevSub: string | null }
+  | { ok: true; gasto: Gasto; prevTipo: string | null; prevSub: string | null; movedOutOfView?: boolean }
   | { ok: false; message: string };
 
 export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promise<MoveGastoCategoriaResult> {
-  const { gasto, toTipoGasto, toSubtipoGasto, vehicleId, motivo = '', vehicles, tenantEmpresaId } = input;
+  const { gasto, toTipoGasto, toSubtipoGasto, vehicleId, motivo = '', vehicles, tenantEmpresaId, operatorClassifyMode } = input;
   const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto);
 
   let toVehicleId: number | null = null;
@@ -83,11 +85,18 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
       sourceAction: 'move_category',
     },
     tenantEmpresaId,
+    { operatorClassifyMode },
   );
 
   if (!result.ok) {
     return { ok: false, message: result.message };
   }
 
-  return { ok: true, gasto: result.gasto, prevTipo, prevSub };
+  return {
+    ok: true,
+    gasto: result.gasto,
+    prevTipo,
+    prevSub,
+    movedOutOfView: result.movedOutOfView,
+  };
 }

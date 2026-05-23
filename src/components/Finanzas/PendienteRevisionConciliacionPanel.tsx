@@ -49,7 +49,10 @@ type Props = {
   canMoveToTipo?: (tipo: string) => boolean;
   userLabel: string;
   categoriaOptions: CategoriaMovimientoOption[];
-  upsertGasto: (g: Gasto) => void;
+  upsertGasto: (g: Gasto, opts?: { reloadSummary?: boolean }) => void;
+  removeGastoLocal?: (id: string, opts?: { reloadSummary?: boolean }) => void;
+  /** Operador restringido: UPDATE sin SELECT si destino no es tab visible. */
+  operatorClassifyMode?: boolean;
   toast: ToastApi;
   showUndoToast: (params: ShowUndoToastParams) => void;
   getVehicleLabel: (vehicleId: number | null) => string;
@@ -92,6 +95,8 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   userLabel,
   categoriaOptions,
   upsertGasto,
+  removeGastoLocal,
+  operatorClassifyMode = false,
   toast,
   showUndoToast,
   getVehicleLabel,
@@ -214,6 +219,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         motivo,
         vehicles,
         tenantEmpresaId,
+        operatorClassifyMode,
       });
 
       if (!res.ok) {
@@ -221,7 +227,13 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         return false;
       }
 
-      upsertGasto(res.gasto);
+      const localSyncSilent = operatorClassifyMode ? { reloadSummary: false as const } : undefined;
+
+      if (res.movedOutOfView) {
+        removeGastoLocal?.(String(gasto.id), localSyncSilent);
+      } else {
+        upsertGasto(res.gasto, localSyncSilent);
+      }
       const subFinal = res.gasto.subtipo_gasto ?? subtipo;
       setConcState(
         recordConciliacionMove({
@@ -262,15 +274,18 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                 sourceAction: 'undo_move_category',
               },
               tenantEmpresaId,
+              { operatorClassifyMode },
             );
             if (!rev.ok) throw new Error('undo_failed');
-            upsertGasto(rev.gasto);
+            const undoSync = operatorClassifyMode ? { reloadSummary: false as const } : undefined;
+            if (rev.movedOutOfView) removeGastoLocal?.(String(gasto.id), undoSync);
+            else upsertGasto(rev.gasto, undoSync);
           },
         },
       });
       return true;
     },
-    [vehicles, upsertGasto, toast, showUndoToast, userLabel, canMoveToTipo],
+    [vehicles, upsertGasto, removeGastoLocal, operatorClassifyMode, toast, showUndoToast, userLabel, canMoveToTipo, tenantEmpresaId],
   );
 
   const handleQuickApply = async (advance: boolean) => {

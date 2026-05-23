@@ -213,7 +213,7 @@ export const useRegistros = () => {
   const [isLoadingGastosFull, setIsLoadingGastosFull] = useState(false);
   const [gastosFinancialSummary, setGastosFinancialSummary] = useState<GastosFinancialSummary | null>(null);
   const [isLoadingGastosSummary, setIsLoadingGastosSummary] = useState(false);
-  const reloadGastosSummaryRef = useRef<() => Promise<void>>(async () => {});
+  const reloadGastosSummaryRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
 
   /** Vacía datos tenant/financieros al cerrar sesión o cambiar de usuario (evita mezclar operador ↔ admin). */
   const clearFinancialRegistrosState = useCallback(() => {
@@ -367,13 +367,13 @@ export const useRegistros = () => {
   /** @deprecated Alias interno — bootstrap reciente. */
   const loadGastosFromSupabase = loadGastosBootstrap;
 
-  /** Agregados financieros globales (RPC; no trae filas). */
-  const reloadGastosFinancialSummary = useCallback(async () => {
+  /** Agregados financieros globales (RPC; no trae filas). `silent` evita spinner de summary. */
+  const reloadGastosFinancialSummary = useCallback(async (opts?: { silent?: boolean }) => {
     if (!profile?.empresa_id) {
       setGastosFinancialSummary(null);
       return;
     }
-    setIsLoadingGastosSummary(true);
+    if (!opts?.silent) setIsLoadingGastosSummary(true);
     try {
       const summary = await fetchGastosFinancialSummary(profile.empresa_id);
       setGastosFinancialSummary(summary);
@@ -381,7 +381,7 @@ export const useRegistros = () => {
         console.log('[summary-context]', summary);
       }
     } finally {
-      setIsLoadingGastosSummary(false);
+      if (!opts?.silent) setIsLoadingGastosSummary(false);
     }
   }, [profile?.empresa_id]);
 
@@ -634,7 +634,7 @@ export const useRegistros = () => {
         }
         return merged;
       });
-      void reloadGastosSummaryRef.current();
+      void reloadGastosSummaryRef.current({ silent: true });
       return created;
     },
     [vehicles, profile?.empresa_id],
@@ -849,19 +849,23 @@ export const useRegistros = () => {
     void reloadGastosSummaryRef.current();
   }, [profile?.empresa_id]);
 
-  const upsertGasto = useCallback((row: Gasto) => {
+  const upsertGasto = useCallback((row: Gasto, opts?: { reloadSummary?: boolean }) => {
     setGastos((prev) => {
       if (import.meta.env.DEV) {
         console.debug('[useRegistros upsertGasto]', { prevLen: prev.length, id: row.id });
       }
       return mergeGastoSorted(prev, row);
     });
-    void reloadGastosSummaryRef.current();
+    if (opts?.reloadSummary !== false) {
+      void reloadGastosSummaryRef.current({ silent: true });
+    }
   }, []);
 
-  const removeGastoLocal = useCallback((id: string) => {
+  const removeGastoLocal = useCallback((id: string, opts?: { reloadSummary?: boolean }) => {
     setGastos((prev) => prev.filter((g) => String(g.id) !== String(id)));
-    void reloadGastosSummaryRef.current();
+    if (opts?.reloadSummary !== false) {
+      void reloadGastosSummaryRef.current({ silent: true });
+    }
   }, []);
 
   const upsertIngreso = useCallback((row: Ingreso) => {

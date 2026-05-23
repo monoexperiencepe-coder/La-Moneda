@@ -189,6 +189,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     vehicles,
     deleteGasto,
     upsertGasto,
+    removeGastoLocal,
     toast,
     addGasto,
     showUndoToast,
@@ -667,6 +668,38 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [tab, historyYear, historyMonth, filterSubtipoGasto],
   );
 
+  const removeGastoFromHistorialLocal = useCallback((id: string) => {
+    const sid = String(id);
+    setHistorialRows((prev) => {
+      const next = prev.filter((g) => String(g.id) !== sid);
+      if (next.length !== prev.length) {
+        setHistorialTotal((t) => Math.max(0, t - 1));
+      }
+      return next;
+    });
+  }, []);
+
+  const syncHistorialRowLocal = useCallback(
+    (gasto: Gasto) => {
+      const id = String(gasto.id);
+      if (!gastoVisibleEnHistorial(gasto)) {
+        removeGastoFromHistorialLocal(id);
+        return;
+      }
+      setHistorialRows((prev) => {
+        const idx = prev.findIndex((g) => String(g.id) === id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = gasto;
+          return next;
+        }
+        setHistorialTotal((t) => t + 1);
+        return [gasto, ...prev];
+      });
+    },
+    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal],
+  );
+
   const handleRegistrarGasto = useCallback(
     async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
       const created = await addGasto(data);
@@ -901,10 +934,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [moveTarget?.vehicleId, vehicles],
   );
 
-  const closeMoveModal = () => {
-    if (moveSaving) return;
+  const resetMoveModal = useCallback(() => {
     setMoveTarget(null);
     setMoveMotivo('');
+  }, []);
+
+  const closeMoveModal = () => {
+    if (moveSaving) return;
+    resetMoveModal();
   };
 
   const isOperativoVehiculoTarget = moveTipo === 'operativo_vehiculo';
@@ -984,7 +1021,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       toVehicleId = n;
     }
     const subtipoFinal =
-      normalizeSubtipoForTipoGasto(moveTipo, moveSubtipo).trim()
+      moveSubtipo.trim()
       || getDefaultSubtipoForTipoGasto(moveTipo)
       || null;
     const changedAt = new Date().toISOString();
@@ -1024,7 +1061,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       }, {
         reason: moveMotivo.trim() || 'Mover gasto de categoría desde UI',
         sourceAction: 'move_category',
-      }, tenantEmpresaId);
+      }, tenantEmpresaId, { operatorClassifyMode: isFinancialOperador });
       if (!result.ok) {
         console.error('[Mover categoría] Detalle técnico', {
           message: result.message,
@@ -1042,13 +1079,37 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         toast.error('No se pudo mover la categoría', short.length > 180 ? `${short.slice(0, 177)}…` : short);
         return;
       }
-      upsertGasto(result.gasto);
-      if (!gastoVisibleEnHistorial(result.gasto)) {
-        toast.info('Registro guardado, pero no aparece por el filtro actual.');
+
+      const localSyncSilent = { reloadSummary: false as const };
+      resetMoveModal();
+
+      if (isFinancialOperador) {
+        if (result.movedOutOfView) {
+          removeGastoLocal(String(moveTarget.id), localSyncSilent);
+          removeGastoFromHistorialLocal(String(moveTarget.id));
+        } else {
+          upsertGasto(result.gasto, localSyncSilent);
+          syncHistorialRowLocal(result.gasto);
+        }
+        toast.success('Gasto clasificado correctamente');
+      } else if (result.movedOutOfView) {
+        removeGastoLocal(String(moveTarget.id));
+        toast.info(
+          'Gasto clasificado',
+          'La categoría asignada ya no aparece en tu listado (solo globales y pendiente de revisión).',
+        );
+      } else {
+        upsertGasto(result.gasto);
+        if (!gastoVisibleEnHistorial(result.gasto)) {
+          toast.info('Registro guardado, pero no aparece por el filtro actual.');
+        }
       }
+
       showUndoToast({
         message: 'Categoría movida',
-        detail: 'El gasto se movió correctamente.',
+        detail: result.movedOutOfView
+          ? 'Clasificación guardada; el gasto salió de tu vista.'
+          : 'El gasto se movió correctamente.',
         undoAction: {
           type: 'move',
           label: 'Revertir mover categoría',
@@ -1074,15 +1135,25 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                 sourceAction: 'undo_move_category',
               },
               tenantEmpresaId,
+              { operatorClassifyMode: isFinancialOperador },
             );
             if (!rev.ok) throw new Error('undo_failed');
-            upsertGasto(rev.gasto);
+            const undoSync = isFinancialOperador ? localSyncSilent : undefined;
+            if (rev.movedOutOfView) {
+              removeGastoLocal(String(gastoId), undoSync);
+              if (isFinancialOperador) removeGastoFromHistorialLocal(String(gastoId));
+            } else {
+              upsertGasto(rev.gasto, undoSync);
+              if (isFinancialOperador) syncHistorialRowLocal(rev.gasto);
+            }
           },
         },
       });
-      closeMoveModal();
-      bumpHistorial();
-      void reloadGastosOnly();
+
+      if (!isFinancialOperador) {
+        bumpHistorial();
+        void reloadGastosOnly();
+      }
     } catch (e) {
       console.error('[Mover categoría] Excepción no controlada', e);
       toast.error('Error al mover categoría', e instanceof Error ? e.message : 'Error inesperado.');
@@ -1317,6 +1388,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           userLabel={user.name || REVISION_USER_LABEL}
           categoriaOptions={categoriaOptions}
           upsertGasto={upsertGasto}
+          removeGastoLocal={removeGastoLocal}
+          operatorClassifyMode={isFinancialOperador}
           toast={toast}
           showUndoToast={showUndoToast}
           getVehicleLabel={getVehicleLabel}
@@ -1625,7 +1698,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               loading={moveSaving}
               disabled={moveDisabled}
             >
-              Confirmar movimiento
+              {moveSaving ? 'Guardando…' : 'Confirmar movimiento'}
             </Button>
           </>
         )}

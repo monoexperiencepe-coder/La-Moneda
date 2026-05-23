@@ -8,7 +8,7 @@ import { supabase } from './lib/supabase'
 
 declare global {
   interface Window {
-    /** Solo dev: UPDATE mínimo a gastos para aislar uuid "0". */
+    /** Dev: PATCH mínimo o RPC classify_gasto_operador + debug_can_update_gasto_row (uuid). */
     testSimpleMoveCategoria?: typeof testSimpleMoveCategoria
     /** Solo dev: cliente anon (misma sesión JWT) para pruebas RLS en DevTools. */
     supabase?: SupabaseClient

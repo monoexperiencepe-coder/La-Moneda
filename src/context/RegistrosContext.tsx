@@ -101,7 +101,9 @@ interface RegistrosContextValue {
   deleteIngreso: (id: string) => Promise<boolean>;
   deleteGasto: (id: string) => Promise<boolean>;
   /** Actualiza o inserta un gasto en el estado local (misma orden que fetch). */
-  upsertGasto: (g: Gasto) => void;
+  upsertGasto: (g: Gasto, opts?: { reloadSummary?: boolean }) => void;
+  /** Quita un gasto del estado local (p. ej. operador clasificó fuera de tabs visibles). */
+  removeGastoLocal: (id: string, opts?: { reloadSummary?: boolean }) => void;
   /** Actualiza o inserta un ingreso en el estado local (misma orden que fetch). */
   upsertIngreso: (i: Ingreso) => void;
   deleteDescuento: (id: number) => void;
@@ -135,8 +137,8 @@ interface RegistrosContextValue {
   gastosFinancialSummary: GastosFinancialSummary | null;
   /** Fetch del summary RPC en curso. */
   isLoadingGastosSummary: boolean;
-  /** Recarga agregados financieros desde Supabase. */
-  reloadGastosFinancialSummary: () => Promise<void>;
+  /** Recarga agregados financieros desde Supabase. `silent` evita spinner de summary. */
+  reloadGastosFinancialSummary: (opts?: { silent?: boolean }) => Promise<void>;
   /** Recarga solo ingresos. */
   reloadIngresosOnly: () => Promise<void>;
   /** Recarga solo kilometrajes. */
@@ -690,6 +692,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       deleteIngreso: handleDeleteIngreso,
       deleteGasto: handleDeleteGasto,
       upsertGasto: registros.upsertGasto,
+      removeGastoLocal: registros.removeGastoLocal,
       upsertIngreso: registros.upsertIngreso,
       deleteDescuento: registros.deleteDescuento,
       deletePrestamo: registros.deletePrestamo,

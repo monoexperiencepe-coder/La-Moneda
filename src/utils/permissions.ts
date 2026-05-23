@@ -16,7 +16,7 @@ export const OPERADOR_VISIBLE_TIPO_GASTO = ['gastos_globales', 'pendiente_revisi
 /** @deprecated Usar OPERADOR_VISIBLE_TIPO_GASTO */
 export const OPERADOR_ALLOWED_TIPO_GASTO = OPERADOR_VISIBLE_TIPO_GASTO;
 
-/** Destinos válidos al clasificar/mover gasto (todas las categorías financieras). */
+/** Destinos válidos al clasificar/mover gasto (operador y finanzas). */
 export const FINANZA_MOVE_TARGET_TIPO_GASTO = [
   'operativo_vehiculo',
   'operativo_flota_general',
@@ -29,7 +29,7 @@ export const FINANZA_MOVE_TARGET_TIPO_GASTO = [
   'pendiente_revision',
 ] as const;
 
-/** @deprecated Usar FINANZA_MOVE_TARGET_TIPO_GASTO — operador puede mover a todas las categorías financieras. */
+/** @deprecated Usar FINANZA_MOVE_TARGET_TIPO_GASTO */
 export const OPERADOR_MOVE_TARGET_TIPO_GASTO = FINANZA_MOVE_TARGET_TIPO_GASTO;
 
 export type PermissionUser = AppUserProfile & { email?: string | null };
@@ -92,6 +92,11 @@ export function getVisibleGastoTipoGastoForUser(
   return OPERADOR_VISIBLE_TIPO_GASTO;
 }
 
+export function isOperadorVisibleTipoGasto(tipoGasto: string | null | undefined): boolean {
+  const t = (tipoGasto ?? '').trim();
+  return (OPERADOR_VISIBLE_TIPO_GASTO as readonly string[]).includes(t);
+}
+
 /** Tipos de gasto permitidos como destino en «Mover categoría» / conciliación. */
 export function getMoveTargetGastoTipoGastoForUser(
   user: PermissionUser | null | undefined,
@@ -109,7 +114,7 @@ export function canMoveGastoToTipo(
   const t = targetTipo.trim();
   if (!(FINANZA_MOVE_TARGET_TIPO_GASTO as readonly string[]).includes(t)) return false;
   if (isFinancialOperadorRestricted(user)) return true;
-  return user.role === 'admin' || user.role === 'contador';
+  return user.role === 'admin' || user.role === 'contador' || user.role === 'socio';
 }
 
 export function canViewAmounts(user: PermissionUser | null | undefined): boolean {
