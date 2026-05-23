@@ -16,12 +16,12 @@ export function isAdminRole(role: AppRole): boolean {
   return role === 'admin';
 }
 
-/** Actualizar / eliminar ingresos (admin y contador). Socios y operadores solo lectura / alta según caso. */
+/** Actualizar / eliminar ingresos (alineado con RLS can_mutate_ingresos). */
 export function canMutateIngresos(role: AppRole): boolean {
-  return role === 'admin' || role === 'contador';
+  return role === 'admin' || role === 'contador' || role === 'socio';
 }
 
-/** Registrar nuevos ingresos desde UI (admin, contador, operador). */
+/** Registrar nuevos ingresos desde UI (alineado con RLS can_mutate_ingresos). */
 export function canCreateIngresos(role: AppRole): boolean {
-  return role === 'admin' || role === 'contador' || role === 'operador';
+  return role === 'admin' || role === 'contador' || role === 'socio';
 }

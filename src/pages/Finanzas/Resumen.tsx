@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Info, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import Card from '../../components/Common/Card';
@@ -6,6 +6,15 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { vehicleIdKey } from '../../utils/vehicleId';
+import {
+  financialKpiSourceLabel,
+  resolveResultadoNetoKpi,
+} from '../../utils/financialGlobalKpis';
+import {
+  distribucionFromSummary,
+  formatGastosGlobalTotalDisplay,
+  resolveGastosGlobalTotalState,
+} from '../../utils/gastosFinancialSummary';
 import type { Gasto, Ingreso } from '../../data/types';
 import { matchesOperativoTipoNormalized } from '../../utils/operativoTipoGasto';
 
@@ -428,7 +437,8 @@ function KpiChip({
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, vehicles } = useRegistrosContext();
+  const { ingresos, gastos, vehicles, gastosFinancialSummary, isLoadingGastosSummary, gastosLoadScope } =
+    useRegistrosContext();
   const [preset, setPreset] = useState<ResumenPreset>('mes_actual');
   const current = todayStr();
   const currentYear = Number(current.slice(0, 4));
@@ -470,8 +480,63 @@ const Resumen: React.FC = () => {
   const gastosP = useMemo(() => gastos.filter((g) => inPeriod(g.fecha)), [gastos, range]);
 
   const totalIngresos = useMemo(() => ingresosP.reduce((s, i) => s + ingresoMontoPEN(i), 0), [ingresosP]);
-  const totalGastos = useMemo(() => gastosP.reduce((s, g) => s + g.monto, 0), [gastosP]);
-  const resultadoNeto = totalIngresos - totalGastos;
+  const totalGastosLocal = useMemo(() => gastosP.reduce((s, g) => s + g.monto, 0), [gastosP]);
+  const localGastosAllTime = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
+  const gastosGlobalStateAllTime = useMemo(
+    () =>
+      resolveGastosGlobalTotalState(
+        gastosFinancialSummary,
+        localGastosAllTime,
+        gastos.length,
+        gastosLoadScope,
+        isLoadingGastosSummary,
+      ),
+    [gastosFinancialSummary, localGastosAllTime, gastos.length, gastosLoadScope, isLoadingGastosSummary],
+  );
+  const useSummaryAllTime = preset === 'todo';
+  const totalGastos = useSummaryAllTime
+    ? (gastosGlobalStateAllTime.total ?? 0)
+    : totalGastosLocal;
+  const totalGastosDisplay = useSummaryAllTime
+    ? formatGastosGlobalTotalDisplay(gastosGlobalStateAllTime)
+    : formatCurrency(totalGastosLocal);
+  const resultadoKpi = useMemo(
+    () =>
+      resolveResultadoNetoKpi(
+        totalIngresos,
+        gastosGlobalStateAllTime,
+        useSummaryAllTime,
+        totalGastosLocal,
+      ),
+    [totalIngresos, gastosGlobalStateAllTime, useSummaryAllTime, totalGastosLocal],
+  );
+  const resultadoNeto = resultadoKpi.value;
+  const resultadoNetoDisplay = resultadoKpi.display;
+  const hasResultado = resultadoNeto != null;
+  const totalesDesdeBd = useSummaryAllTime && gastosGlobalStateAllTime.source === 'rpc';
+  const vistaRapidaPeriodo =
+    !useSummaryAllTime && gastosLoadScope === 'recent';
+  const periodoSourceLabel = useSummaryAllTime
+    ? financialKpiSourceLabel(resultadoKpi.gastosSource)
+    : vistaRapidaPeriodo
+      ? 'Vista rápida (período, memoria parcial)'
+      : financialKpiSourceLabel('memoria-periodo');
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log('[Resumen] gastos source', {
+      preset,
+      source: useSummaryAllTime ? gastosGlobalStateAllTime.source : 'memory-period',
+      total: useSummaryAllTime ? gastosGlobalStateAllTime.total : totalGastosLocal,
+      summary: gastosFinancialSummary?.totalGastos ?? null,
+    });
+  }, [
+    preset,
+    useSummaryAllTime,
+    gastosGlobalStateAllTime,
+    totalGastosLocal,
+    gastosFinancialSummary,
+  ]);
 
   const cobrosPendientesGlobal = useMemo(
     () => ingresos.filter((i) => (i.estadoPago ?? '').toUpperCase() === 'PENDIENTE'),
@@ -482,10 +547,16 @@ const Resumen: React.FC = () => {
     [cobrosPendientesGlobal],
   );
 
-  const hasData = ingresosP.length > 0 || gastosP.length > 0;
-  const fmt = (v: number) => (hasData ? formatCurrency(v) : '—');
+  const hasData =
+    ingresosP.length > 0 ||
+    gastosP.length > 0 ||
+    (useSummaryAllTime && gastosGlobalStateAllTime.source === 'rpc');
+  const fmt = (v: number) => (hasData || useSummaryAllTime ? formatCurrency(v) : '—');
 
   const distribucion = useMemo(() => {
+    if (useSummaryAllTime && gastosFinancialSummary) {
+      return distribucionFromSummary(gastosFinancialSummary, CATEGORIA_MAP);
+    }
     const total = totalGastos;
     const acc: Record<string, number> = Object.fromEntries(CATEGORIA_MAP.map((c) => [c.key, 0]));
     for (const g of gastosP) {
@@ -499,7 +570,7 @@ const Resumen: React.FC = () => {
     })
       .filter((d) => d.monto > 0)
       .sort((a, b) => b.monto - a.monto);
-  }, [gastosP, totalGastos]);
+  }, [useSummaryAllTime, gastosFinancialSummary, gastosP, totalGastos]);
 
   const byKey = useMemo(
     () => Object.fromEntries(distribucion.map((d) => [d.key, d.monto])),
@@ -522,10 +593,10 @@ const Resumen: React.FC = () => {
     (): PeriodTotals => ({
       ingresos: totalIngresos,
       gastos: totalGastos,
-      resultado: resultadoNeto,
-      hasMovement: hasData,
+      resultado: resultadoNeto ?? 0,
+      hasMovement: hasData && hasResultado,
     }),
-    [totalIngresos, totalGastos, resultadoNeto, hasData],
+    [totalIngresos, totalGastos, resultadoNeto, hasData, hasResultado],
   );
 
   const comparisonLines = useMemo(() => {
@@ -608,14 +679,14 @@ const Resumen: React.FC = () => {
       });
     }
 
-    if (hasData && resultadoNeto < 0) {
+    if (hasResultado && resultadoNeto < 0) {
       out.push({
         id: 'baja-utilidad',
         tone: 'danger',
         title: 'Baja utilidad',
         text: `En ${periodHuman} los gastos superan a los ingresos registrados.`,
       });
-    } else if (hasData && totalIngresos > 0 && resultadoNeto / totalIngresos < 0.1) {
+    } else if (hasResultado && totalIngresos > 0 && resultadoNeto / totalIngresos < 0.1) {
       out.push({
         id: 'baja-utilidad-margen',
         tone: 'warning',
@@ -649,6 +720,7 @@ const Resumen: React.FC = () => {
     cobrosPendientesGlobal.length,
     cobrosPendientesMonto,
     hasData,
+    hasResultado,
     periodHuman,
     resultadoNeto,
     totalGastos,
@@ -656,7 +728,11 @@ const Resumen: React.FC = () => {
   ]);
 
   const heroTone =
-    !hasData ? 'neutral' : resultadoNeto >= 0 ? 'positive' : 'negative';
+    !hasData || !hasResultado
+      ? 'neutral'
+      : (resultadoNeto ?? 0) >= 0
+        ? 'positive'
+        : 'negative';
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 pb-10 animate-fade-in">
@@ -746,19 +822,21 @@ const Resumen: React.FC = () => {
             heroTone === 'positive' ? 'text-emerald-900' : heroTone === 'negative' ? 'text-rose-900' : 'text-slate-400'
           }`}
         >
-          {hasData ? formatCurrency(resultadoNeto) : '—'}
+          {hasData ? resultadoNetoDisplay : '—'}
         </p>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">
           {hasData ? (
-            resultadoNeto >= 0 ? (
+            resultadoKpi.value == null ? (
+              <>{resultadoNetoDisplay}</>
+            ) : resultadoKpi.value >= 0 ? (
               <>
-                Te quedaron <strong>{formatCurrency(resultadoNeto)}</strong> en {periodHuman}, después de registrar todos
-                los gastos del período.
+                Te quedaron <strong>{formatCurrency(resultadoKpi.value)}</strong> en {periodHuman}, después de registrar
+                todos los gastos del período.
               </>
             ) : (
               <>
                 En {periodHuman} los gastos superan a los ingresos por{' '}
-                <strong>{formatCurrency(Math.abs(resultadoNeto))}</strong>.
+                <strong>{formatCurrency(Math.abs(resultadoKpi.value))}</strong>.
               </>
             )
           ) : (
@@ -793,6 +871,15 @@ const Resumen: React.FC = () => {
       </section>
 
       {/* 2 — KPIs */}
+      {periodoSourceLabel ? (
+        <p className="text-[11px] font-medium text-sky-800/90 -mt-2 mb-1">
+          Gastos: {periodoSourceLabel}
+          {isLoadingGastosSummary ? ' (actualizando…)' : ''}.
+          {vistaRapidaPeriodo
+            ? ' Los totales del período pueden ser menores al histórico completo hasta cargar más filas.'
+            : null}
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <KpiChip
           label="Ingresos"
@@ -802,13 +889,17 @@ const Resumen: React.FC = () => {
         />
         <KpiChip
           label="Gastos"
-          value={fmt(totalGastos)}
+          value={totalGastosDisplay}
           tone="rose"
-          tooltip="Suma de todos los gastos del período (operativos, planilla, financieros, etc.)."
+          tooltip={
+            totalesDesdeBd
+              ? 'Suma histórica de todos los gastos (agregado en Supabase, respeta permisos).'
+              : 'Suma de todos los gastos del período (operativos, planilla, financieros, etc.).'
+          }
         />
         <KpiChip
-          label="Resultado"
-          value={fmt(resultadoNeto)}
+          label="Resultado neto"
+          value={resultadoNetoDisplay}
           tone="slate"
           tooltip="Ingresos del período menos gastos del período."
         />

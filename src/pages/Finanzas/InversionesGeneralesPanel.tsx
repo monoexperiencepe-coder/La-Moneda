@@ -4,6 +4,8 @@ import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGen
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
 import { formatCurrency, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
+import { useAuth } from '../../context/AuthContext';
+import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -80,22 +82,35 @@ const tdText = `${tdBase} text-left`;
 const tdUsd = `${tdBase} text-right max-w-[4.75rem]`;
 
 const InversionesGeneralesPanel: React.FC = () => {
+  const { profile, user } = useAuth();
+  const canLoadInversiones = useMemo(
+    () => canUseInversiones(permissionUserFromAuth(user, profile?.email ?? null)),
+    [user, profile?.email],
+  );
+  const tenantEmpresaId = profile?.empresa_id;
+
   const [rows, setRows] = useState<InversionGeneralVehiculo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: 'numero', dir: 'asc' });
 
   const reload = useCallback(async () => {
-    if (!EMPRESA_ID) {
+    if (!canLoadInversiones) {
       setRows([]);
       setLoading(false);
-      setError('Falta VITE_EMPRESA_ID');
+      setError(null);
+      return;
+    }
+    if (!tenantEmpresaId?.trim() && !EMPRESA_ID) {
+      setRows([]);
+      setLoading(false);
+      setError('Falta empresa_id en el entorno.');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchInversionesGeneralesVehiculo();
+      const data = await fetchInversionesGeneralesVehiculo(tenantEmpresaId);
       setRows(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar');
@@ -103,7 +118,7 @@ const InversionesGeneralesPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canLoadInversiones, tenantEmpresaId]);
 
   useEffect(() => {
     void reload();

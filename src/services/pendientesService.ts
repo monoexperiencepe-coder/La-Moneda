@@ -3,12 +3,19 @@ import { EMPRESA_ID } from '../config/app';
 import { mapPendienteRow, pendientePatchToSnake, pendienteToInsert } from './supabaseMappers';
 import type { Pendiente } from '../data/types';
 
-export async function fetchPendientes(): Promise<Pendiente[]> {
-  if (!EMPRESA_ID) return [];
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
+
+/** @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). */
+export async function fetchPendientes(tenantEmpresaId?: string | null): Promise<Pendiente[]> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return [];
   const { data, error } = await supabase
     .from('pendientes')
     .select('*')
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .order('fecha', { ascending: false })
     .order('id', { ascending: false });
   if (error) {
@@ -18,11 +25,15 @@ export async function fetchPendientes(): Promise<Pendiente[]> {
   return (data ?? []).map((r) => mapPendienteRow(r as Record<string, unknown>));
 }
 
-export async function insertPendiente(row: Omit<Pendiente, 'id' | 'createdAt'>): Promise<Pendiente | null> {
-  if (!EMPRESA_ID) return null;
+export async function insertPendiente(
+  row: Omit<Pendiente, 'id' | 'createdAt'>,
+  tenantEmpresaId?: string | null,
+): Promise<Pendiente | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const { data, error } = await supabase
     .from('pendientes')
-    .insert(pendienteToInsert(EMPRESA_ID, row))
+    .insert(pendienteToInsert(empresaId, row))
     .select('*')
     .single();
   if (error) {
@@ -35,15 +46,17 @@ export async function insertPendiente(row: Omit<Pendiente, 'id' | 'createdAt'>):
 export async function patchPendiente(
   id: number,
   patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>,
+  tenantEmpresaId?: string | null,
 ): Promise<Pendiente | null> {
-  if (!EMPRESA_ID) return null;
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const snake = pendientePatchToSnake(patch);
   if (Object.keys(snake).length === 0) {
     const { data: cur } = await supabase
       .from('pendientes')
       .select('*')
       .eq('id', id)
-      .eq('empresa_id', EMPRESA_ID)
+      .eq('empresa_id', empresaId)
       .maybeSingle();
     return cur ? mapPendienteRow(cur as Record<string, unknown>) : null;
   }
@@ -51,7 +64,7 @@ export async function patchPendiente(
     .from('pendientes')
     .update(snake)
     .eq('id', id)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .select('*')
     .single();
   if (error) {
@@ -61,9 +74,10 @@ export async function patchPendiente(
   return data ? mapPendienteRow(data as Record<string, unknown>) : null;
 }
 
-export async function removePendiente(id: number): Promise<boolean> {
-  if (!EMPRESA_ID) return false;
-  const { error } = await supabase.from('pendientes').delete().eq('id', id).eq('empresa_id', EMPRESA_ID);
+export async function removePendiente(id: number, tenantEmpresaId?: string | null): Promise<boolean> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
+  const { error } = await supabase.from('pendientes').delete().eq('id', id).eq('empresa_id', empresaId);
   if (error) {
     console.error('[pendientes delete]', error.message);
     return false;

@@ -127,6 +127,10 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
     <section className="space-y-5 content-enter">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Rendimiento mensual</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Resultado operativo por mes (ingresos − gastos operativos + descuentos). No es resultado neto global ni
+          utilidad acumulada importada.
+        </p>
         <p className="mt-1 text-sm text-slate-600">Mes por mes: cuánto entró, cuánto salió en gastos de flota y qué quedó.</p>
       </div>
 

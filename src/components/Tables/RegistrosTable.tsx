@@ -13,6 +13,10 @@ import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../u
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
 import { TIPOS_GASTO_FACT, getSubtiposGasto, getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
+import {
+  buildSubtipoFormSelectOptions,
+  formatSubtipoOptionLabel,
+} from '../../constants/gastosSubtipos';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
 import { undoUpdateGastoDetalle } from '../../undo/factories';
@@ -32,6 +36,7 @@ import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { sortRegistrosByLatestCreatedOrDate } from '../../utils/sortRegistrosByLatestCreatedOrDate';
 import { sumGastosHistorialPEN, sumIngresosHistorialPEN } from '../../utils/historialRegistroTotals';
 import { useBootstrapPending } from '../../hooks/useBootstrapPending';
+import { useGastosDataPending } from '../../hooks/useGastosDataPending';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { RegistroCountLabel, SkeletonTableRows, TableBodySurface, UpdatingChrome } from '../Loading';
 import {
@@ -58,6 +63,14 @@ interface RegistrosTableProps {
   onMoveCategoriaGasto?: (gasto: Gasto) => void;
   /** Tras guardar edición manual en el modal de detalle (solo gastos); p. ej. `upsertGasto`. */
   onGastoDetalleSaved?: (gasto: Gasto) => void;
+  /** Paginación server-side (historial gastos desde Supabase). */
+  serverPagination?: {
+    total: number;
+    page: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    loading?: boolean;
+  };
 }
 
 type SortDir = 'asc' | 'desc';
@@ -183,8 +196,18 @@ function buildGastoDetallePatch(
   if (subNorm !== baseSub) patch.subTipo = subNorm;
 
   const subs = getSubtiposGasto(tipoTrim);
-  if (subs.length > 0 && subNorm != null && !subs.includes(subNorm)) {
-    return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
+  const allowedSubtipos = new Set(subs);
+  if (subNorm != null && !allowedSubtipos.has(subNorm)) {
+    const tipoGasto = baseline.tipo_gasto ?? 'gastos_globales';
+    const merged = buildSubtipoFormSelectOptions(
+      tipoGasto,
+      undefined,
+      tipoTrim,
+      [baseline.subTipo ?? '', subNorm],
+    );
+    if (!merged.some((o) => o.value === subNorm)) {
+      return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
+    }
   }
 
   if (draft.categoria !== baseline.categoria) patch.categoria = draft.categoria;
@@ -227,10 +250,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   showClasificacionFinanciera = false,
   onMoveCategoriaGasto,
   onGastoDetalleSaved,
+  serverPagination,
 }) => {
-  const { role } = useAuth();
+  const { role, isFinancialOperador, profile } = useAuth();
   const { toast, showUndoToast } = useRegistrosContext();
   const showDeleteIngreso = mode !== 'ingresos' || canMutateIngresos(role);
+  const showDeleteGasto = mode !== 'gastos' || !isFinancialOperador;
+  const tenantEmpresaId = profile?.empresa_id;
   const colCount = 5;
   const [query, setQuery] = useState('');
   const [filterEstadoPago, setFilterEstadoPago] = useState(() => (mode === 'ingresos' ? initialEstadoPago : ''));
@@ -376,14 +402,19 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   }, [gastoEditDraft]);
 
   const subtipoFactOptions = useMemo(() => {
-    if (!gastoEditDraft) return [];
-    const fromCat = getSubtiposGasto(gastoEditDraft.tipo).map((s) => ({ value: s, label: s }));
-    const cur = gastoEditDraft.subTipo.trim();
-    if (cur && !fromCat.some((o) => o.value === cur)) {
-      return [{ value: cur, label: `${cur} (actual)` }, ...fromCat];
-    }
-    return fromCat;
-  }, [gastoEditDraft]);
+    if (!gastoEditDraft || !gastoEditBaseline) return [];
+    const tipoGasto = gastoEditBaseline.tipo_gasto ?? 'gastos_globales';
+    const merged = buildSubtipoFormSelectOptions(
+      tipoGasto,
+      gastos,
+      gastoEditDraft.tipo,
+      [gastoEditBaseline.subTipo ?? '', gastoEditDraft.subTipo].filter(Boolean),
+    );
+    return merged.map((o) => ({
+      value: o.value,
+      label: formatSubtipoOptionLabel(tipoGasto, o, o.isHistorico),
+    }));
+  }, [gastoEditDraft, gastoEditBaseline, gastos]);
 
   const startGastoEdit = useCallback(() => {
     if (mode !== 'gastos' || !viewItem || !onGastoDetalleSaved || !('signo' in viewItem)) return;
@@ -412,7 +443,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     if (Object.keys(patch).length === 0) return;
     setGastoSaveBusy(true);
     try {
-      const res = await updateGastoDetalleManual(gastoEditBaseline.id, patch);
+      const res = await updateGastoDetalleManual(gastoEditBaseline.id, patch, tenantEmpresaId);
       if (!res.ok) {
         console.error('[Detalle gasto] updateGastoDetalleManual', res.supabase ?? res.error);
         const msg =
@@ -436,7 +467,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   }, [gastoEditBaseline, gastoEditDraft, gastoSaveBusy, onGastoDetalleSaved, toast, showUndoToast, closeDetail]);
 
   const rawData = mode === 'ingresos' ? ingresos : gastos;
-  const bootstrapPending = useBootstrapPending();
+  const globalBootstrapPending = useBootstrapPending();
+  const gastosDataPending = useGastosDataPending();
+  const bootstrapPending = mode === 'gastos' ? gastosDataPending : globalBootstrapPending;
+  const serverMode = Boolean(serverPagination);
 
   const filterInputs = useMemo(
     () => ({ query, filterEstadoPago }),
@@ -527,24 +561,47 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     });
   }, [filtered, sortKey, sortDir]);
 
-  const totalPages = showFullHistory ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated = showFullHistory ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = serverMode
+    ? Math.max(1, Math.ceil((serverPagination!.total || 0) / serverPagination!.pageSize))
+    : showFullHistory
+      ? 1
+      : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const uiPage = serverMode ? serverPagination!.page + 1 : page;
+  const goToPage = (p: number) => {
+    const next = Math.max(1, Math.min(totalPages, p));
+    if (serverMode) serverPagination!.onPageChange(next - 1);
+    else setPage(next);
+  };
+  const paginated =
+    serverMode || showFullHistory ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const historialResumen = useMemo(() => {
-    const filteredCount = sorted.length;
-    const filteredTotal =
-      mode === 'ingresos'
+    const filteredCount = serverMode ? serverPagination!.total : sorted.length;
+    const filteredTotal = serverMode
+      ? 0
+      : mode === 'ingresos'
         ? sumIngresosHistorialPEN(sorted as Ingreso[])
         : sumGastosHistorialPEN(sorted as Gasto[]);
     const pageTotal =
       mode === 'ingresos'
         ? sumIngresosHistorialPEN(paginated as Ingreso[])
         : sumGastosHistorialPEN(paginated as Gasto[]);
-    const isPaginated = !showFullHistory && filteredCount > pageSize;
-    const rangeFrom = filteredCount === 0 ? 0 : showFullHistory ? 1 : (page - 1) * pageSize + 1;
-    const rangeTo = showFullHistory ? filteredCount : Math.min(page * pageSize, filteredCount);
+    const effectivePage = serverMode ? serverPagination!.page + 1 : page;
+    const effectivePageSize = serverMode ? serverPagination!.pageSize : pageSize;
+    const isPaginated = serverMode
+      ? filteredCount > effectivePageSize
+      : !showFullHistory && filteredCount > pageSize;
+    const rangeFrom =
+      filteredCount === 0
+        ? 0
+        : showFullHistory
+          ? 1
+          : (effectivePage - 1) * effectivePageSize + 1;
+    const rangeTo = showFullHistory
+      ? filteredCount
+      : Math.min(effectivePage * effectivePageSize, filteredCount);
     return { filteredCount, filteredTotal, pageTotal, isPaginated, rangeFrom, rangeTo };
-  }, [sorted, paginated, mode, showFullHistory, page, pageSize]);
+  }, [sorted, paginated, mode, showFullHistory, page, pageSize, serverMode, serverPagination]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -562,7 +619,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     </span>
   );
 
-  const canShowEmpty = !bootstrapPending && !isRecalculating;
+  const canShowEmpty = !bootstrapPending && !isRecalculating && !(serverPagination?.loading);
 
   const emptyMessage = (
     <div className="text-center py-10 text-gray-400 text-sm">
@@ -656,11 +713,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               showFullHistory
                 ? 'border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200'
                 : 'border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-            }`}
+            } ${serverMode ? 'hidden' : ''}`}
           >
             {showFullHistory ? 'Volver a paginado' : 'Ver historial completo'}
           </button>
-          <div className="w-full sm:w-40">
+          <div className={`w-full sm:w-40 ${serverMode ? 'hidden' : ''}`}>
             <Select
               options={PAGE_SIZE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
               value={pageSize}
@@ -837,19 +894,21 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       </button>
                     )
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
-                      disabled={deletingGastoId === String((item as Gasto).id)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                      title="Eliminar"
-                    >
-                      {deletingGastoId === String((item as Gasto).id) ? (
-                        <Loader2 size={14} className="animate-spin text-red-500" />
-                      ) : (
-                        <Trash2 size={14} />
-                      )}
-                    </button>
+                    showDeleteGasto && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
+                        disabled={deletingGastoId === String((item as Gasto).id)}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                        title="Eliminar"
+                      >
+                        {deletingGastoId === String((item as Gasto).id) ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -1035,19 +1094,21 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                           </button>
                         )
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
-                          disabled={deletingGastoId === String((item as Gasto).id)}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                          title="Eliminar"
-                        >
-                          {deletingGastoId === String((item as Gasto).id) ? (
-                            <Loader2 size={15} className="animate-spin text-red-500" />
-                          ) : (
-                            <Trash2 size={15} />
-                          )}
-                        </button>
+                        showDeleteGasto && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletePending({ kind: 'gasto', id: (item as Gasto).id })}
+                            disabled={deletingGastoId === String((item as Gasto).id)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                            title="Eliminar"
+                          >
+                            {deletingGastoId === String((item as Gasto).id) ? (
+                              <Loader2 size={15} className="animate-spin text-red-500" />
+                            ) : (
+                              <Trash2 size={15} />
+                            )}
+                          </button>
+                        )
                       )}
                     </div>
                   </td>
@@ -1063,13 +1124,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       {!showFullHistory && historialResumen.filteredCount > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-3 sm:px-5">
           <p className="text-xs text-gray-500">
-            Página {page} de {totalPages}
+            Página {uiPage} de {totalPages}
           </p>
           <div className="flex items-center gap-1 ml-auto">
             <button
               type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
+              onClick={() => goToPage(uiPage - 1)}
+              disabled={uiPage === 1 || serverPagination?.loading}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft size={16} />
@@ -1077,17 +1138,17 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pageNum = i + 1;
               if (totalPages > 5) {
-                if (page <= 3) pageNum = i + 1;
-                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
-                else pageNum = page - 2 + i;
+                if (uiPage <= 3) pageNum = i + 1;
+                else if (uiPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = uiPage - 2 + i;
               }
               return (
                 <button
                   key={pageNum}
                   type="button"
-                  onClick={() => setPage(pageNum)}
+                  onClick={() => goToPage(pageNum)}
                   className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${
-                    page === pageNum ? 'bg-primary-500 text-white' : 'hover:bg-gray-100 text-gray-600'
+                    uiPage === pageNum ? 'bg-primary-500 text-white' : 'hover:bg-gray-100 text-gray-600'
                   }`}
                 >
                   {pageNum}
@@ -1096,8 +1157,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             })}
             <button
               type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
+              onClick={() => goToPage(uiPage + 1)}
+              disabled={uiPage === totalPages || serverPagination?.loading}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight size={16} />

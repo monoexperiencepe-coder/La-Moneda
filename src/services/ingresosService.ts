@@ -3,9 +3,15 @@ import { EMPRESA_ID } from '../config/app';
 import { ingresoToInsert, mapIngresoRow } from './supabaseMappers';
 import type { Ingreso } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
+import { devPerfAsync } from '../utils/devPerf';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { isValidIngresoPrimaryKey } from '../utils/ingresoRecordId';
+
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
 
 /** Columnas mínimas para old_data en auditoría (evita SELECT * antes del delete). */
 const INGRESO_AUDIT_SNAPSHOT_SELECT =
@@ -15,13 +21,17 @@ export type RemoveIngresoResult =
   | { ok: true }
   | { ok: false; message: string; code?: string; details?: string; hint?: string };
 
-async function fetchIngresoAuditSnapshot(id: string): Promise<Record<string, unknown> | null> {
-  if (!EMPRESA_ID) return null;
+async function fetchIngresoAuditSnapshot(
+  id: string,
+  tenantEmpresaId?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const { data, error } = await supabase
     .from('ingresos')
     .select(INGRESO_AUDIT_SNAPSHOT_SELECT)
     .eq('id', id)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .maybeSingle();
   if (error) {
     logPostgrestError('ingresos fetchIngresoAuditSnapshot', error);
@@ -31,26 +41,33 @@ async function fetchIngresoAuditSnapshot(id: string): Promise<Record<string, unk
 }
 
 /** Lista paginada; `select('*')` incluye `created_at` para UI «Registrado en sistema». */
-export async function fetchIngresos(): Promise<Ingreso[]> {
-  if (!EMPRESA_ID) return [];
-  const data = await fetchAllSupabasePages(async (from, to) => {
-    const { data, error } = await supabase
-      .from('ingresos')
-      .select('*')
-      .eq('empresa_id', EMPRESA_ID)
-      .order('fecha', { ascending: false })
-      .order('id', { ascending: false })
-      .range(from, to);
-    return { data, error };
+export async function fetchIngresos(tenantEmpresaId?: string | null): Promise<Ingreso[]> {
+  return devPerfAsync('fetchIngresos', async () => {
+    const empresaId = resolveTenantId(tenantEmpresaId);
+    if (!empresaId) return [];
+    const data = await fetchAllSupabasePages(async (from, to) => {
+      const { data, error } = await supabase
+        .from('ingresos')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .order('fecha', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+      return { data, error };
+    }, { label: 'fetchIngresos' });
+    return data.map((r) => mapIngresoRow(r as Record<string, unknown>));
   });
-  return data.map((r) => mapIngresoRow(r as Record<string, unknown>));
 }
 
-export async function insertIngreso(row: Omit<Ingreso, 'id' | 'createdAt'>): Promise<Ingreso | null> {
-  if (!EMPRESA_ID) return null;
+export async function insertIngreso(
+  row: Omit<Ingreso, 'id' | 'createdAt'>,
+  tenantEmpresaId?: string | null,
+): Promise<Ingreso | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const { data, error } = await supabase
     .from('ingresos')
-    .insert(ingresoToInsert(EMPRESA_ID, row))
+    .insert(ingresoToInsert(empresaId, row))
     .select('*')
     .single();
   if (error) {
@@ -78,21 +95,25 @@ export async function insertIngreso(row: Omit<Ingreso, 'id' | 'createdAt'>): Pro
 }
 
 /** Elimina ingreso; auditoría en segundo plano para no demorar la respuesta. */
-export async function removeIngreso(id: string): Promise<RemoveIngresoResult> {
+export async function removeIngreso(
+  id: string,
+  tenantEmpresaId?: string | null,
+): Promise<RemoveIngresoResult> {
   if (!isValidIngresoPrimaryKey(id)) {
     return { ok: false, message: 'No se puede eliminar: el registro no tiene ID válido' };
   }
-  if (!EMPRESA_ID) {
-    return { ok: false, message: 'EMPRESA_ID no configurado.' };
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { ok: false, message: 'Empresa no configurada.' };
   }
 
-  const before = await fetchIngresoAuditSnapshot(id);
+  const before = await fetchIngresoAuditSnapshot(id, empresaId);
 
   const { error } = await supabase
     .from('ingresos')
     .delete()
     .eq('id', id)
-    .eq('empresa_id', EMPRESA_ID);
+    .eq('empresa_id', empresaId);
 
   if (error) {
     logPostgrestError('ingresos delete', error);

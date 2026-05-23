@@ -29,7 +29,13 @@ import type {
   UnidadRegistro,
   Vehicle,
 } from '../data/types';
-import { canViewGastoTipo, type PermissionUser } from '../utils/permissions';
+import {
+  canUseIngresos,
+  canUseInversiones,
+  canViewFinancialAuditLogs,
+  canViewGastoTipo,
+  type PermissionUser,
+} from '../utils/permissions';
 
 /** Historial del sistema: recargar lista al insertar un log remoto. */
 export const AUDIT_LOGS_REALTIME_EVENT = 'la-moneda:audit-logs-changed';
@@ -188,7 +194,10 @@ export function useEmpresaRegistrosRealtime({
       scheduleBatch.current();
     };
 
+    const canFinanzasSecundarias = canUseInversiones(permissionUser);
+
     const handleIngresos = (payload: RealtimePayload) => {
+      if (!canUseIngresos(permissionUser)) return;
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, false);
         if (typeof id === 'string' && id) {
@@ -299,6 +308,7 @@ export function useEmpresaRegistrosRealtime({
     };
 
     const handleInversiones = (payload: RealtimePayload) => {
+      if (!canFinanzasSecundarias) return;
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
@@ -314,6 +324,7 @@ export function useEmpresaRegistrosRealtime({
     };
 
     const handleGastosCaja = (payload: RealtimePayload) => {
+      if (!canFinanzasSecundarias) return;
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
@@ -329,6 +340,7 @@ export function useEmpresaRegistrosRealtime({
     };
 
     const handleCajaNegocio = (payload: RealtimePayload) => {
+      if (!canFinanzasSecundarias) return;
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
@@ -371,19 +383,21 @@ export function useEmpresaRegistrosRealtime({
       );
     }
 
-    channel = channel.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'financial_audit_logs',
-        filter: empresaFilter,
-      },
-      () => {
-        window.dispatchEvent(new CustomEvent(AUDIT_LOGS_REALTIME_EVENT));
-        scheduleBatch.current();
-      },
-    );
+    if (canViewFinancialAuditLogs(permissionUser)) {
+      channel = channel.on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'financial_audit_logs',
+          filter: empresaFilter,
+        },
+        () => {
+          window.dispatchEvent(new CustomEvent(AUDIT_LOGS_REALTIME_EVENT));
+          scheduleBatch.current();
+        },
+      );
+    }
 
     channel.subscribe((status) => {
       setConnected(status === 'SUBSCRIBED');

@@ -9,12 +9,19 @@ import {
 } from '../utils/conductorId';
 import type { Conductor } from '../data/types';
 
-export async function fetchConductores(): Promise<Conductor[]> {
-  if (!EMPRESA_ID) return [];
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
+
+/** @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). `EMPRESA_ID` solo filtro cliente legacy. */
+export async function fetchConductores(tenantEmpresaId?: string | null): Promise<Conductor[]> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return [];
   const { data, error } = await supabase
     .from('conductores')
     .select('*')
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .order('id', { ascending: false });
   if (error) {
     console.error('[conductores fetch]', error.message, error);
@@ -25,11 +32,15 @@ export async function fetchConductores(): Promise<Conductor[]> {
   return rows;
 }
 
-export async function insertConductor(row: Omit<Conductor, 'id' | 'createdAt'>): Promise<Conductor | null> {
-  if (!EMPRESA_ID) return null;
+export async function insertConductor(
+  row: Omit<Conductor, 'id' | 'createdAt'>,
+  tenantEmpresaId?: string | null,
+): Promise<Conductor | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const { data, error } = await supabase
     .from('conductores')
-    .insert(conductorToInsert(EMPRESA_ID, row))
+    .insert(conductorToInsert(empresaId, row))
     .select('*')
     .single();
   if (error) {
@@ -42,9 +53,11 @@ export async function insertConductor(row: Omit<Conductor, 'id' | 'createdAt'>):
 export async function patchConductor(
   id: ConductorId,
   patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>,
+  tenantEmpresaId?: string | null,
 ): Promise<Conductor | null> {
-  if (!EMPRESA_ID) {
-    console.error('[conductores update] EMPRESA_ID no configurado');
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    console.error('[conductores update] tenant empresa_id no configurado');
     return null;
   }
 
@@ -62,7 +75,7 @@ export async function patchConductor(
   console.log('[conductores update] request', {
     id: conductorId,
     type: typeof conductorId,
-    empresaId: EMPRESA_ID,
+    empresaId,
   });
 
   if (Object.keys(snake).length === 0) {
@@ -70,7 +83,7 @@ export async function patchConductor(
       .from('conductores')
       .select('*')
       .eq('id', conductorId)
-      .eq('empresa_id', EMPRESA_ID)
+      .eq('empresa_id', empresaId)
       .maybeSingle();
     if (readErr) {
       console.error('[conductores update] read empty patch failed', readErr);
@@ -83,7 +96,7 @@ export async function patchConductor(
     .from('conductores')
     .update(snake)
     .eq('id', conductorId)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .select('*');
 
   if (error) {
@@ -104,7 +117,7 @@ export async function patchConductor(
   if (!row) {
     console.warn('[conductores update] 0 filas actualizadas', {
       id: conductorId,
-      empresaId: EMPRESA_ID,
+      empresaId,
       status,
       statusText,
       count: data?.length ?? 0,
@@ -122,8 +135,12 @@ export async function patchConductor(
   return mapped;
 }
 
-export async function removeConductor(id: ConductorId): Promise<boolean> {
-  if (!EMPRESA_ID) return false;
+export async function removeConductor(
+  id: ConductorId,
+  tenantEmpresaId?: string | null,
+): Promise<boolean> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
   const conductorId = normalizeConductorIdForQuery(id);
   if (!isValidConductorId(conductorId)) {
     console.error('[conductores delete] id inválido', id);
@@ -133,7 +150,7 @@ export async function removeConductor(id: ConductorId): Promise<boolean> {
     .from('conductores')
     .delete()
     .eq('id', conductorId)
-    .eq('empresa_id', EMPRESA_ID);
+    .eq('empresa_id', empresaId);
   if (error) {
     console.error('[conductores delete]', error.message, error);
     return false;

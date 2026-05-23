@@ -3,6 +3,8 @@ import { EMPRESA_ID } from '../config/app';
 import { gastoToInsert, mapGastoRow } from './supabaseMappers';
 import type { Gasto } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
+import { devPerfAsync } from '../utils/devPerf';
+import { mapGastosFinancialSummaryRow, type GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { getDetalleMetodoByLabel } from '../data/factCatalog';
@@ -17,6 +19,11 @@ import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
 
 const MSG_GASTO_ID_INVALID =
   'Este registro no tiene ID válido. Recarga la página o revisa el mapeo desde Supabase.';
+
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
 
 function normalizeGastoIdParam(id: unknown): string {
   return typeof id === 'string' ? id.trim() : String(id ?? '').trim();
@@ -276,8 +283,9 @@ async function auditGastoDetalleManualAfterUpdate(
 export async function updateGastoDetalleManual(
   id: string,
   patch: GastoDetalleManualPatch,
+  tenantEmpresaId?: string | null,
 ): Promise<UpdateGastoDetalleManualResult> {
-  const empresaIdFrontend = EMPRESA_ID || '';
+  const empresaIdFrontend = resolveTenantId(tenantEmpresaId) || '';
   const idNorm = normalizeGastoIdParam(id);
   const fail = (
     error: string,
@@ -308,7 +316,7 @@ export async function updateGastoDetalleManual(
     );
   }
 
-  const before = await fetchGastoRawById(idNorm);
+  const before = await fetchGastoRawById(idNorm, empresaIdFrontend);
 
   const { data, error } = await supabase
     .from('gastos')
@@ -513,7 +521,7 @@ async function fetchGastoRawById(
   /** Misma forma que el UPDATE (p. ej. UUID ya validado con `cleanUuid`). */
   empresaIdFilter?: string | null,
 ): Promise<Record<string, unknown> | null> {
-  const eid = empresaIdFilter ?? EMPRESA_ID;
+  const eid = resolveTenantId(empresaIdFilter);
   if (!eid) return null;
   const { data, error } = await supabase
     .from('gastos')
@@ -532,21 +540,23 @@ export async function updateClasificacionGasto(
   id: string,
   patch: ClasificacionGastoPatch,
   meta: GastoAuditMeta = {},
+  tenantEmpresaId?: string | null,
 ): Promise<Gasto | null> {
   const idNorm = normalizeGastoIdParam(id);
   if (!isValidGastoPrimaryKey(idNorm)) {
     console.error('[gastos updateClasificacionGasto]', MSG_GASTO_ID_INVALID, { id: idNorm });
     return null;
   }
-  if (!EMPRESA_ID) return null;
-  const before = await fetchGastoRawById(idNorm);
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
+  const before = await fetchGastoRawById(idNorm, empresaId);
   const row = clasificacionPatchToRow(patch);
   if (Object.keys(row).length === 0) return null;
   const { data, error } = await supabase
     .from('gastos')
     .update(row)
     .eq('id', idNorm)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .select('*')
     .single();
   if (error) {
@@ -579,9 +589,10 @@ export async function updateGastoCategoriaManual(
   id: string,
   patch: GastoCategoriaManualPatch,
   meta: GastoAuditMeta = {},
+  tenantEmpresaId?: string | null,
 ): Promise<UpdateGastoCategoriaManualResult> {
   const idNorm = normalizeGastoIdParam(id);
-  const empresaIdFrontend = EMPRESA_ID || '';
+  const empresaIdFrontend = resolveTenantId(tenantEmpresaId) || '';
   const patchSummary = {
     tipo_gasto: patch.tipo_gasto,
     subtipo_gasto: patch.subtipo_gasto,
@@ -727,26 +738,34 @@ export async function updateGastoCategoriaManual(
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }
 
-export async function fetchGastos(): Promise<Gasto[]> {
-  if (!EMPRESA_ID) return [];
-  const data = await fetchAllSupabasePages(async (from, to) => {
-    const { data, error } = await supabase
-      .from('gastos')
-      .select('*')
-      .eq('empresa_id', EMPRESA_ID)
-      .order('fecha', { ascending: false })
-      .order('id', { ascending: false })
-      .range(from, to);
-    return { data, error };
-  });
-  const mapped = data.map((r) => mapGastoRow(r as Record<string, unknown>));
+export const DEFAULT_GASTOS_RECENT_LIMIT = 1000;
+export const DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE = 50;
+
+/** Valores `tipo_gasto` en BD que corresponden a un tab canónico (legacy incluido). */
+export function sqlTipoGastoVariants(canonicalTipo: string): string[] {
+  switch (canonicalTipo) {
+    case 'gastos_globales':
+      return ['gastos_globales', 'operativo_flota_global'];
+    case 'financiero_prestamo':
+      return ['financiero_prestamo', 'financiero'];
+    case 'inversion_compra':
+      return ['inversion_compra', 'inversion'];
+    case 'representacion_interna':
+      return ['representacion_interna', 'personal_socios_familiares', 'personal_socios', 'personales'];
+    default:
+      return [canonicalTipo];
+  }
+}
+
+function mapAndValidateGastosRows(data: Record<string, unknown>[]): Gasto[] {
+  const mapped = data.map((r) => mapGastoRow(r));
   const valid: Gasto[] = [];
   for (const g of mapped) {
     if (isValidGastoPrimaryKey(g.id)) {
       valid.push(g);
       continue;
     }
-    console.warn('[gastos fetchGastos] fila descartada: id de gasto inválido', {
+    console.warn('[gastos] fila descartada: id de gasto inválido', {
       id: g.id,
       fecha: g.fecha,
       motivo: g.motivo?.slice?.(0, 80),
@@ -755,11 +774,185 @@ export async function fetchGastos(): Promise<Gasto[]> {
   return valid;
 }
 
-export async function insertGasto(row: Omit<Gasto, 'id' | 'createdAt'>): Promise<Gasto | null> {
-  if (!EMPRESA_ID) return null;
+/** Une listas de gastos sin duplicar por id; orden fecha desc, id desc. */
+export function mergeGastosUniqueById(...lists: Gasto[][]): Gasto[] {
+  const map = new Map<string, Gasto>();
+  for (const list of lists) {
+    for (const g of list) {
+      map.set(String(g.id), g);
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    const fd = b.fecha.localeCompare(a.fecha);
+    if (fd !== 0) return fd;
+    return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+  });
+}
+
+/** Carga inicial: últimos N gastos (default 1000). Respeta RLS + empresa_id. */
+export async function fetchGastosRecent(
+  tenantEmpresaId?: string | null,
+  options?: { limit?: number },
+): Promise<Gasto[]> {
+  const limit = options?.limit ?? DEFAULT_GASTOS_RECENT_LIMIT;
+  return devPerfAsync(
+    'fetchGastosRecent',
+    async () => {
+      const empresaId = resolveTenantId(tenantEmpresaId);
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from('gastos')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .order('fecha', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('[fetchGastosRecent]', error.message);
+        return [];
+      }
+      return mapAndValidateGastosRows((data ?? []) as Record<string, unknown>[]);
+    },
+    (rows) => ({ limit }),
+  );
+}
+
+/** Histórico completo paginado (auditoría, reportes, conciliación total). NO usar en bootstrap. */
+export async function fetchGastosFull(tenantEmpresaId?: string | null): Promise<Gasto[]> {
+  return devPerfAsync('fetchGastosFull', async () => {
+    const empresaId = resolveTenantId(tenantEmpresaId);
+    if (!empresaId) return [];
+    const data = await fetchAllSupabasePages(async (from, to) => {
+      const { data, error } = await supabase
+        .from('gastos')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .order('fecha', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+      return { data, error };
+    }, { label: 'fetchGastosFull' });
+    return mapAndValidateGastosRows(data as Record<string, unknown>[]);
+  });
+}
+
+/** @deprecated Preferir fetchGastosRecent (bootstrap) o fetchGastosFull (histórico). */
+export const fetchGastos = fetchGastosFull;
+
+/** Todos los gastos de un tipo (p. ej. pendiente_revision, gastos_globales) — conciliación operador. */
+export async function fetchGastosByTipo(
+  tipoGasto: string,
+  tenantEmpresaId?: string | null,
+): Promise<Gasto[]> {
+  return devPerfAsync(
+    `fetchGastosByTipo:${tipoGasto}`,
+    async () => {
+      const empresaId = resolveTenantId(tenantEmpresaId);
+      if (!empresaId) return [];
+      const variants = sqlTipoGastoVariants(tipoGasto);
+      const data = await fetchAllSupabasePages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('gastos')
+          .select('*')
+          .eq('empresa_id', empresaId)
+          .in('tipo_gasto', variants)
+          .order('fecha', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to);
+        return { data, error };
+      }, { label: `fetchGastosByTipo:${tipoGasto}` });
+      return mapAndValidateGastosRows(data as Record<string, unknown>[]);
+    },
+  );
+}
+
+export type GastosHistorialFilters = {
+  tipo_gasto: string;
+  year?: string;
+  month?: string;
+  subtipo?: string;
+  search?: string;
+};
+
+/** Historial paginado server-side (tab detalle Gastos). */
+export async function fetchGastosHistorialPage(
+  filters: GastosHistorialFilters,
+  page: number,
+  pageSize: number = DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
+  tenantEmpresaId?: string | null,
+): Promise<{ rows: Gasto[]; total: number }> {
+  return devPerfAsync(
+    'fetchGastosHistorialPage',
+    async () => {
+      const empresaId = resolveTenantId(tenantEmpresaId);
+      if (!empresaId) return { rows: [], total: 0 };
+
+      const from = Math.max(0, page) * pageSize;
+      const to = from + pageSize - 1;
+      const variants = sqlTipoGastoVariants(filters.tipo_gasto);
+
+      let q = supabase
+        .from('gastos')
+        .select('*', { count: 'exact' })
+        .eq('empresa_id', empresaId)
+        .in('tipo_gasto', variants);
+
+      const year = filters.year?.trim();
+      if (year && year !== 'ALL' && /^\d{4}$/.test(year)) {
+        q = q.gte('fecha', `${year}-01-01`).lte('fecha', `${year}-12-31`);
+        const month = filters.month?.trim();
+        if (month && month !== 'ALL' && /^\d{1,2}$/.test(month)) {
+          const mm = month.padStart(2, '0');
+          const yNum = Number(year);
+          const mNum = Number(mm);
+          const lastDay = new Date(yNum, mNum, 0).getDate();
+          q = q
+            .gte('fecha', `${year}-${mm}-01`)
+            .lte('fecha', `${year}-${mm}-${String(lastDay).padStart(2, '0')}`);
+        }
+      }
+
+      const subtipo = filters.subtipo?.trim();
+      if (subtipo) {
+        q = q.eq('subtipo_gasto', subtipo);
+      }
+
+      const search = filters.search?.trim();
+      if (search) {
+        const esc = search.replace(/[%_,]/g, '');
+        if (esc) {
+          q = q.or(`motivo.ilike.%${esc}%,comentarios.ilike.%${esc}%`);
+        }
+      }
+
+      const { data, error, count } = await q
+        .order('fecha', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        console.error('[fetchGastosHistorialPage]', error.message);
+        return { rows: [], total: 0 };
+      }
+
+      return {
+        rows: mapAndValidateGastosRows((data ?? []) as Record<string, unknown>[]),
+        total: count ?? 0,
+      };
+    },
+    (r) => ({ page, pageSize, total: r.total, rows: r.rows.length, tipo: filters.tipo_gasto }),
+  );
+}
+
+export async function insertGasto(
+  row: Omit<Gasto, 'id' | 'createdAt'>,
+  tenantEmpresaId?: string | null,
+): Promise<Gasto | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
   const { data, error } = await supabase
     .from('gastos')
-    .insert(gastoToInsert(EMPRESA_ID, row))
+    .insert(gastoToInsert(empresaId, row))
     .select('*')
     .single();
   if (error) {
@@ -784,19 +977,20 @@ export async function insertGasto(row: Omit<Gasto, 'id' | 'createdAt'>): Promise
   return data ? mapGastoRow(data as Record<string, unknown>) : null;
 }
 
-export async function removeGasto(id: string): Promise<boolean> {
+export async function removeGasto(id: string, tenantEmpresaId?: string | null): Promise<boolean> {
   const idNorm = normalizeGastoIdParam(id);
   if (!isValidGastoPrimaryKey(idNorm)) {
     console.error('[gastos removeGasto]', MSG_GASTO_ID_INVALID, { id: idNorm });
     return false;
   }
-  if (!EMPRESA_ID) return false;
-  const before = await fetchGastoRawById(idNorm);
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
+  const before = await fetchGastoRawById(idNorm, empresaId);
   const { error } = await supabase
     .from('gastos')
     .delete()
     .eq('id', idNorm)
-    .eq('empresa_id', EMPRESA_ID);
+    .eq('empresa_id', empresaId);
   if (error) {
     console.error('[gastos delete]', error.message);
     return false;
@@ -816,4 +1010,51 @@ export async function removeGasto(id: string): Promise<boolean> {
     }
   }
   return true;
+}
+
+/** Agregados financieros globales (RPC; respeta RLS, no trae filas). */
+export async function fetchGastosFinancialSummary(
+  tenantEmpresaId?: string | null,
+): Promise<GastosFinancialSummary | null> {
+  return devPerfAsync('fetchGastosFinancialSummary', async () => {
+    const empresaId = resolveTenantId(tenantEmpresaId);
+    if (!empresaId) {
+      if (import.meta.env.DEV) console.warn('[fetchGastosFinancialSummary] sin empresa_id');
+      return null;
+    }
+
+    const { data, error } = await supabase.rpc('get_gastos_financial_summary', {
+      p_empresa_id: empresaId,
+    });
+
+    if (import.meta.env.DEV) {
+      console.log('[fetchGastosFinancialSummary] raw', { empresaId, data, error: error?.message ?? null });
+    }
+
+    if (error) {
+      console.error('[fetchGastosFinancialSummary]', error.message, error);
+      return null;
+    }
+
+    let row: Record<string, unknown> | null = null;
+    if (Array.isArray(data)) {
+      row = (data[0] as Record<string, unknown> | undefined) ?? null;
+      if (!row && data.length === 0 && import.meta.env.DEV) {
+        console.warn('[fetchGastosFinancialSummary] RPC devolvió array vacío (se esperaba 1 fila)');
+      }
+    } else if (data && typeof data === 'object') {
+      row = data as Record<string, unknown>;
+    }
+
+    if (!row) {
+      console.warn('[fetchGastosFinancialSummary] respuesta vacía o sin filas');
+      return null;
+    }
+
+    const mapped = mapGastosFinancialSummaryRow(row);
+    if (import.meta.env.DEV) {
+      console.log('[fetchGastosFinancialSummary] mapped', mapped);
+    }
+    return mapped;
+  });
 }

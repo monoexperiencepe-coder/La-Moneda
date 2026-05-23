@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Modal from '../Common/Modal';
 import type { AporteAccionista, Moneda } from '../../data/types';
 import { insertAporteAccionista, APORTE_TIPO_RETIRO } from '../../services/aportesAccionistasService';
+import { useAuth } from '../../context/AuthContext';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -29,6 +30,8 @@ const AporteRetiroModal: React.FC<AporteRetiroModalProps> = ({
   onSaved,
   sugerenciasAccionista = [],
 }) => {
+  const { profile } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [accionista, setAccionista] = useState('');
@@ -70,16 +73,19 @@ const AporteRetiroModal: React.FC<AporteRetiroModalProps> = ({
 
     setSaving(true);
     try {
-      const { error, row } = await insertAporteAccionista({
-        accionista: accionista.trim(),
-        vehiculoReferencia: vehiculoRef.trim() || null,
-        monto: m,
-        moneda,
-        fechaAporte: fechaRetiro.trim().slice(0, 10),
-        generaInteres: false,
-        tipo: APORTE_TIPO_RETIRO,
-        observaciones: observaciones.trim(),
-      });
+      const { error, row } = await insertAporteAccionista(
+        {
+          accionista: accionista.trim(),
+          vehiculoReferencia: vehiculoRef.trim() || null,
+          monto: m,
+          moneda,
+          fechaAporte: fechaRetiro.trim().slice(0, 10),
+          generaInteres: false,
+          tipo: APORTE_TIPO_RETIRO,
+          observaciones: observaciones.trim(),
+        },
+        tenantEmpresaId,
+      );
       if (error) {
         setFormError(error);
         return;

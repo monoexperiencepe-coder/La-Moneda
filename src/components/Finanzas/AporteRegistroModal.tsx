@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Modal from '../Common/Modal';
 import type { AporteAccionista, Moneda } from '../../data/types';
 import { insertAporteAccionista } from '../../services/aportesAccionistasService';
+import { useAuth } from '../../context/AuthContext';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -22,6 +23,8 @@ interface AporteRegistroModalProps {
 }
 
 const AporteRegistroModal: React.FC<AporteRegistroModalProps> = ({ isOpen, onClose, onSaved }) => {
+  const { profile } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [accionista, setAccionista] = useState('');
@@ -67,16 +70,19 @@ const AporteRegistroModal: React.FC<AporteRegistroModalProps> = ({ isOpen, onClo
 
     setSaving(true);
     try {
-      const { error, row } = await insertAporteAccionista({
-        accionista: accionista.trim(),
-        vehiculoReferencia: vehiculoRef.trim() || null,
-        monto: m,
-        moneda,
-        fechaAporte: fechaAporte.trim().slice(0, 10),
-        generaInteres,
-        tipo: tipo.trim() || 'aporte_accionista',
-        observaciones: observaciones.trim(),
-      });
+      const { error, row } = await insertAporteAccionista(
+        {
+          accionista: accionista.trim(),
+          vehiculoReferencia: vehiculoRef.trim() || null,
+          monto: m,
+          moneda,
+          fechaAporte: fechaAporte.trim().slice(0, 10),
+          generaInteres,
+          tipo: tipo.trim() || 'aporte_accionista',
+          observaciones: observaciones.trim(),
+        },
+        tenantEmpresaId,
+      );
       if (error) {
         setFormError(error);
         return;

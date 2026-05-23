@@ -15,6 +15,8 @@ export type MoveGastoCategoriaInput = {
   vehicleId: number | null;
   motivo?: string;
   vehicles: Vehicle[];
+  /** Preferir `profile.empresa_id` (RLS). */
+  tenantEmpresaId?: string | null;
 };
 
 export type MoveGastoCategoriaResult =
@@ -22,7 +24,7 @@ export type MoveGastoCategoriaResult =
   | { ok: false; message: string };
 
 export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promise<MoveGastoCategoriaResult> {
-  const { gasto, toTipoGasto, toSubtipoGasto, vehicleId, motivo = '', vehicles } = input;
+  const { gasto, toTipoGasto, toSubtipoGasto, vehicleId, motivo = '', vehicles, tenantEmpresaId } = input;
   const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto);
 
   let toVehicleId: number | null = null;
@@ -80,6 +82,7 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
       reason: motivo.trim() || 'Conciliación pendiente de revisión',
       sourceAction: 'move_category',
     },
+    tenantEmpresaId,
   );
 
   if (!result.ok) {

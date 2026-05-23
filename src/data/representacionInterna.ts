@@ -12,6 +12,8 @@ export const SUBTIPOS_REPRESENTACION_INTERNA = [
   'almuerzo_socios',
   'reunion_socios',
   'gasto_representacion',
+  'regalos',
+  'alojamientos',
 ] as const;
 
 export type SubtipoRepresentacionInterna = (typeof SUBTIPOS_REPRESENTACION_INTERNA)[number];

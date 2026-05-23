@@ -12,6 +12,7 @@ import {
   updatePrestamoFinanciero,
   updatePrestamoTramo,
 } from '../../services/prestamosFinancierosService';
+import { useAuth } from '../../context/AuthContext';
 import { cuotaMensualDesdeCapitalYTasaAnual } from '../../utils/prestamosFinancierosCalc';
 
 type TramoForm = {
@@ -76,6 +77,8 @@ interface PrestamoEditModalProps {
 }
 
 const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, mode, detalle, onSaved }) => {
+  const { profile } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
   const isCreate = mode === 'create';
   const p = detalle?.prestamo;
   const [saving, setSaving] = useState(false);
@@ -363,7 +366,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           }
           const dCf = draftTramo.modalidadPago === 'cuota_fija' ? parseNum(draftTramo.cuotaFijaMensual) : null;
 
-          const { id: newId, error: eIns } = await insertPrestamoFinanciero(payloadBase);
+          const { id: newId, error: eIns } = await insertPrestamoFinanciero(payloadBase, tenantEmpresaId);
           if (eIns) {
             setFormError(eIns);
             return;
@@ -374,7 +377,9 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           }
           const capRef = parseNum(draftTramo.capitalReferencial);
           const intT = parseNum(draftTramo.interesMensual);
-          const { error: eTr } = await insertPrestamoTramo(newId, {
+          const { error: eTr } = await insertPrestamoTramo(
+            newId,
+            {
             monedaCapital,
             monedaPago,
             modalidadPago: draftTramo.modalidadPago,
@@ -387,7 +392,9 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
             evento: draftTramo.evento.trim() || 'inicio',
             nota: draftTramo.nota.trim(),
             orden: 0,
-          });
+            },
+            tenantEmpresaId,
+          );
           if (eTr) {
             setFormError(`Préstamo creado (id ${newId}), pero el tramo inicial falló: ${eTr}`);
             return;
@@ -397,7 +404,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           return;
         }
 
-        const { id: newId, error: eIns } = await insertPrestamoFinanciero(payloadBase);
+        const { id: newId, error: eIns } = await insertPrestamoFinanciero(payloadBase, tenantEmpresaId);
         if (eIns) {
           setFormError(eIns);
           return;
@@ -413,7 +420,7 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
 
       if (!p) return;
 
-      const { error: e1 } = await updatePrestamoFinanciero(p.id, payloadBase);
+      const { error: e1 } = await updatePrestamoFinanciero(p.id, payloadBase, tenantEmpresaId);
       if (e1) {
         setFormError(e1);
         return;
@@ -426,20 +433,25 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
         const cfT = parseNum(row.cuotaFijaMensual);
         const intT = parseNum(row.interesMensual);
         const ord = parseNum(row.orden);
-        const { error: eT } = await updatePrestamoTramo(p.id, row.id, {
-          monedaCapital: row.monedaCapital,
-          monedaPago: row.monedaPago,
-          modalidadPago: row.modalidadPago,
-          desde: row.desde.trim().slice(0, 10),
-          hasta: row.hasta.trim() ? row.hasta.trim().slice(0, 10) : null,
-          capitalReferencial: capRef,
-          tasaAnual: row.modalidadPago === 'tasa_anual' ? tasaDec : null,
-          cuotaFijaMensual: row.modalidadPago === 'cuota_fija' ? cfT : null,
-          interesMensual: intT,
-          evento: row.evento.trim(),
-          nota: row.nota.trim(),
-          orden: ord != null ? Math.round(ord) : undefined,
-        });
+        const { error: eT } = await updatePrestamoTramo(
+          p.id,
+          row.id,
+          {
+            monedaCapital: row.monedaCapital,
+            monedaPago: row.monedaPago,
+            modalidadPago: row.modalidadPago,
+            desde: row.desde.trim().slice(0, 10),
+            hasta: row.hasta.trim() ? row.hasta.trim().slice(0, 10) : null,
+            capitalReferencial: capRef,
+            tasaAnual: row.modalidadPago === 'tasa_anual' ? tasaDec : null,
+            cuotaFijaMensual: row.modalidadPago === 'cuota_fija' ? cfT : null,
+            interesMensual: intT,
+            evento: row.evento.trim(),
+            nota: row.nota.trim(),
+            orden: ord != null ? Math.round(ord) : undefined,
+          },
+          tenantEmpresaId,
+        );
         if (eT) {
           setFormError(`Tramo #${row.id}: ${eT}`);
           return;

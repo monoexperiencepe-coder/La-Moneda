@@ -27,6 +27,7 @@ import Modal from '../Common/Modal';
 import type { ShowUndoToastParams } from '../../hooks/useUndoToast';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
+import { useAuth } from '../../context/AuthContext';
 
 export type CategoriaMovimientoOption = { value: string; label: string };
 
@@ -95,6 +96,9 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   showUndoToast,
   getVehicleLabel,
 }) => {
+  const { profile } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
+
   const [mode, setMode] = useState<PanelMode>('overview');
   const [concState, setConcState] = useState<PendienteConciliacionState>(() => getPendienteConciliacionState());
   const [quickIndex, setQuickIndex] = useState(0);
@@ -209,6 +213,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         vehicleId: tipoGastoRequiereVehiculo(tipo) ? vehicleId : null,
         motivo,
         vehicles,
+        tenantEmpresaId,
       });
 
       if (!res.ok) {
@@ -256,6 +261,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                 reason: 'Deshacer conciliación rápida',
                 sourceAction: 'undo_move_category',
               },
+              tenantEmpresaId,
             );
             if (!rev.ok) throw new Error('undo_failed');
             upsertGasto(rev.gasto);

@@ -4,13 +4,22 @@ import { mapInversionGeneralVehiculoRow } from './supabaseMappers';
 import type { InversionGeneralVehiculo } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
 
-export async function fetchInversionesGeneralesVehiculo(): Promise<InversionGeneralVehiculo[]> {
-  if (!EMPRESA_ID) return [];
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
+
+/** @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). */
+export async function fetchInversionesGeneralesVehiculo(
+  tenantEmpresaId?: string | null,
+): Promise<InversionGeneralVehiculo[]> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return [];
   const data = await fetchAllSupabasePages(async (from, to) => {
     const { data, error } = await supabase
       .from('inversiones_generales_vehiculo')
       .select('*')
-      .eq('empresa_id', EMPRESA_ID)
+      .eq('empresa_id', empresaId)
       .order('vehiculo_numero', { ascending: true, nullsFirst: false })
       .order('vehiculo_referencia', { ascending: true })
       .range(from, to);

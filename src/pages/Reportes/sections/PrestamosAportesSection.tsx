@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 import { useRegistrosContext } from '../../../context/RegistrosContext';
+import { canUseFinanciamiento, permissionUserFromAuth } from '../../../utils/permissions';
 import { fetchAportesAccionistas, aporteMontoNeto } from '../../../services/aportesAccionistasService';
 import { fetchPrestamosFinancierosDetalle } from '../../../services/prestamosFinancierosService';
 import { calcularPrestamoFinancieroInfo } from '../../../utils/prestamosFinancierosCalc';
@@ -10,6 +12,9 @@ import type { AporteAccionista, PrestamoFinancieroDetalle } from '../../../data/
 
 const PrestamosAportesSection: React.FC = () => {
   const { prestamoAbonos } = useRegistrosContext();
+  const { profile, user } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
+  const canLoadFinanciamiento = canUseFinanciamiento(permissionUserFromAuth(user, profile?.email ?? null));
   const [prestamos, setPrestamos] = useState<PrestamoFinancieroDetalle[]>([]);
   const [aportes, setAportes] = useState<AporteAccionista[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +22,15 @@ const PrestamosAportesSection: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [pRes, aRes] = await Promise.all([fetchPrestamosFinancierosDetalle(), fetchAportesAccionistas()]);
+      if (!canLoadFinanciamiento) {
+        setPrestamos([]);
+        setAportes([]);
+        return;
+      }
+      const [pRes, aRes] = await Promise.all([
+        fetchPrestamosFinancierosDetalle(tenantEmpresaId),
+        fetchAportesAccionistas(tenantEmpresaId),
+      ]);
       setPrestamos(pRes.detalle);
       setAportes(aRes.rows);
     } finally {

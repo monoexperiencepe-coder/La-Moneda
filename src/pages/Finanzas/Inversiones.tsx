@@ -2,10 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { tipoGastoEffective } from '../../utils/gastosTipoGasto';
+import { useAuth } from '../../context/AuthContext';
+import { gastoMatchesTipoGasto } from '../../utils/gastosTipoGasto';
 import { formatCurrency, formatUSD } from '../../utils/formatting';
+import {
+  financialKpiSourceLabel,
+  formatInversionCompraDisplay,
+  resolveInversionCompraKpi,
+} from '../../utils/financialGlobalKpis';
 import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
 import { EMPRESA_ID } from '../../config/app';
+import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
 
 type HubSubCard = {
   title: string;
@@ -19,22 +26,41 @@ type HubSubCard = {
 
 const Inversiones: React.FC = () => {
   const navigate = useNavigate();
-  const { gastos } = useRegistrosContext();
+  const { gastos, gastosFinancialSummary, gastosLoadScope, isLoadingGastosSummary } =
+    useRegistrosContext();
+  const { profile, user } = useAuth();
+  const canLoadInversiones = useMemo(
+    () => canUseInversiones(permissionUserFromAuth(user, profile?.email ?? null)),
+    [user, profile?.email],
+  );
+  const tenantEmpresaId = profile?.empresa_id;
 
-  const totalUtilidadPEN = useMemo(() => {
-    let s = 0;
-    for (const g of gastos) {
-      if (tipoGastoEffective(g) === 'inversion_compra') s += g.monto;
-    }
-    return s;
-  }, [gastos]);
+  const inversionCompraKpi = useMemo(() => {
+    const localRows = gastos.filter((g) => gastoMatchesTipoGasto(g, 'inversion_compra'));
+    const local = {
+      monto: localRows.reduce((s, g) => s + g.monto, 0),
+      count: localRows.length,
+    };
+    return resolveInversionCompraKpi(
+      gastosFinancialSummary,
+      local,
+      gastosLoadScope,
+      isLoadingGastosSummary,
+    );
+  }, [gastos, gastosFinancialSummary, gastosLoadScope, isLoadingGastosSummary]);
 
   const [genPen, setGenPen] = useState(0);
   const [genUsd, setGenUsd] = useState(0);
   const [genLoading, setGenLoading] = useState(true);
 
   useEffect(() => {
-    if (!EMPRESA_ID) {
+    if (!canLoadInversiones) {
+      setGenPen(0);
+      setGenUsd(0);
+      setGenLoading(false);
+      return;
+    }
+    if (!tenantEmpresaId?.trim() && !EMPRESA_ID) {
       setGenPen(0);
       setGenUsd(0);
       setGenLoading(false);
@@ -42,7 +68,7 @@ const Inversiones: React.FC = () => {
     }
     let cancelled = false;
     setGenLoading(true);
-    void fetchInversionesGeneralesVehiculo()
+    void fetchInversionesGeneralesVehiculo(tenantEmpresaId)
       .then((rows) => {
         if (cancelled) return;
         let pen = 0;
@@ -66,10 +92,13 @@ const Inversiones: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canLoadInversiones, tenantEmpresaId]);
 
+  const inversionSourceLabel = financialKpiSourceLabel(inversionCompraKpi.source);
   const statUtilidad = (
-    <span className="text-sm sm:text-base font-bold text-violet-800 leading-snug tabular-nums">{formatCurrency(totalUtilidadPEN)}</span>
+    <span className="text-sm sm:text-base font-bold text-violet-800 leading-snug tabular-nums">
+      {formatInversionCompraDisplay(inversionCompraKpi)}
+    </span>
   );
 
   const statGenerales =
@@ -91,7 +120,9 @@ const Inversiones: React.FC = () => {
   const options: HubSubCard[] = [
     {
       title: 'Inversión con utilidad',
-      desc: 'Inversiones clasificadas desde gastos (inversion_compra)',
+      desc: inversionSourceLabel
+        ? `inversion_compra · ${inversionSourceLabel}`
+        : 'Inversiones clasificadas desde gastos (inversion_compra)',
       emoji: '🚗',
       path: '/finanzas/inversiones/utilidad',
       gradient: 'from-purple-500/10 to-violet-500/10',

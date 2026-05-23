@@ -11,7 +11,7 @@ import {
   clearFinancialAuditLogsBefore,
 } from '../../services/financialAuditService';
 import type { FinancialAuditLog } from '../../data/types';
-import { formatDate } from '../../utils/formatting';
+import { formatDateTimePe } from '../../utils/formatting';
 import { useAuth } from '../../context/AuthContext';
 import { isAdminRole } from '../../utils/roles';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -52,8 +52,9 @@ type ConfirmModal =
 
 const HistorialSistema: React.FC = () => {
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const admin = isAdminRole(role);
+  const tenantEmpresaId = profile?.empresa_id;
   const { toast, vehicles } = useRegistrosContext();
 
   const [rows, setRows] = useState<FinancialAuditLog[]>([]);
@@ -67,11 +68,14 @@ const HistorialSistema: React.FC = () => {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const [data, profiles] = await Promise.all([fetchFinancialAuditLogs(300), fetchUserProfilesLookup()]);
+    const [data, profiles] = await Promise.all([
+      fetchFinancialAuditLogs(300, tenantEmpresaId),
+      fetchUserProfilesLookup(),
+    ]);
     setRows(data);
     setUserLookup(profiles);
     setLoading(false);
-  }, []);
+  }, [tenantEmpresaId]);
 
   useEffect(() => {
     void reload();
@@ -88,7 +92,7 @@ const HistorialSistema: React.FC = () => {
     const id = confirmModal.row.id;
     setDeletingId(id);
     try {
-      const ok = await deleteFinancialAuditLog(id);
+      const ok = await deleteFinancialAuditLog(id, tenantEmpresaId);
       if (!ok) {
         toast.error('No se pudo eliminar el log');
         return;
@@ -105,7 +109,7 @@ const HistorialSistema: React.FC = () => {
     if (!confirmModal || confirmModal.kind !== 'all') return;
     setBulkBusy(true);
     try {
-      const ok = await clearFinancialAuditLogs();
+      const ok = await clearFinancialAuditLogs(tenantEmpresaId);
       if (!ok) {
         toast.error('No se pudieron eliminar los logs');
         return;
@@ -122,7 +126,7 @@ const HistorialSistema: React.FC = () => {
     if (!confirmModal || confirmModal.kind !== 'before') return;
     setBulkBusy(true);
     try {
-      const ok = await clearFinancialAuditLogsBefore(confirmModal.date);
+      const ok = await clearFinancialAuditLogsBefore(confirmModal.date, tenantEmpresaId);
       if (!ok) {
         toast.error('No se pudieron eliminar los logs');
         return;
@@ -253,8 +257,8 @@ const HistorialSistema: React.FC = () => {
                         {changeSummary}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {formatDate(r.createdAt.slice(0, 10))}
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap" title={r.createdAt}>
+                      {formatDateTimePe(r.createdAt)}
                     </td>
                     {admin && (
                       <td className="px-4 py-3 text-center">

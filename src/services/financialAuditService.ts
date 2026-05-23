@@ -12,7 +12,7 @@ export interface FinancialAuditLogInsert {
   old_data?: Record<string, unknown> | null;
   new_data?: Record<string, unknown> | null;
   reason?: string | null;
-  /** Tenant; obligatorio tras migration_rls_preparation.sql */
+  /** Tenant; obligatorio con RLS fase 1. */
   empresa_id?: string | null;
 }
 
@@ -41,13 +41,15 @@ function mapFinancialAuditRow(r: Record<string, unknown>): FinancialAuditLog {
   };
 }
 
-function resolveAuditEmpresaId(explicit?: string | null): string | null {
-  const fromArg = cleanUuid(explicit ?? null);
-  if (fromArg) return fromArg;
-  return cleanUuid(EMPRESA_ID);
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = cleanUuid(tenantEmpresaId ?? EMPRESA_ID);
+  return id || null;
 }
 
-export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Promise<boolean> {
+export async function insertFinancialAuditLog(
+  row: FinancialAuditLogInsert,
+  tenantEmpresaId?: string | null,
+): Promise<boolean> {
   const uidFromClean = cleanUuid(row.user_id);
   const uid =
     uidFromClean ??
@@ -56,9 +58,9 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
     console.warn('No authenticated user for audit log', { user_id: row.user_id });
     return true;
   }
-  const empresaId = resolveAuditEmpresaId(row.empresa_id);
+  const empresaId = resolveTenantId(row.empresa_id ?? tenantEmpresaId);
   if (!empresaId) {
-    console.warn('[financial_audit_logs] Sin empresa_id; omitiendo insert hasta migración RLS prep.');
+    console.warn('[financial_audit_logs] Sin empresa_id; omitiendo insert.');
     return true;
   }
   const sanitized: FinancialAuditLogInsert = {
@@ -72,12 +74,7 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
       ? (deepStripZeroIdFields(row.new_data) as Record<string, unknown>)
       : row.new_data,
   };
-  let { error } = await supabase.from('financial_audit_logs').insert(sanitized);
-  if (error && /empresa_id/i.test(error.message)) {
-    const { empresa_id: _omit, ...withoutEmpresa } = sanitized;
-    void _omit;
-    ({ error } = await supabase.from('financial_audit_logs').insert(withoutEmpresa));
-  }
+  const { error } = await supabase.from('financial_audit_logs').insert(sanitized);
   if (error) {
     logPostgrestError('financial_audit_logs insert', error);
     return false;
@@ -85,22 +82,19 @@ export async function insertFinancialAuditLog(row: FinancialAuditLogInsert): Pro
   return true;
 }
 
-export async function fetchFinancialAuditLogs(limit = 200): Promise<FinancialAuditLog[]> {
-  const empresaId = resolveAuditEmpresaId(null);
-  let q = supabase.from('financial_audit_logs').select('*');
-  if (empresaId) {
-    q = q.eq('empresa_id', empresaId);
-  }
-  let { data, error } = await q.order('created_at', { ascending: false }).limit(limit);
-  if (error && /empresa_id/i.test(error.message)) {
-    const fallback = await supabase
-      .from('financial_audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    data = fallback.data;
-    error = fallback.error;
-  }
+/** Lectura historial; operador / operador@ devuelve [] (RLS + guard UI). */
+export async function fetchFinancialAuditLogs(
+  limit = 200,
+  tenantEmpresaId?: string | null,
+): Promise<FinancialAuditLog[]> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return [];
+  const { data, error } = await supabase
+    .from('financial_audit_logs')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
   if (error) {
     logPostgrestError('financial_audit_logs fetch', error);
     return [];
@@ -108,8 +102,17 @@ export async function fetchFinancialAuditLogs(limit = 200): Promise<FinancialAud
   return (data ?? []).map((r) => mapFinancialAuditRow(r as Record<string, unknown>));
 }
 
-export async function deleteFinancialAuditLog(id: number): Promise<boolean> {
-  const { error } = await supabase.from('financial_audit_logs').delete().eq('id', id);
+export async function deleteFinancialAuditLog(
+  id: number,
+  tenantEmpresaId?: string | null,
+): Promise<boolean> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
+  const { error } = await supabase
+    .from('financial_audit_logs')
+    .delete()
+    .eq('id', id)
+    .eq('empresa_id', empresaId);
   if (error) {
     logPostgrestError('financial_audit_logs delete one', error);
     return false;
@@ -117,11 +120,14 @@ export async function deleteFinancialAuditLog(id: number): Promise<boolean> {
   return true;
 }
 
-/** Borra todos los logs (admin). Filtro amplio requerido por PostgREST. */
-export async function clearFinancialAuditLogs(): Promise<boolean> {
+/** Borra todos los logs del tenant (admin). */
+export async function clearFinancialAuditLogs(tenantEmpresaId?: string | null): Promise<boolean> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
   const { error } = await supabase
     .from('financial_audit_logs')
     .delete()
+    .eq('empresa_id', empresaId)
     .gte('created_at', '1970-01-01T00:00:00.000Z');
   if (error) {
     logPostgrestError('financial_audit_logs clear all', error);
@@ -130,12 +136,21 @@ export async function clearFinancialAuditLogs(): Promise<boolean> {
   return true;
 }
 
-/** Borra logs con created_at estrictamente anterior al instante dado (`YYYY-MM-DD` → inicio UTC ese día). */
-export async function clearFinancialAuditLogsBefore(isoDateEndExclusive: string): Promise<boolean> {
+/** Borra logs del tenant con created_at estrictamente anterior al instante dado. */
+export async function clearFinancialAuditLogsBefore(
+  isoDateEndExclusive: string,
+  tenantEmpresaId?: string | null,
+): Promise<boolean> {
   const raw = isoDateEndExclusive.trim();
   if (!raw) return false;
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return false;
   const d = raw.includes('T') ? raw : `${raw}T00:00:00.000Z`;
-  const { error } = await supabase.from('financial_audit_logs').delete().lt('created_at', d);
+  const { error } = await supabase
+    .from('financial_audit_logs')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .lt('created_at', d);
   if (error) {
     logPostgrestError('financial_audit_logs clear before', error);
     return false;

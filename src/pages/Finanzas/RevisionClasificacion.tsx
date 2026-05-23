@@ -16,15 +16,14 @@ import { REVISION_USER_LABEL } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { vehicleIdKey } from '../../utils/vehicleId';
-import { SUBTIPOS_REPRESENTACION_INTERNA } from '../../data/representacionInterna';
-import { normKey } from '../../utils/subtipoFinancieroLabel';
+import {
+  collectHistoricosSubtiposForTipoGasto,
+  formatSubtipoOptionLabel,
+  mergeSubtiposHistoricosConOficiales,
+} from '../../constants/gastosSubtipos';
 import {
   getDefaultSubtipoForTipoGasto,
-  normalizeSubtipoForTipoGasto,
-  tipoGastoUsaSubtipoOperativo,
 } from '../../utils/gastoMoveCategoriaDefaults';
-import { getOperativoSubtipoOptions } from '../../utils/operativoSubtipo';
-import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 
 const TIPO_OPCIONES = [
   { value: 'operativo_vehiculo', label: 'Operativo por vehículo' },
@@ -41,17 +40,7 @@ const TIPO_OPCIONES = [
   { value: 'personal_socios', label: 'Personal socios (legacy)' },
 ] as const;
 
-const SUBTIPO_OPERATIVO_OPCIONES = getOperativoSubtipoOptions();
-
-const SUBTIPO_REPRESENTACION_OPCIONES = SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
-  value: s,
-  label: getRepresentacionInternaSubtipoLabel(s),
-})) as readonly { value: string; label: string }[];
-
-const SUBTIPO_OPCIONES = [...SUBTIPO_OPERATIVO_OPCIONES, ...SUBTIPO_REPRESENTACION_OPCIONES] as const;
-
 const TIPO_DEFAULT = TIPO_OPCIONES[0].value;
-const SUBTIPO_DEFAULT = 'motor';
 
 function normalizeTipo(raw: string | null | undefined): string {
   const r = (raw ?? '').trim();
@@ -59,16 +48,11 @@ function normalizeTipo(raw: string | null | undefined): string {
   return r && TIPO_OPCIONES.some((o) => o.value === r) ? r : TIPO_DEFAULT;
 }
 
+const SUBTIPO_DEFAULT = 'motor';
+
 function normalizeSubtipo(raw: string | null | undefined, tipoFinanza: string): string {
   const r0 = (raw ?? '').trim();
-  if (tipoFinanza === 'representacion_interna') {
-    return normalizeSubtipoForTipoGasto('representacion_interna', r0);
-  }
-  if (tipoGastoUsaSubtipoOperativo(tipoFinanza)) {
-    return normalizeSubtipoForTipoGasto(tipoFinanza, r0);
-  }
-  const r = normKey(r0) === 'bateria' ? 'bateria' : r0;
-  if (r && SUBTIPO_OPCIONES.some((o) => o.value === r)) return r;
+  if (r0) return r0;
   const def = getDefaultSubtipoForTipoGasto(tipoFinanza);
   return def || SUBTIPO_DEFAULT;
 }
@@ -86,7 +70,8 @@ const RevisionClasificacion: React.FC = () => {
   const navigate = useNavigate();
   const { gastosPendientesRevision, vehicles, toast, upsertGasto } =
     useRegistrosContext();
-  const { canEditFinances } = useAuth();
+  const { canEditFinances, profile } = useAuth();
+  const tenantEmpresaId = profile?.empresa_id;
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [pending, setPending] = useState<{ id: string; kind: 'approve' | 'tipo' } | null>(null);
@@ -100,6 +85,22 @@ const RevisionClasificacion: React.FC = () => {
       }),
     [gastosPendientesRevision],
   );
+
+  const subtipoOptionsByTipo = useMemo(() => {
+    const map = new Map<string, { value: string; label: string }[]>();
+    for (const t of TIPO_OPCIONES) {
+      const historicos = collectHistoricosSubtiposForTipoGasto(gastosPendientesRevision, t.value);
+      const merged = mergeSubtiposHistoricosConOficiales(t.value, historicos);
+      map.set(
+        t.value,
+        merged.map((o) => ({
+          value: o.value,
+          label: formatSubtipoOptionLabel(t.value, o, o.isHistorico),
+        })),
+      );
+    }
+    return map;
+  }, [gastosPendientesRevision]);
 
   useEffect(() => {
     setDrafts(() => {
@@ -136,7 +137,7 @@ const RevisionClasificacion: React.FC = () => {
           revisado_por: REVISION_USER_LABEL,
         }, {
           reason: 'Aprobación de clasificación manual',
-        });
+        }, tenantEmpresaId);
         if (!updated) {
           toast.error('No se pudo aprobar', 'Revisa conexión o permisos en Supabase.');
           return;
@@ -147,7 +148,7 @@ const RevisionClasificacion: React.FC = () => {
         setPending(null);
       }
     },
-    [toast, upsertGasto],
+    [toast, upsertGasto, tenantEmpresaId],
   );
 
   const handleSaveTipoSubtipo = useCallback(
@@ -166,7 +167,7 @@ const RevisionClasificacion: React.FC = () => {
           revisado_por: REVISION_USER_LABEL,
         }, {
           reason: 'Corrección manual tipo/subtipo',
-        });
+        }, tenantEmpresaId);
         if (!updated) {
           toast.error('No se guardaron los cambios', 'Revisa conexión o permisos en Supabase.');
           return;
@@ -177,7 +178,7 @@ const RevisionClasificacion: React.FC = () => {
         setPending(null);
       }
     },
-    [drafts, toast, upsertGasto],
+    [drafts, toast, upsertGasto, tenantEmpresaId],
   );
 
   const colCount = 9;
@@ -284,7 +285,7 @@ const RevisionClasificacion: React.FC = () => {
                       <td className="px-4 py-3 align-top">
                         {draft ? (
                           <Select
-                            options={[...SUBTIPO_OPCIONES]}
+                            options={subtipoOptionsByTipo.get(draft.tipo) ?? []}
                             value={draft.subtipo}
                             disabled={busy || !canEditFinances}
                             className="!py-1.5 text-xs min-h-0"

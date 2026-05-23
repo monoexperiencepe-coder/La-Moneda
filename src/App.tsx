@@ -22,6 +22,7 @@ const InversionesUtilidad = lazy(() => import('./pages/Finanzas/InversionesUtili
 const InversionesGenerales = lazy(() => import('./pages/Finanzas/InversionesGenerales'));
 const GastosCaja = lazy(() => import('./pages/Finanzas/GastosCaja'));
 const CajaNegocio = lazy(() => import('./pages/Finanzas/CajaNegocio'));
+const UtilidadOperativa = lazy(() => import('./pages/Finanzas/UtilidadOperativa'));
 const Descuentos = lazy(() => import('./pages/Finanzas/Descuentos'));
 const Prestamos = lazy(() => import('./pages/Finanzas/Prestamos'));
 const Financiamiento = lazy(() => import('./pages/Finanzas/Financiamiento'));
@@ -137,6 +138,7 @@ const AppContent: React.FC = () => {
                         <Route path="/finanzas/prestamos" element={<SectionGuard section="finanzas_financiamiento"><Prestamos /></SectionGuard>} />
                         <Route path="/finanzas/reportes" element={<SectionGuard section="finanzas_reportes"><ReportesHub /></SectionGuard>} />
                         <Route path="/finanzas/resumen" element={<SectionGuard section="finanzas_resumen"><Resumen /></SectionGuard>} />
+                        <Route path="/finanzas/utilidad-operativa" element={<SectionGuard section="finanzas_resumen"><UtilidadOperativa /></SectionGuard>} />
                         <Route path="/finanzas/revision-clasificacion" element={<SectionGuard section="finanzas"><RevisionClasificacion /></SectionGuard>} />
 
                         {/* Vehículos */}

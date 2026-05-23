@@ -1,5 +1,10 @@
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
+
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
 import type {
   ModalidadPagoPrestamo,
   Moneda,
@@ -121,32 +126,35 @@ export type PrestamosFinancierosFetchResult = {
   tramosError: string | null;
 };
 
-function logPrestamosEmptyDiagnostic() {
+function logPrestamosEmptyDiagnostic(empresaId: string | null) {
   console.warn(
     '[prestamos_financieros] Sin filas visibles para esta sesión.',
-    '\n  empresa_id (VITE_EMPRESA_ID):',
-    EMPRESA_ID,
+    '\n  empresa_id:',
+    empresaId,
     '\n  Revisar: coincidencia empresa_id en BD, políticas RLS (rol admin/socio/contador/operador en user_profiles), migración v3.',
     '\n  SQL útil: supabase/diagnostico_prestamos_financieros.sql',
   );
 }
 
-/** Lista préstamos financieros con tramos (solo lectura; no usa gastos ni financiero_prestamo). */
-export async function fetchPrestamosFinancierosDetalle(): Promise<PrestamosFinancierosFetchResult> {
-  if (!EMPRESA_ID) {
-    console.error('[prestamos_financieros] Falta VITE_EMPRESA_ID en build (.env).');
-    return { detalle: [], error: 'Falta VITE_EMPRESA_ID en el entorno.', tramosError: null };
+/** Lista préstamos financieros con tramos. @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). */
+export async function fetchPrestamosFinancierosDetalle(
+  tenantEmpresaId?: string | null,
+): Promise<PrestamosFinancierosFetchResult> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    console.error('[prestamos_financieros] Falta empresa_id (perfil o VITE_EMPRESA_ID).');
+    return { detalle: [], error: 'Falta empresa_id en el entorno.', tramosError: null };
   }
 
   const { data: prestamosRaw, error: e1 } = await supabase
     .from('prestamos_financieros')
     .select('*')
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .order('id', { ascending: true });
 
   if (e1) {
     console.error('[prestamos_financieros] Supabase:', e1.message, {
-      empresa_id: EMPRESA_ID,
+      empresa_id: empresaId,
       code: e1.code,
       details: e1.details,
       hint: e1.hint,
@@ -160,7 +168,7 @@ export async function fetchPrestamosFinancierosDetalle(): Promise<PrestamosFinan
 
   const prestamos = (prestamosRaw ?? []).map((r) => mapPrestamoRow(r as Record<string, unknown>));
   if (prestamos.length === 0) {
-    logPrestamosEmptyDiagnostic();
+    logPrestamosEmptyDiagnostic(empresaId);
     return { detalle: [], error: null, tramosError: null };
   }
 
@@ -168,6 +176,7 @@ export async function fetchPrestamosFinancierosDetalle(): Promise<PrestamosFinan
   const { data: tramosRaw, error: e2 } = await supabase
     .from('prestamos_tramos')
     .select('*')
+    .eq('empresa_id', empresaId)
     .in('prestamo_financiero_id', ids)
     .order('prestamo_financiero_id', { ascending: true })
     .order('orden', { ascending: true })
@@ -175,7 +184,7 @@ export async function fetchPrestamosFinancierosDetalle(): Promise<PrestamosFinan
 
   if (e2) {
     console.error('[prestamos_tramos] Supabase:', e2.message, {
-      empresa_id: EMPRESA_ID,
+      empresa_id: empresaId,
       code: e2.code,
       details: e2.details,
       hint: e2.hint,
@@ -254,9 +263,11 @@ function buildPrestamoUpdateRow(input: PrestamoFinancieroUpdateInput): Record<st
 export async function updatePrestamoFinanciero(
   prestamoId: number,
   input: PrestamoFinancieroUpdateInput,
+  tenantEmpresaId?: string | null,
 ): Promise<{ error: string | null }> {
-  if (!EMPRESA_ID) {
-    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
   }
   const row = buildPrestamoUpdateRow(input);
   if (Object.keys(row).length === 0) {
@@ -266,7 +277,7 @@ export async function updatePrestamoFinanciero(
     .from('prestamos_financieros')
     .update(row)
     .eq('id', prestamoId)
-    .eq('empresa_id', EMPRESA_ID);
+    .eq('empresa_id', empresaId);
   return { error: error?.message ?? null };
 }
 
@@ -309,7 +320,12 @@ export async function updatePrestamoTramo(
   prestamoFinancieroId: number,
   tramoId: number,
   input: PrestamoTramoUpdateInput,
+  tenantEmpresaId?: string | null,
 ): Promise<{ error: string | null }> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
+  }
   const row = buildTramoUpdateRow(input);
   if (Object.keys(row).length === 0) {
     return { error: null };
@@ -318,7 +334,8 @@ export async function updatePrestamoTramo(
     .from('prestamos_tramos')
     .update(row)
     .eq('id', tramoId)
-    .eq('prestamo_financiero_id', prestamoFinancieroId);
+    .eq('prestamo_financiero_id', prestamoFinancieroId)
+    .eq('empresa_id', empresaId);
   return { error: error?.message ?? null };
 }
 
@@ -345,12 +362,14 @@ export type PrestamoFinancieroInsertInput = {
 
 export async function insertPrestamoFinanciero(
   input: PrestamoFinancieroInsertInput,
+  tenantEmpresaId?: string | null,
 ): Promise<{ id: number | null; error: string | null }> {
-  if (!EMPRESA_ID) {
-    return { id: null, error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { id: null, error: 'Falta empresa_id en el entorno.' };
   }
   const row: Record<string, unknown> = {
-    empresa_id: EMPRESA_ID,
+    empresa_id: empresaId,
     codigo: input.codigo,
     prestamista: input.prestamista,
     titulo: input.titulo,
@@ -400,8 +419,14 @@ export type PrestamoTramoInsertInput = {
 export async function insertPrestamoTramo(
   prestamoFinancieroId: number,
   input: PrestamoTramoInsertInput,
+  tenantEmpresaId?: string | null,
 ): Promise<{ error: string | null }> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
+  }
   const row: Record<string, unknown> = {
+    empresa_id: empresaId,
     prestamo_financiero_id: prestamoFinancieroId,
     moneda: input.monedaCapital,
     moneda_capital: input.monedaCapital,

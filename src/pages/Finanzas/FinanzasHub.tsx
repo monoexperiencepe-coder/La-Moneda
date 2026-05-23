@@ -1,70 +1,120 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { calculateKPIs } from '../../utils/calculations';
+import {
+  formatGlobalGastosDisplay,
+  formatGlobalIngresosDisplay,
+} from '../../utils/financialGlobalKpis';
+import { resolveGastosGlobalTotalState } from '../../utils/gastosFinancialSummary';
 import { formatCurrency } from '../../utils/formatting';
+import {
+  sumUtilidadHistoricaTotal,
+  UTILIDAD_HISTORICA_TOOLTIP,
+} from '../../utils/utilidadOperativa';
 import SmartClock from '../../components/Common/SmartClock';
 
+/** Ocultar resultado neto en hub hasta que la data operativa esté ordenada. */
+const SHOW_RESULTADO_NETO_EN_HUB = false;
+
 type HubCardOption = {
+  id: string;
   title: string;
   desc: string;
   emoji: string;
   path: string;
   gradient: string;
   border: string;
-  /** Si se omite o es cadena vacía, no se muestra el monto arriba a la derecha. */
   stat?: string;
   statColor?: string;
+  statTitle?: string;
 };
 
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
-  const { ingresos, gastos, cajaNegocioVehiculo } = useRegistrosContext();
-  const kpis = calculateKPIs(ingresos, gastos, []);
-  const totalGastosTabla = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
-  const totalCajaNegocio = useMemo(() => cajaNegocioVehiculo.reduce((s, x) => s + x.monto, 0), [cajaNegocioVehiculo]);
+  const {
+    ingresos,
+    gastos,
+    gastosFinancialSummary,
+    gastosLoadScope,
+    isLoadingGastosSummary,
+    cajaNegocioVehiculo,
+  } = useRegistrosContext();
+  const localGastosTotal = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
+  const gastosGlobalState = useMemo(
+    () =>
+      resolveGastosGlobalTotalState(
+        gastosFinancialSummary,
+        localGastosTotal,
+        gastos.length,
+        gastosLoadScope,
+        isLoadingGastosSummary,
+      ),
+    [gastosFinancialSummary, localGastosTotal, gastos.length, gastosLoadScope, isLoadingGastosSummary],
+  );
+  const totalGastosTabla = formatGlobalGastosDisplay(gastosGlobalState);
+  const totalIngresosTabla = formatGlobalIngresosDisplay(ingresos);
+  const utilidadHistoricaDisplay = formatCurrency(sumUtilidadHistoricaTotal(cajaNegocioVehiculo));
+  const gastosSourceLabel =
+    gastosGlobalState.source === 'rpc' ? 'BD' : gastosGlobalState.source === 'loading' ? '' : 'Vista rápida';
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log('[FinanzasHub] gastos source', {
+      source: gastosGlobalState.source,
+      total: gastosGlobalState.total,
+      local: localGastosTotal,
+      summary: gastosFinancialSummary?.totalGastos ?? null,
+      utilidadHistorica: sumUtilidadHistoricaTotal(cajaNegocioVehiculo),
+    });
+  }, [gastosGlobalState, localGastosTotal, gastosFinancialSummary, cajaNegocioVehiculo]);
 
   const options: HubCardOption[] = [
     {
+      id: 'ingresos',
       title: 'Ingresos',
-      desc: 'Tabla y gráficos de ingresos',
+      desc: 'Histórico completo en memoria (ingresos)',
       emoji: '💰',
       path: '/finanzas/ingresos',
       gradient: 'from-emerald-500/10 to-teal-500/10',
       border: 'border-emerald-200 hover:border-emerald-400',
-      stat: formatCurrency(kpis.totalIngresos),
+      stat: totalIngresosTabla,
       statColor: 'text-emerald-600',
     },
     {
+      id: 'gastos',
       title: 'Gastos',
-      desc: 'Gastos clasificados por categoría',
+      desc: gastosSourceLabel ? `Totales globales · ${gastosSourceLabel}` : 'Gastos clasificados por categoría',
       emoji: '💸',
       path: '/finanzas/gastos',
       gradient: 'from-red-500/10 to-orange-500/10',
       border: 'border-red-200 hover:border-red-400',
-      stat: formatCurrency(totalGastosTabla),
+      stat: totalGastosTabla,
       statColor: 'text-red-500',
     },
     {
-      title: 'Utilidad',
-      desc: 'Por vehículo — aparte de gastos operativos e ingresos',
+      id: 'utilidad-historica',
+      title: 'Utilidad histórica',
+      desc: 'Importada desde Excel (caja negocio por vehículo)',
       emoji: '📈',
-      path: '/finanzas/caja-negocio',
-      gradient: 'from-teal-500/10 to-cyan-500/10',
-      border: 'border-teal-200 hover:border-teal-400',
-      stat: formatCurrency(totalCajaNegocio),
-      statColor: 'text-teal-800',
+      path: '/finanzas/utilidad-operativa',
+      gradient: 'from-emerald-500/10 to-green-500/10',
+      border: 'border-emerald-200 hover:border-emerald-400',
+      stat: utilidadHistoricaDisplay,
+      statColor: 'text-emerald-800',
+      statTitle: UTILIDAD_HISTORICA_TOOLTIP,
     },
     {
+      id: 'inversiones',
       title: 'Inversiones',
       desc: 'Inversión con utilidad (gastos) e inversión inicial por vehículo (Excel)',
       emoji: '🚗',
       path: '/finanzas/inversiones',
       gradient: 'from-purple-500/10 to-violet-500/10',
-      border: 'border-purple-200 hover:border-purple-400',
+      border: 'border-purple-200 hover:border-violet-400',
     },
     {
+      id: 'resumen',
       title: 'Resumen',
       desc: '¿Cómo va el negocio este mes?',
       emoji: '📋',
@@ -73,6 +123,7 @@ const FinanzasHub: React.FC = () => {
       border: 'border-violet-200 hover:border-violet-400',
     },
     {
+      id: 'financiamiento',
       title: 'Financiamiento',
       desc: 'Préstamos y aportes de capital',
       emoji: '🏦',
@@ -81,6 +132,7 @@ const FinanzasHub: React.FC = () => {
       border: 'border-indigo-200 hover:border-indigo-400',
     },
     {
+      id: 'reportes',
       title: 'Reportes',
       desc: 'Centro de análisis e histórico',
       emoji: '📊',
@@ -89,6 +141,10 @@ const FinanzasHub: React.FC = () => {
       border: 'border-purple-200 hover:border-purple-400',
     },
   ];
+
+  const visibleOptions = SHOW_RESULTADO_NETO_EN_HUB
+    ? options
+    : options.filter((o) => o.id !== 'resultado-neto');
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -107,12 +163,13 @@ const FinanzasHub: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {options.map((o) => {
+        {visibleOptions.map((o) => {
           const showStat = o.stat != null && String(o.stat).trim() !== '';
           return (
             <button
-              key={o.path}
+              key={o.id}
               type="button"
+              title={o.statTitle}
               onClick={() => navigate(o.path)}
               className={`mission-btn bg-gradient-to-br ${o.gradient} border-2 ${o.border} group text-left`}
             >
@@ -125,6 +182,7 @@ const FinanzasHub: React.FC = () => {
                 <span className="text-4xl group-hover:scale-110 transition-transform shrink-0">{o.emoji}</span>
                 {showStat ? (
                   <span
+                    title={o.statTitle}
                     className={`text-sm sm:text-base font-bold ${o.statColor ?? 'text-gray-800'} text-right leading-snug break-words max-w-[min(100%,14rem)]`}
                   >
                     {o.stat}

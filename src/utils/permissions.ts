@@ -55,17 +55,21 @@ export function normalizeEmail(email: string | null | undefined): string {
   return (email ?? '').trim().toLowerCase();
 }
 
-/** Cuenta con acceso financiero restringido (solo globales + pendiente revisión). */
+/**
+ * Cuenta con acceso financiero restringido (solo globales + pendiente revisión).
+ * Mismo criterio que RLS `is_restricted_operador_account()`: rol operador o email operador@.
+ */
 export function isFinancialOperadorRestricted(user: PermissionUser | null | undefined): boolean {
   if (!user) return false;
   const mail = normalizeEmail(user.email);
   if (mail && mail === OPERADOR_EMAIL) return true;
-  return false;
+  const role = (user.role ?? '').trim().toLowerCase();
+  return role === 'operador';
 }
 
 /**
  * Rol efectivo para permisos de app.
- * El email operador configurado fuerza restricción financiera aunque el perfil diga otra cosa.
+ * Cuenta restringida (rol operador o email operador@) se trata como operador en UI.
  */
 export function getUserRole(user: PermissionUser | null | undefined): AppRole {
   if (!user) return 'operador';
@@ -135,6 +139,12 @@ export function canMovePendienteToTipo(
 }
 
 export function canUseIngresos(user: PermissionUser | null | undefined): boolean {
+  if (!user || isFinancialOperadorRestricted(user)) return false;
+  return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+}
+
+/** Historial del sistema / financial_audit_logs (alineado con RLS SELECT). */
+export function canViewFinancialAuditLogs(user: PermissionUser | null | undefined): boolean {
   if (!user || isFinancialOperadorRestricted(user)) return false;
   return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
 }

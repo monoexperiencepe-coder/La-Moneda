@@ -8,11 +8,13 @@ function normKey(s: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-const LABELS: Record<(typeof SUBTIPOS_REPRESENTACION_INTERNA)[number], string> = {
+const LABELS: Record<string, string> = {
   movilidad_socios: 'Movilidad socios',
   almuerzo_socios: 'Almuerzo socios',
   reunion_socios: 'Reunión socios',
   gasto_representacion: 'Gasto de representación',
+  regalos: 'Regalos',
+  alojamientos: 'Alojamientos',
 };
 
 const CODE_SET = new Set<string>(SUBTIPOS_REPRESENTACION_INTERNA);
@@ -62,7 +64,7 @@ export function normalizeRepresentacionInternaSubtipo(raw: string | null | undef
  */
 export function getRepresentacionInternaSubtipoLabel(subtipo: string | null | undefined): string {
   const code = normalizeRepresentacionInternaSubtipo(subtipo);
-  if (code && code in LABELS) return LABELS[code as keyof typeof LABELS];
+  if (code && LABELS[code]) return LABELS[code];
   const t = (subtipo ?? '').trim();
   if (!t) return '—';
   return t;

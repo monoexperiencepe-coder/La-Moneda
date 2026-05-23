@@ -16,6 +16,7 @@ import {
 import type { AporteAccionista, Moneda } from '../../data/types';
 import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
+import { canUseFinanciamiento, permissionUserFromAuth } from '../../utils/permissions';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -48,7 +49,13 @@ type HistorialFiltro = 'todos' | 'aportes' | 'retiros';
 type ReloadOpts = { background?: boolean };
 
 const AportesPanel: React.FC = () => {
-  const { canEditFinances } = useAuth();
+  const { canEditFinances, profile, user } = useAuth();
+  const canLoadFinanciamiento = useMemo(
+    () => canUseFinanciamiento(permissionUserFromAuth(user, profile?.email ?? null)),
+    [user, profile?.email],
+  );
+  const tenantEmpresaId = profile?.empresa_id;
+  const realtimeEmpresaId = (tenantEmpresaId?.trim() || EMPRESA_ID) ?? '';
   const { toast, showUndoToast } = useRegistrosContext();
   const [rows, setRows] = useState<AporteAccionista[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,12 +68,19 @@ const AportesPanel: React.FC = () => {
 
   const reload = useCallback(async (opts?: ReloadOpts) => {
     const background = opts?.background ?? false;
-    if (!EMPRESA_ID) {
+    if (!canLoadFinanciamiento) {
       setRows([]);
       setLoading(false);
       setRefreshing(false);
-      setError('Falta VITE_EMPRESA_ID en el entorno.');
-      console.error('[AportesPanel] Falta VITE_EMPRESA_ID');
+      setError(null);
+      return;
+    }
+    if (!tenantEmpresaId?.trim() && !EMPRESA_ID) {
+      setRows([]);
+      setLoading(false);
+      setRefreshing(false);
+      setError('Falta empresa_id en el entorno.');
+      console.error('[AportesPanel] Falta empresa_id');
       return;
     }
     if (background) {
@@ -76,20 +90,20 @@ const AportesPanel: React.FC = () => {
     }
     setError(null);
     try {
-      const { rows: next, error: fetchErr } = await fetchAportesAccionistas();
+      const { rows: next, error: fetchErr } = await fetchAportesAccionistas(tenantEmpresaId);
       setRows(next);
       setError(fetchErr);
       if (fetchErr) {
-        console.error('[AportesPanel] Supabase:', fetchErr, { empresa_id: EMPRESA_ID });
+        console.error('[AportesPanel] Supabase:', fetchErr, { empresa_id: tenantEmpresaId });
       }
       if (!fetchErr && next.length === 0) {
-        console.warn('[AportesPanel] Lista vacía.', { empresa_id: EMPRESA_ID, revision: 'RLS / import v3' });
+        console.warn('[AportesPanel] Lista vacía.', { empresa_id: tenantEmpresaId, revision: 'RLS / import v3' });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar aportes';
       setError(msg);
       setRows([]);
-      console.error('[AportesPanel] Excepción:', e, { empresa_id: EMPRESA_ID });
+      console.error('[AportesPanel] Excepción:', e, { empresa_id: tenantEmpresaId });
     } finally {
       if (background) {
         setRefreshing(false);
@@ -97,7 +111,7 @@ const AportesPanel: React.FC = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [canLoadFinanciamiento, tenantEmpresaId]);
 
   useEffect(() => {
     void reload();
@@ -105,16 +119,16 @@ const AportesPanel: React.FC = () => {
 
   /** Otros usuarios o pestañas: reflejar INSERT/UPDATE/DELETE sin recargar la página. */
   useEffect(() => {
-    if (!EMPRESA_ID) return;
+    if (!canLoadFinanciamiento || !realtimeEmpresaId) return;
     const channel = supabase
-      .channel(`aportes-accionistas-${EMPRESA_ID}`)
+      .channel(`aportes-accionistas-${realtimeEmpresaId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'aportes_accionistas',
-          filter: `empresa_id=eq.${EMPRESA_ID}`,
+          filter: `empresa_id=eq.${realtimeEmpresaId}`,
         },
         () => {
           void reload({ background: true });
@@ -130,7 +144,7 @@ const AportesPanel: React.FC = () => {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [EMPRESA_ID, reload]);
+  }, [canLoadFinanciamiento, realtimeEmpresaId, reload]);
 
   const onMovimientoGuardado = useCallback(
     async (row: AporteAccionista) => {
@@ -202,7 +216,7 @@ const AportesPanel: React.FC = () => {
       if (!window.confirm(msg)) return;
       setDeletingId(r.id);
       try {
-        const { error: delErr } = await deleteAporteAccionista(r.id);
+        const { error: delErr } = await deleteAporteAccionista(r.id, tenantEmpresaId);
         if (delErr) {
           toast.error('No se pudo eliminar', delErr);
           return;
@@ -217,16 +231,19 @@ const AportesPanel: React.FC = () => {
             entityType: 'aporte',
             entityId: r.id,
             undo: async () => {
-              const { error: insErr } = await insertAporteAccionista({
-                accionista: r.accionista,
-                vehiculoReferencia: r.vehiculoReferencia,
-                monto: r.monto,
-                moneda: r.moneda,
-                fechaAporte: r.fechaAporte,
-                generaInteres: r.generaInteres,
-                tipo: r.tipo,
-                observaciones: r.observaciones,
-              });
+              const { error: insErr } = await insertAporteAccionista(
+                {
+                  accionista: r.accionista,
+                  vehiculoReferencia: r.vehiculoReferencia,
+                  monto: r.monto,
+                  moneda: r.moneda,
+                  fechaAporte: r.fechaAporte,
+                  generaInteres: r.generaInteres,
+                  tipo: r.tipo,
+                  observaciones: r.observaciones,
+                },
+                tenantEmpresaId,
+              );
               if (insErr) throw new Error(insErr);
               await reload({ background: true });
             },

@@ -2,6 +2,11 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import type { AporteAccionista, Moneda } from '../data/types';
 
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
+
 /** Movimiento contable de salida de capital (resta en totales). */
 export const APORTE_TIPO_RETIRO = 'retiro_accionista';
 
@@ -38,32 +43,35 @@ export type AportesAccionistasFetchResult = {
   error: string | null;
 };
 
-function logAportesEmptyDiagnostic() {
+function logAportesEmptyDiagnostic(empresaId: string | null) {
   console.warn(
     '[aportes_accionistas] Sin filas visibles.',
-    '\n  empresa_id (VITE_EMPRESA_ID):',
-    EMPRESA_ID,
+    '\n  empresa_id:',
+    empresaId,
     '\n  Revisar: import v3, RLS en aportes_accionistas, políticas para rol finanzas.',
   );
 }
 
-/** Aportes de accionistas para la empresa configurada (solo lectura). */
-export async function fetchAportesAccionistas(): Promise<AportesAccionistasFetchResult> {
-  if (!EMPRESA_ID) {
-    console.error('[aportes_accionistas] Falta VITE_EMPRESA_ID en build (.env).');
-    return { rows: [], error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+/** Aportes de accionistas. @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). */
+export async function fetchAportesAccionistas(
+  tenantEmpresaId?: string | null,
+): Promise<AportesAccionistasFetchResult> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    console.error('[aportes_accionistas] Falta empresa_id (perfil o VITE_EMPRESA_ID).');
+    return { rows: [], error: 'Falta empresa_id en el entorno.' };
   }
 
   const { data, error } = await supabase
     .from('aportes_accionistas')
     .select(APORTE_SELECT)
-    .eq('empresa_id', EMPRESA_ID)
+    .eq('empresa_id', empresaId)
     .order('fecha_aporte', { ascending: false })
     .order('id', { ascending: false });
 
   if (error) {
     console.error('[aportes_accionistas] Supabase:', error.message, {
-      empresa_id: EMPRESA_ID,
+      empresa_id: empresaId,
       code: error.code,
       details: error.details,
       hint: error.hint,
@@ -72,7 +80,7 @@ export async function fetchAportesAccionistas(): Promise<AportesAccionistasFetch
   }
 
   const rows = (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
-  if (rows.length === 0) logAportesEmptyDiagnostic();
+  if (rows.length === 0) logAportesEmptyDiagnostic(empresaId);
 
   return { rows, error: null };
 }
@@ -95,15 +103,16 @@ export type AporteAccionistaInsertInput = {
   observaciones: string;
 };
 
-/** Alta de un aporte o retiro (dedupe_key único en cliente). Devuelve la fila creada para actualizar UI al instante. */
 export async function insertAporteAccionista(
   input: AporteAccionistaInsertInput,
+  tenantEmpresaId?: string | null,
 ): Promise<{ error: string | null; row: AporteAccionista | null }> {
-  if (!EMPRESA_ID) {
-    return { error: 'Falta VITE_EMPRESA_ID en el entorno.', row: null };
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.', row: null };
   }
   const row = {
-    empresa_id: EMPRESA_ID,
+    empresa_id: empresaId,
     accionista: input.accionista.trim(),
     vehiculo_referencia:
       input.vehiculoReferencia == null || input.vehiculoReferencia.trim() === ''
@@ -124,15 +133,18 @@ export async function insertAporteAccionista(
   return { error: null, row: data ? mapRow(data as Record<string, unknown>) : null };
 }
 
-/** Elimina un aporte o retiro por id (respeta empresa_id y RLS). */
-export async function deleteAporteAccionista(id: string): Promise<{ error: string | null }> {
-  if (!EMPRESA_ID) {
-    return { error: 'Falta VITE_EMPRESA_ID en el entorno.' };
+export async function deleteAporteAccionista(
+  id: string,
+  tenantEmpresaId?: string | null,
+): Promise<{ error: string | null }> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
   }
   const { error } = await supabase
     .from('aportes_accionistas')
     .delete()
     .eq('id', id)
-    .eq('empresa_id', EMPRESA_ID);
+    .eq('empresa_id', empresaId);
   return { error: error?.message ?? null };
 }

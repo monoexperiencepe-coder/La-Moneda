@@ -111,14 +111,16 @@ Bloquean `SELECT`/`INSERT`/… para `authenticated` salvo bypass. Si la app “f
 
 ---
 
-## Fase 1 piloto — `vehiculos` (activo en repo)
+## Fase 1 piloto — `vehiculos` / `conductores` (activo en repo)
 
-| Archivo | Uso |
-|---------|-----|
-| [`migration_vehiculos_rls_fase1.sql`](migration_vehiculos_rls_fase1.sql) | Activar RLS **solo** en `vehiculos` + 4 policies |
-| [`diagnostico_rls_vehiculos_post_fase1.sql`](diagnostico_rls_vehiculos_post_fase1.sql) | Validación post-migración |
+| Tabla | Migración | Diagnóstico post |
+|-------|-----------|------------------|
+| `vehiculos` | [`migration_vehiculos_rls_fase1.sql`](migration_vehiculos_rls_fase1.sql) + [`migration_vehiculos_rls_fase1_fix.sql`](migration_vehiculos_rls_fase1_fix.sql) | [`diagnostico_rls_vehiculos_post_fase1.sql`](diagnostico_rls_vehiculos_post_fase1.sql) |
+| `conductores` | [`migration_conductores_rls_fase1.sql`](migration_conductores_rls_fase1.sql) | [`diagnostico_rls_conductores_post_fase1.sql`](diagnostico_rls_conductores_post_fase1.sql) |
+| `unidades` | [`migration_unidades_rls_fase1.sql`](migration_unidades_rls_fase1.sql) | [`diagnostico_rls_unidades_post_fase1.sql`](diagnostico_rls_unidades_post_fase1.sql) |
+| `kilometrajes` | [`migration_kilometrajes_rls_fase1.sql`](migration_kilometrajes_rls_fase1.sql) | [`diagnostico_rls_kilometrajes_post_fase1.sql`](diagnostico_rls_kilometrajes_post_fase1.sql) |
 
-Policies: `vehiculos_select_tenant_active`, `vehiculos_insert_tenant_editors`, `vehiculos_update_tenant_editors`, `vehiculos_delete_tenant_editors`.
+Helpers compartidos: `is_restricted_operador_account()`, `can_mutate_vehiculos()`, `can_mutate_conductores()`, `can_mutate_unidades()`, `can_mutate_kilometrajes()`.
 
 ---
 

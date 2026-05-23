@@ -14,6 +14,7 @@ import { calcularPrestamoFinancieroInfo, interesMensualEfectivoTramo } from '../
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
+import { canUseFinanciamiento, permissionUserFromAuth } from '../../utils/permissions';
 import PrestamoEditModal from '../../components/Finanzas/PrestamoEditModal';
 import PrestamosRegistroTable from '../../components/Finanzas/PrestamosRegistroTable';
 
@@ -397,7 +398,13 @@ function TramosTimeline({
 type ReloadOpts = { background?: boolean };
 
 const PrestamosPanel: React.FC = () => {
-  const { canEditFinances } = useAuth();
+  const { canEditFinances, profile, user } = useAuth();
+  const canLoadFinanciamiento = useMemo(
+    () => canUseFinanciamiento(permissionUserFromAuth(user, profile?.email ?? null)),
+    [user, profile?.email],
+  );
+  const tenantEmpresaId = profile?.empresa_id;
+  const realtimeEmpresaId = (tenantEmpresaId?.trim() || EMPRESA_ID) ?? '';
   const [prestamoModal, setPrestamoModal] = useState<
     | { open: false }
     | { open: true; mode: 'create' }
@@ -413,12 +420,20 @@ const PrestamosPanel: React.FC = () => {
 
   const reload = useCallback(async (opts?: ReloadOpts) => {
     const background = opts?.background ?? false;
-    if (!EMPRESA_ID) {
+    if (!canLoadFinanciamiento) {
       setDetalle([]);
       setLoading(false);
       setRefreshing(false);
-      setError('Falta VITE_EMPRESA_ID en el entorno.');
-      console.error('[PrestamosPanel] Falta VITE_EMPRESA_ID');
+      setError(null);
+      setTramosError(null);
+      return;
+    }
+    if (!tenantEmpresaId?.trim() && !EMPRESA_ID) {
+      setDetalle([]);
+      setLoading(false);
+      setRefreshing(false);
+      setError('Falta empresa_id en el entorno.');
+      console.error('[PrestamosPanel] Falta empresa_id');
       return;
     }
     if (background) {
@@ -429,24 +444,25 @@ const PrestamosPanel: React.FC = () => {
     setError(null);
     setTramosError(null);
     try {
-      const { detalle: rows, error: fetchErr, tramosError: trErr } = await fetchPrestamosFinancierosDetalle();
+      const { detalle: rows, error: fetchErr, tramosError: trErr } =
+        await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
       setDetalle(rows);
       setError(fetchErr);
       setTramosError(trErr);
       if (fetchErr) {
-        console.error('[PrestamosPanel] Supabase préstamos:', fetchErr, { empresa_id: EMPRESA_ID });
+        console.error('[PrestamosPanel] Supabase préstamos:', fetchErr, { empresa_id: tenantEmpresaId });
       }
       if (trErr) {
-        console.error('[PrestamosPanel] Supabase tramos:', trErr, { empresa_id: EMPRESA_ID });
+        console.error('[PrestamosPanel] Supabase tramos:', trErr, { empresa_id: tenantEmpresaId });
       }
       if (!fetchErr && rows.length === 0) {
-        console.warn('[PrestamosPanel] Lista vacía.', { empresa_id: EMPRESA_ID, revision: 'RLS / import / empresa_id' });
+        console.warn('[PrestamosPanel] Lista vacía.', { empresa_id: tenantEmpresaId, revision: 'RLS / import / empresa_id' });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar préstamos';
       setError(msg);
       setDetalle([]);
-      console.error('[PrestamosPanel] Excepción:', e, { empresa_id: EMPRESA_ID });
+      console.error('[PrestamosPanel] Excepción:', e, { empresa_id: tenantEmpresaId });
     } finally {
       if (background) {
         setRefreshing(false);
@@ -454,7 +470,7 @@ const PrestamosPanel: React.FC = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [canLoadFinanciamiento, tenantEmpresaId]);
 
   useEffect(() => {
     void reload();
@@ -470,16 +486,16 @@ const PrestamosPanel: React.FC = () => {
 
   /** Actualización automática al modificar préstamos o tramos (requiere Realtime habilitado en Supabase para esas tablas). */
   useEffect(() => {
-    if (!EMPRESA_ID) return undefined;
+    if (!canLoadFinanciamiento || !realtimeEmpresaId) return undefined;
     const channel = supabase
-      .channel(`prestamos-panel-${EMPRESA_ID}`)
+      .channel(`prestamos-panel-${realtimeEmpresaId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'prestamos_financieros',
-          filter: `empresa_id=eq.${EMPRESA_ID}`,
+          filter: `empresa_id=eq.${realtimeEmpresaId}`,
         },
         () => {
           scheduleBackgroundReload();
@@ -491,7 +507,7 @@ const PrestamosPanel: React.FC = () => {
           event: '*',
           schema: 'public',
           table: 'prestamos_tramos',
-          filter: `empresa_id=eq.${EMPRESA_ID}`,
+          filter: `empresa_id=eq.${realtimeEmpresaId}`,
         },
         () => {
           scheduleBackgroundReload();
@@ -510,7 +526,7 @@ const PrestamosPanel: React.FC = () => {
       }
       void supabase.removeChannel(channel);
     };
-  }, [EMPRESA_ID, scheduleBackgroundReload]);
+  }, [canLoadFinanciamiento, realtimeEmpresaId, scheduleBackgroundReload]);
 
   useEffect(() => {
     const onVis = () => {
@@ -518,7 +534,7 @@ const PrestamosPanel: React.FC = () => {
         wasHiddenRef.current = true;
         return;
       }
-      if (document.visibilityState === 'visible' && wasHiddenRef.current && EMPRESA_ID) {
+      if (document.visibilityState === 'visible' && wasHiddenRef.current && canLoadFinanciamiento) {
         wasHiddenRef.current = false;
         void reload({ background: true });
       }

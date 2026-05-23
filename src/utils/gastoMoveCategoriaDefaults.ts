@@ -1,8 +1,8 @@
+import { getOficialesSubtiposForCategoria, resolveCategoriaFinanzaParaSubtipos } from '../constants/gastosSubtipos';
 import { getSubtiposGasto } from '../data/factCatalog';
 import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/finanzaGastoRegistro';
-import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
-import { getOperativoCanonSet, normalizeOperativoSubtipo } from './operativoSubtipo';
+import { normalizeOperativoSubtipo } from './operativoSubtipo';
 import {
   TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   TIPO_GASTO_OPERATIVO_VEHICULO,
@@ -33,38 +33,16 @@ export function tipoGastoUsaSubtipoOperativo(tipoGasto: string): boolean {
 }
 
 function catalogSubtiposUnionForFinanza(cat: FinanzaGastoRegistroValue): Set<string> {
-  const out = new Set<string>();
-  if (cat === TIPO_GASTO_OPERATIVO_VEHICULO || cat === TIPO_GASTO_OPERATIVO_FLOTA_GENERAL) {
-    return getOperativoCanonSet();
-  }
-  for (const factTipo of getFactTiposForFinanza(cat)) {
-    for (const s of getSubtiposGasto(factTipo)) {
-      if (s.trim()) out.add(s);
-    }
-  }
-  return out;
+  return new Set(getOficialesSubtiposForCategoria(cat));
 }
 
 /** Subtipos aceptados para `tipo_gasto` (finanza) al mover desde la UI. */
 export function getValidSubtiposForTipoGastoFinanza(tipoGasto: string): Set<string> {
   const t = tipoGasto.trim();
   const out = new Set<string>();
-  if (t === 'representacion_interna') {
-    for (const s of SUBTIPOS_REPRESENTACION_INTERNA) out.add(s);
-    return out;
-  }
-  if (!FINANZA_TAB_TIPOS.has(t)) return out;
-  const cat = t as FinanzaGastoRegistroValue;
+  const cat = resolveCategoriaFinanzaParaSubtipos(t);
+  if (!cat || !FINANZA_TAB_TIPOS.has(cat)) return out;
   for (const s of catalogSubtiposUnionForFinanza(cat)) out.add(s);
-  if (t === 'financiero_prestamo') {
-    out.add('prestamo');
-    out.add('cuota');
-    out.add('interes');
-    out.add('prestamo_interes_banca');
-  }
-  if (t === 'administrativo_empresa') out.add('administrativo_general');
-  if (t === 'gastos_globales') out.add('global_no_asignado');
-  if (t === 'inversion_compra') out.add('inversion_compra');
   return out;
 }
 

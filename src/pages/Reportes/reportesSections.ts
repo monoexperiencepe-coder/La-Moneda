@@ -4,6 +4,7 @@ import {
   Car,
   Download,
   Landmark,
+  LineChart,
   Receipt,
   TrendingUp,
 } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
 export type ReportesSectionId =
   | 'mensual'
   | 'vehiculos'
+  | 'utilidad'
   | 'gastos_op'
   | 'ingresos'
   | 'financiamiento'
@@ -37,10 +39,18 @@ export const REPORTES_SECTION_CARDS: ReportesSectionCard[] = [
   {
     id: 'vehiculos',
     title: 'Rentabilidad por vehículo',
-    description: 'Detecta qué unidades generan más utilidad.',
+    description: 'Detecta qué unidades generan más margen operativo.',
     icon: Car,
     accent: 'border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-100',
     iconBg: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    id: 'utilidad',
+    title: 'Utilidad histórica',
+    description: 'Importada desde Excel; sin cálculo automático por ahora.',
+    icon: LineChart,
+    accent: 'border-teal-200 hover:border-teal-400 hover:shadow-teal-100',
+    iconBg: 'bg-teal-100 text-teal-700',
   },
   {
     id: 'gastos_op',

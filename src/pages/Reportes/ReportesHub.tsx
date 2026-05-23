@@ -10,6 +10,7 @@ import GastosOperativosSection from './sections/GastosOperativosSection';
 import IngresosReporteSection from './sections/IngresosReporteSection';
 import PrestamosAportesSection from './sections/PrestamosAportesSection';
 import ExportarSection from './sections/ExportarSection';
+import UtilidadAcumuladaSection from './sections/UtilidadAcumuladaSection';
 
 const VALID_SECTIONS = new Set<ReportesSectionId>(
   REPORTES_SECTION_CARDS.map((c) => c.id),
@@ -24,7 +25,7 @@ const ReportesHub: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const panelRef = useRef<HTMLDivElement>(null);
-  const { ingresos, gastos, descuentos, vehicles } = useRegistrosContext();
+  const { ingresos, gastos, descuentos, vehicles, cajaNegocioVehiculo } = useRegistrosContext();
 
   const [activeSection, setActiveSection] = useState<ReportesSectionId | null>(() =>
     parseSectionParam(searchParams.get('seccion')),
@@ -148,6 +149,13 @@ const ReportesHub: React.FC = () => {
               ingresos={ingresos}
               gastos={gastos}
               descuentos={descuentos}
+              yearOptions={yearOptions}
+            />
+          ) : null}
+          {activeSection === 'utilidad' ? (
+            <UtilidadAcumuladaSection
+              vehicles={vehicles}
+              cajaNegocioVehiculo={cajaNegocioVehiculo}
               yearOptions={yearOptions}
             />
           ) : null}

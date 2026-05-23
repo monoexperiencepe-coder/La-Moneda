@@ -23,7 +23,6 @@ import {
 import {
   REPRESENTACION_INTERNA_FACT_SUBTIPO,
   REPRESENTACION_INTERNA_FACT_TIPO,
-  SUBTIPOS_REPRESENTACION_INTERNA,
   defaultSubtipoRepresentacionInterna,
 } from '../../data/representacionInterna';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
@@ -31,10 +30,14 @@ import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import {
   getDefaultFactTipoSubtipoForOperativoCanon,
   getOperativoSubtipoLabel,
-  getOperativoSubtipoOptions,
 } from '../../utils/operativoSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
+import {
+  buildSubtipoFormSelectOptions,
+  formatSubtipoOptionLabel,
+  mergeSubtiposHistoricosConOficiales,
+} from '../../constants/gastosSubtipos';
 import { todayStr } from '../../utils/formatting';
 
 /** Orden visual (arriba → abajo) para llevar al usuario al primer error. */
@@ -202,7 +205,36 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     setForm((f) => ({ ...f, tipo: t0, subTipo: getSubtiposGasto(t0)[0] ?? '' }));
   }, [form.categoriaFinanciera, form.tipo]);
 
-  const subtipos = useMemo(() => getSubtiposGasto(form.tipo), [form.tipo]);
+  const subtiposRepresentacionMerged = useMemo(() => {
+    if (form.categoriaFinanciera !== 'representacion_interna') return [];
+    return mergeSubtiposHistoricosConOficiales(
+      'representacion_interna',
+      (gastos ?? [])
+        .filter((g) => g.tipo_gasto === 'representacion_interna' || g.tipo_gasto === 'personal_socios')
+        .map((g) => g.subtipo_gasto ?? '')
+        .filter(Boolean),
+    );
+  }, [form.categoriaFinanciera, gastos]);
+
+  const subtiposOperativoMerged = useMemo(() => {
+    const cat = form.categoriaFinanciera;
+    if (!cat || !tipoGastoUsaSubtipoOperativo(cat)) return [];
+    return mergeSubtiposHistoricosConOficiales(
+      cat,
+      (gastos ?? []).filter((g) => g.tipo_gasto === cat).map((g) => g.subtipo_gasto ?? '').filter(Boolean),
+    );
+  }, [form.categoriaFinanciera, gastos]);
+
+  const subtiposFactMerged = useMemo(() => {
+    const cat = form.categoriaFinanciera;
+    if (!cat || cat === 'representacion_interna' || tipoGastoUsaSubtipoOperativo(cat)) return [];
+    return buildSubtipoFormSelectOptions(cat, gastos, form.tipo);
+  }, [form.categoriaFinanciera, form.tipo, gastos]);
+
+  const subtipos = useMemo(
+    () => subtiposFactMerged.map((o) => o.value),
+    [subtiposFactMerged],
+  );
 
   const tiposFactParaCategoria = useMemo(() => {
     if (!form.categoriaFinanciera) return [...TIPOS_GASTO_FACT];
@@ -524,9 +556,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 <Select
                   id="expense-field-subtipo-representacion"
                   label="Subtipo (representación interna)"
-                  options={SUBTIPOS_REPRESENTACION_INTERNA.map((s) => ({
-                    value: s,
-                    label: getRepresentacionInternaSubtipoLabel(s),
+                  options={subtiposRepresentacionMerged.map((o) => ({
+                    value: o.value,
+                    label: formatSubtipoOptionLabel('representacion_interna', o),
                   }))}
                   value={form.subtipoRepresentacion}
                   placeholder="Seleccionar…"
@@ -544,7 +576,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   <Select
                     id="expense-field-subtipo-operativo"
                     label="Subtipo operativo"
-                    options={getOperativoSubtipoOptions()}
+                    options={subtiposOperativoMerged.map((o) => ({
+                      value: o.value,
+                      label: formatSubtipoOptionLabel(form.categoriaFinanciera, o),
+                    }))}
                     value={form.subtipoOperativoCanon}
                     placeholder="Seleccionar…"
                     onChange={(v) => {
@@ -595,7 +630,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   <Select
                     id="expense-field-subtipo"
                     label="Sub tipo"
-                    options={subtipos.map((s) => ({ value: s, label: s }))}
+                    options={subtiposFactMerged.map((o) => ({
+                      value: o.value,
+                      label: formatSubtipoOptionLabel(form.categoriaFinanciera, o),
+                    }))}
                     value={form.subTipo}
                     placeholder={subtipos.length ? 'Seleccionar...' : '—'}
                     onChange={(v) => {

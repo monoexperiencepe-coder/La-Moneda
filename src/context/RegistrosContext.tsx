@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { useRegistros } from '../hooks/useRegistros';
 import { useToast } from '../hooks/useToast';
 import { ToastMessage } from '../components/Common/Toast';
@@ -28,6 +28,7 @@ import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '.
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
+import type { GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
 import {
   undoCreateConductor,
@@ -122,8 +123,20 @@ interface RegistrosContextValue {
   /** Toast con botón Deshacer + rollback Supabase/local. */
   showUndoToast: (params: ShowUndoToastParams) => string;
   refreshFromSupabase: () => Promise<void>;
-  /** Recarga solo la lista de gastos (sin tocar el resto del estado). */
+  /** Recarga solo la lista de gastos (bootstrap reciente, sin histórico completo). */
   reloadGastosOnly: () => Promise<void>;
+  /** Carga histórico completo bajo demanda. */
+  reloadGastosFull: () => Promise<void>;
+  /** `recent` = bootstrap; `full` = histórico completo cargado. */
+  gastosLoadScope: 'recent' | 'full';
+  /** True mientras corre fetchGastosFull. */
+  isLoadingGastosFull: boolean;
+  /** Agregados financieros globales (RPC; totales reales sin histórico en memoria). */
+  gastosFinancialSummary: GastosFinancialSummary | null;
+  /** Fetch del summary RPC en curso. */
+  isLoadingGastosSummary: boolean;
+  /** Recarga agregados financieros desde Supabase. */
+  reloadGastosFinancialSummary: () => Promise<void>;
   /** Recarga solo ingresos. */
   reloadIngresosOnly: () => Promise<void>;
   /** Recarga solo kilometrajes. */
@@ -136,8 +149,14 @@ interface RegistrosContextValue {
   registrosBootstrapComplete: boolean;
   /** `true` mientras corre el refresh del ciclo post-autenticación. */
   registrosBootstrapLoading: boolean;
+  /** Alias: `registrosBootstrapLoading && !registrosBootstrapComplete`. */
+  isBootstrapLoading: boolean;
   /** `true` desde que arranca el ciclo post-auth hasta marcar complete. */
   registrosBootstrapStarted: boolean;
+  /** Fetch de `gastos` en curso (bootstrap, recarga manual o realtime indirecto). */
+  isLoadingGastos: boolean;
+  /** `true` tras el primer fetch de gastos de la sesión/usuario actual. */
+  hasLoadedGastosOnce: boolean;
   /** Suscripción realtime activa (registros de la empresa en Supabase). */
   registrosRealtimeConnected: boolean;
   /** @deprecated Usar registrosRealtimeConnected */
@@ -161,6 +180,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     () => filterGastosForUser(permissionUser, registros.gastos),
     [permissionUser, registros.gastos],
   );
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log('[summary-context]', registros.gastosFinancialSummary);
+  }, [registros.gastosFinancialSummary]);
 
   const realtimeHandlers = useMemo(
     () => ({
@@ -686,13 +710,23 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       showUndoToast,
       refreshFromSupabase: registros.refreshFromSupabase,
       reloadGastosOnly: registros.reloadGastosOnly,
+      reloadGastosFull: registros.reloadGastosFull,
+      gastosLoadScope: registros.gastosLoadScope,
+      isLoadingGastosFull: registros.isLoadingGastosFull,
+      gastosFinancialSummary: registros.gastosFinancialSummary,
+      isLoadingGastosSummary: registros.isLoadingGastosSummary,
+      reloadGastosFinancialSummary: registros.reloadGastosFinancialSummary,
       reloadIngresosOnly: registros.reloadIngresosOnly,
       reloadKilometrajesOnly: registros.reloadKilometrajesOnly,
       reloadPendientesOnly: registros.reloadPendientesOnly,
       reloadControlFechasLatest: registros.reloadControlFechasLatest,
       registrosBootstrapComplete: registros.registrosBootstrapComplete,
       registrosBootstrapLoading: registros.registrosBootstrapLoading,
+      isBootstrapLoading:
+        registros.registrosBootstrapLoading && !registros.registrosBootstrapComplete,
       registrosBootstrapStarted: registros.registrosBootstrapStarted,
+      isLoadingGastos: registros.isLoadingGastos,
+      hasLoadedGastosOnce: registros.hasLoadedGastosOnce,
       registrosRealtimeConnected,
       gastosRealtimeConnected: registrosRealtimeConnected,
     }}>

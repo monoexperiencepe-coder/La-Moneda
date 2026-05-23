@@ -4,6 +4,11 @@ import { mapInversionVehiculoRow } from './supabaseMappers';
 import type { InversionVehiculo } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
 
+function resolveTenantId(tenantEmpresaId?: string | null): string | null {
+  const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
+  return id || null;
+}
+
 /** Suma total_inversion_usd por vehicle_id; null si no hay filas para esa unidad. */
 export function totalInversionUsdForVehicle(rows: InversionVehiculo[], vehicleId: number): number | null {
   const list = rows.filter((r) => r.vehicleId != null && Number(r.vehicleId) === vehicleId);
@@ -12,13 +17,15 @@ export function totalInversionUsdForVehicle(rows: InversionVehiculo[], vehicleId
   return sum;
 }
 
-export async function fetchInversionesVehiculo(): Promise<InversionVehiculo[]> {
-  if (!EMPRESA_ID) return [];
+/** @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). */
+export async function fetchInversionesVehiculo(tenantEmpresaId?: string | null): Promise<InversionVehiculo[]> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return [];
   const data = await fetchAllSupabasePages(async (from, to) => {
     const { data, error } = await supabase
       .from('inversiones_vehiculo')
       .select('*')
-      .eq('empresa_id', EMPRESA_ID)
+      .eq('empresa_id', empresaId)
       .order('id', { ascending: true })
       .range(from, to);
     return { data, error };

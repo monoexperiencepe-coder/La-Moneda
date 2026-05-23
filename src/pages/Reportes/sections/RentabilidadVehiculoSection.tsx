@@ -11,7 +11,6 @@ import {
 } from '../../../utils/reportesAnalytics';
 import ReportesPeriodFilter from '../components/ReportesPeriodFilter';
 import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
-import { UpdatingChrome } from '../../../components/Loading';
 
 interface RentabilidadVehiculoSectionProps {
   vehicles: Vehicle[];
@@ -33,7 +32,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
 
   const filterKey = useMemo(() => ({ preset, customYear }), [preset, customYear]);
-  const { deferred: deferredFilter, isRecalculating } = useDeferredRecalc(filterKey);
+  const { deferred: deferredFilter } = useDeferredRecalc(filterKey);
 
   const range = useMemo(
     () => getReportesPeriodRange(deferredFilter.preset, deferredFilter.customYear),
@@ -64,7 +63,8 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
       <div>
         <h2 className="text-lg font-bold text-slate-900">Rentabilidad por vehículo</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Ingresos menos gastos operativos por unidad en el período elegido. Toca una fila para ver el detalle.
+          Ingresos menos gastos operativos por unidad en el período elegido (margen operativo). No es utilidad
+          histórica importada ni resultado neto global.
         </p>
       </div>
 
@@ -80,7 +80,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
       <div className="grid gap-4 lg:grid-cols-2">
         <RankingList
           title="Top rentables"
-          empty="Sin utilidad positiva en este período."
+          empty="Sin margen positivo en este período."
           items={topRentables}
           margenPct={margenPct}
           tone="good"
@@ -105,7 +105,6 @@ function RankingList({
   items,
   margenPct,
   tone,
-  updating,
   onRow,
 }: {
   title: string;
@@ -113,7 +112,6 @@ function RankingList({
   items: ReturnType<typeof calculateVehicleRentability>;
   margenPct: (r: ReturnType<typeof calculateVehicleRentability>[0]) => number;
   tone: 'good' | 'warn';
-  updating?: boolean;
   onRow: (id: number) => void;
 }) {
   return (
@@ -121,7 +119,7 @@ function RankingList({
       <div className="border-b border-slate-100 px-4 py-3">
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
       </div>
-      {items.length === 0 && !updating ? (
+      {items.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-slate-400">{empty}</p>
       ) : (
         <ul className="divide-y divide-slate-50">
@@ -130,7 +128,7 @@ function RankingList({
               <button
                 type="button"
                 onClick={() => onRow(r.vehicle.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-300 hover:bg-slate-50/90 active:scale-[0.995]"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/90"
               >
                 <span
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
