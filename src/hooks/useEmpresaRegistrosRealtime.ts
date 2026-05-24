@@ -29,6 +29,7 @@ import type {
   UnidadRegistro,
   Vehicle,
 } from '../data/types';
+import type { ApplyGastoLocalOpts } from '../utils/gastoLocalMutations';
 import {
   canUseIngresos,
   canUseInversiones,
@@ -47,8 +48,8 @@ type RealtimePayload = {
 };
 
 export type EmpresaRealtimeHandlers = {
-  upsertGasto: (row: Gasto) => void;
-  removeGastoLocal: (id: string) => void;
+  upsertGasto: (row: Gasto, opts?: ApplyGastoLocalOpts) => void;
+  removeGastoLocal: (id: string, opts?: ApplyGastoLocalOpts) => void;
   upsertIngreso: (row: Ingreso) => void;
   removeIngresoLocal: (id: string) => void;
   upsertConductor: (row: Conductor) => void;

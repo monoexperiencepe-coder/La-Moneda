@@ -4,7 +4,6 @@ import { insertKilometraje, removeKilometraje } from '../services/kilometrajesSe
 import { insertPendiente, patchPendiente, removePendiente } from '../services/pendientesService';
 import {
   insertGasto,
-  removeGasto,
   updateGastoDetalleManual,
   type GastoDetalleManualPatch,
 } from '../services/gastosService';
@@ -32,8 +31,6 @@ export function undoCreateGasto(
     entityType: 'gasto',
     entityId: String(created.id),
     undo: async () => {
-      const ok = await removeGasto(String(created.id));
-      if (!ok) throw new Error('undo_failed');
       await deleteLocal(String(created.id));
     },
   };

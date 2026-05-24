@@ -1,6 +1,7 @@
 /**
  * Búsqueda de texto en historiales (frontend): case-insensitive, parcial, sin tildes.
  */
+import { cleanOperationalCommentForUi } from './cleanOperationalComment';
 
 /** Campos habituales de observaciones / notas en registros. */
 export const RECORD_SEARCH_COMMENT_KEYS = [
@@ -60,13 +61,9 @@ export function matchesSearchQuery(
   return matchesSearchHaystack(buildSearchHaystack(...haystackParts), query);
 }
 
-/** Limpia comentarios de gasto (migración caja) para alinear búsqueda con detalle UI. */
+/** Limpia comentarios de gasto para búsqueda y UI (sin metadata ETL). */
 export function gastoComentariosForSearch(raw: string | null | undefined): string {
-  if (!raw) return '';
-  return raw
-    .replace(/\[\s*migraci[oó]n\s+gastos_caja\s+final\s*\]/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return cleanOperationalCommentForUi(raw) ?? '';
 }
 
 /** Extrae strings buscables de un objeto plano (shallow). */

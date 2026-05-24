@@ -61,7 +61,7 @@ import {
 } from '../../constants/gastosSubtipos';
 import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
-import { gastoComentariosForSearch } from '../../utils/recordSearch';
+import { cleanOperationalCommentForUi, gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { devMemoPerf } from '../../utils/devPerf';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
@@ -164,7 +164,7 @@ const TAB_BAR_GRADIENT: Record<string, { from: string; to: string }> = {
 
 /** Misma limpieza que el detalle del registro (RegistrosTable). */
 function formatGastoObservacionesModal(comentarios: string | null | undefined): string {
-  const cleaned = gastoComentariosForSearch(comentarios);
+  const cleaned = cleanOperationalCommentForUi(comentarios);
   return cleaned || 'Sin observaciones';
 }
 
@@ -190,6 +190,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     deleteGasto,
     upsertGasto,
     removeGastoLocal,
+    applyGastoMovedLocal,
+    subscribeGastoHistorialSync,
     toast,
     addGasto,
     showUndoToast,
@@ -349,18 +351,16 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const handleGastoDetalleSaved = useCallback(
     (g: Gasto) => {
-      upsertGasto(g);
-      bumpHistorial();
+      upsertGasto(g, { source: 'user' });
     },
-    [upsertGasto, bumpHistorial],
+    [upsertGasto],
   );
 
   const handleDeleteGastoHistorial = useCallback(
     async (id: string) => {
       await deleteGasto(id);
-      bumpHistorial();
     },
-    [deleteGasto, bumpHistorial],
+    [deleteGasto],
   );
 
   const [moveTarget, setMoveTarget] = useState<Gasto | null>(null);
@@ -700,17 +700,34 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [gastoVisibleEnHistorial, removeGastoFromHistorialLocal],
   );
 
+  useEffect(() => {
+    return subscribeGastoHistorialSync((event) => {
+      if (event.kind === 'created') {
+        syncHistorialRowLocal(event.gasto);
+      } else if (event.kind === 'removed') {
+        removeGastoFromHistorialLocal(event.id);
+      } else if (event.kind === 'updated') {
+        syncHistorialRowLocal(event.after);
+      } else if (event.kind === 'moved') {
+        if (event.movedOutOfView || event.removeFromVisible) {
+          removeGastoFromHistorialLocal(String(event.before.id));
+        } else {
+          syncHistorialRowLocal(event.after);
+        }
+      }
+    });
+  }, [subscribeGastoHistorialSync, syncHistorialRowLocal, removeGastoFromHistorialLocal]);
+
   const handleRegistrarGasto = useCallback(
     async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
       const created = await addGasto(data);
       if (!created) return;
-      bumpHistorial();
       if (!gastoVisibleEnHistorial(created)) {
         toast.info('Registro guardado, pero no aparece por el filtro actual.');
       }
       closeRegistrarModal();
     },
-    [addGasto, bumpHistorial, gastoVisibleEnHistorial, closeRegistrarModal],
+    [addGasto, gastoVisibleEnHistorial, closeRegistrarModal, toast],
   );
 
   const localTotalFlota = useMemo(() => gastosForCalc.reduce((s, g) => s + g.monto, 0), [gastosForCalc]);
@@ -817,18 +834,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     },
     [vehicles],
   );
-
-  const sumaCategoriasParrilla = useMemo(
-    () => GASTO_TABS.reduce((s, t) => s + (resumenPorCategoria[t.tipo_gasto]?.monto ?? 0), 0),
-    [resumenPorCategoria],
-  );
-
-  const sumaConciliacionVisual = useMemo(
-    () => sumaCategoriasParrilla + statsInversionesGastos.monto + statsPendienteRevision.monto,
-    [sumaCategoriasParrilla, statsInversionesGastos.monto, statsPendienteRevision.monto],
-  );
-
-  const conciliacionCuadra = Math.abs(sumaConciliacionVisual - totalFlota) < 0.02;
 
   useEffect(() => {
     if (!import.meta.env.DEV || gastosDataPending) return;
@@ -1080,26 +1085,22 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         return;
       }
 
-      const localSyncSilent = { reloadSummary: false as const };
+      const localSyncSilent = { reloadSummary: false as const, source: 'user' as const };
       resetMoveModal();
 
+      applyGastoMovedLocal(moveTarget, result.gasto, {
+        movedOutOfView: result.movedOutOfView,
+        ...localSyncSilent,
+      });
+
       if (isFinancialOperador) {
-        if (result.movedOutOfView) {
-          removeGastoLocal(String(moveTarget.id), localSyncSilent);
-          removeGastoFromHistorialLocal(String(moveTarget.id));
-        } else {
-          upsertGasto(result.gasto, localSyncSilent);
-          syncHistorialRowLocal(result.gasto);
-        }
         toast.success('Gasto clasificado correctamente');
       } else if (result.movedOutOfView) {
-        removeGastoLocal(String(moveTarget.id));
         toast.info(
           'Gasto clasificado',
           'La categoría asignada ya no aparece en tu listado (solo globales y pendiente de revisión).',
         );
       } else {
-        upsertGasto(result.gasto);
         if (!gastoVisibleEnHistorial(result.gasto)) {
           toast.info('Registro guardado, pero no aparece por el filtro actual.');
         }
@@ -1138,22 +1139,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               { operatorClassifyMode: isFinancialOperador },
             );
             if (!rev.ok) throw new Error('undo_failed');
-            const undoSync = isFinancialOperador ? localSyncSilent : undefined;
-            if (rev.movedOutOfView) {
-              removeGastoLocal(String(gastoId), undoSync);
-              if (isFinancialOperador) removeGastoFromHistorialLocal(String(gastoId));
-            } else {
-              upsertGasto(rev.gasto, undoSync);
-              if (isFinancialOperador) syncHistorialRowLocal(rev.gasto);
-            }
+            applyGastoMovedLocal(result.gasto, rev.gasto, {
+              movedOutOfView: rev.movedOutOfView,
+              ...(isFinancialOperador ? localSyncSilent : { source: 'undo' as const }),
+            });
           },
         },
       });
-
-      if (!isFinancialOperador) {
-        bumpHistorial();
-        void reloadGastosOnly();
-      }
     } catch (e) {
       console.error('[Mover categoría] Excepción no controlada', e);
       toast.error('Error al mover categoría', e instanceof Error ? e.message : 'Error inesperado.');
@@ -1193,26 +1185,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                     {gastos.length} movimientos en tus categorías asignadas
                   </>
                 )}
-              </p>
-              {!isInversionesPage && showGlobalTotals && !gastosDataPending && gastosGlobalState.source !== 'loading' ? (
-                <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
-                  Conciliación: {formatCurrency(sumaConciliacionVisual)}
-                  {conciliacionCuadra ? (
-                    <span className="text-emerald-600 font-semibold"> · cuadra con total tabla</span>
-                  ) : (
-                    <span className="text-amber-700 font-semibold">
-                      {' '}
-                      · diferencia {formatCurrency(totalFlota - sumaConciliacionVisual)}
-                    </span>
-                  )}
-                </p>
-              ) : null}
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                {isInversionesPage
-                  ? 'Compras e inversión en flota (tipo_gasto inversion_compra). «Caja negocio» sigue en Finanzas → Caja negocio.'
-                  : isFinancialOperador
-                    ? 'Acceso restringido: Gastos globales y Pendiente de revisión.'
-                    : 'Categorías de la parrilla + Inversión + Pendiente de revisión = total tabla. Inversiones: Finanzas → Inversiones.'}
               </p>
             </div>
           </div>
@@ -1313,28 +1285,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             </button>
           ) : null}
         </div>
-        {showGlobalTotals ? (
-        <div
-          className={`rounded-xl border px-3 py-2.5 text-[11px] leading-snug sm:text-xs ${
-            conciliacionCuadra
-              ? 'border-emerald-200/90 bg-emerald-50/80 text-emerald-900'
-              : 'border-amber-200/90 bg-amber-50/80 text-amber-950'
-          }`}
-        >
-          <p className="font-semibold">Suma visible = total tabla</p>
-          <p className="mt-0.5 tabular-nums">
-            Categorías ({formatCurrency(sumaCategoriasParrilla)}) + Inversión (
-            {formatCurrency(statsInversionesGastos.monto)}) + Pendiente revisión (
-            {formatCurrency(statsPendienteRevision.monto)}) ={' '}
-            <span className="font-bold">{formatCurrency(sumaConciliacionVisual)}</span>
-            {conciliacionCuadra ? (
-              <span className="text-emerald-700"> ✓</span>
-            ) : (
-              <span className="text-amber-800"> (total tabla {formatCurrency(totalFlota)})</span>
-            )}
-          </p>
-        </div>
-        ) : null}
         {showGlobalTotals && gastosLoadScope === 'recent' ? (
           <div className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-3 py-2.5 text-[11px] leading-snug text-sky-950 sm:text-xs">
             <p className="font-semibold">Vista rápida en tablas · totales globales desde BD</p>
@@ -1387,6 +1337,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           canMoveToTipo={canMoveToTipo}
           userLabel={user.name || REVISION_USER_LABEL}
           categoriaOptions={categoriaOptions}
+          applyGastoMovedLocal={applyGastoMovedLocal}
           upsertGasto={upsertGasto}
           removeGastoLocal={removeGastoLocal}
           operatorClassifyMode={isFinancialOperador}

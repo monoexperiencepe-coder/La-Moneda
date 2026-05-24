@@ -34,6 +34,11 @@ import {
   ingresoComentarioAuditRaw,
   ingresoComentarioParaLista,
 } from '../../utils/ingresoImportComment';
+import {
+  cleanOperationalCommentForUi,
+  gastoObservacionParaLista,
+  operationalCommentAuditRaw,
+} from '../../utils/cleanOperationalComment';
 import { labelCategoriaIngresoExtraordinario } from '../../data/ingresoAlcanceCatalog';
 import { isIngresoExtraordinario, isIngresoVehicular } from '../../utils/ingresoAlcance';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
@@ -48,7 +53,6 @@ import { useGastosDataPending } from '../../hooks/useGastosDataPending';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { RegistroCountLabel, SkeletonTableRows, TableBodySurface, UpdatingChrome } from '../Loading';
 import {
-  gastoComentariosForSearch,
   gastoSearchHaystack,
   ingresoSearchHaystack,
   matchesSearchHaystack,
@@ -105,8 +109,24 @@ const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number
   );
 };
 
-function cleanGastoComentario(text: string | null | undefined): string {
-  return gastoComentariosForSearch(text);
+function gastoListaEtiquetas(
+  g: Gasto,
+  showFin: boolean,
+): { primary: string; secondary: string | null } {
+  const subtipoFin = g.subtipo_gasto
+    ? getSubtipoFinancieroLabel(g.subtipo_gasto, g.tipo_gasto)
+    : null;
+  const primary =
+    showFin && g.tipo_gasto
+      ? labelTipoGastoFinanciero(g.tipo_gasto)
+      : g.motivo || CATEGORIAS_GASTO_LABELS[g.categoria];
+  const secondaryRaw = showFin
+    ? subtipoFin || g.subcategoria || g.subTipo
+    : g.subcategoria || g.subTipo || g.categoriaReal;
+  const norm = (s: string) => s.trim().toLowerCase().replace(/_/g, ' ');
+  const secondary =
+    secondaryRaw && norm(secondaryRaw) !== norm(primary) ? secondaryRaw : null;
+  return { primary, secondary };
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -263,6 +283,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       comentario: cleanIngresoComentarioParaUi(ing.comentarios),
       detalleOperativo: cleanIngresoDetalleOperativoParaUi(ing.detalleOperativo),
       auditRaw: ingresoComentarioAuditRaw(ing.comentarios, ing.detalleOperativo),
+    };
+  }, [mode, viewItem]);
+
+  const gastoDetalleUi = useMemo(() => {
+    if (mode !== 'gastos' || !viewItem) return null;
+    const g = viewItem as Gasto;
+    return {
+      observacion: cleanOperationalCommentForUi(g.comentarios),
+      detalleOperativo: cleanOperationalCommentForUi(g.detalleOperativo),
+      auditRaw: operationalCommentAuditRaw(g.comentarios, g.detalleOperativo),
     };
   }, [mode, viewItem]);
 
@@ -718,6 +748,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               mode === 'ingresos' && ingresoEsExtraordinarioMobile
                 ? labelCategoriaIngresoExtraordinario((item as Ingreso).subTipo)
                 : null;
+            const gastoObsMobile =
+              mode === 'gastos' ? gastoObservacionParaLista(item as Gasto) : null;
+            const gastoEtiquetasMobile =
+              mode === 'gastos' ? gastoListaEtiquetas(item as Gasto, showClasificacionFinanciera) : null;
             return (
             <div
               key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
@@ -798,17 +832,17 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               ) : (
                 <>
-                  <div className="mt-2 flex items-start gap-2">
-                    <p className="text-xs font-semibold text-gray-700">
-                      {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {(item as Gasto).motivo || (item as Gasto).categoriaReal || '—'}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-800">{gastoEtiquetasMobile?.primary}</span>
+                    {gastoEtiquetasMobile?.secondary ? (
+                      <span className="text-[10px] text-gray-500 truncate max-w-[10rem]">
+                        {gastoEtiquetasMobile.secondary}
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    Vehículo: {getVehicleIdPlaca('vehicleId' in item ? item.vehicleId : null)}
-                  </p>
+                  {gastoObsMobile ? (
+                    <p className="text-[11px] text-gray-600 line-clamp-2 leading-snug">{gastoObsMobile}</p>
+                  ) : null}
                 </>
               )}
 
@@ -839,16 +873,22 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               )}
 
-              <div className={`flex items-center gap-2 ${mode === 'ingresos' && !ingresoCommentMobile ? 'justify-end' : 'justify-between mt-2'}`}>
-                {mode === 'ingresos' ? (
-                  ingresoCommentMobile ? (
-                    <p className="text-[11px] text-gray-500 truncate min-w-0 flex-1">{ingresoCommentMobile}</p>
-                  ) : null
-                ) : (
+              <div
+                className={`flex items-center gap-2 ${
+                  (mode === 'ingresos' && !ingresoCommentMobile) || (mode === 'gastos' && !gastoObsMobile)
+                    ? 'justify-end mt-2'
+                    : 'justify-between mt-2'
+                }`}
+              >
+                {mode === 'ingresos' && ingresoCommentMobile ? (
+                  <p className="text-[11px] text-gray-500 truncate min-w-0 flex-1 line-clamp-2">
+                    {ingresoCommentMobile}
+                  </p>
+                ) : mode === 'gastos' && !gastoObsMobile ? (
                   <p className="text-[11px] text-gray-500 truncate">
                     {(item as Gasto).metodoPago || 'Sin método'}
                   </p>
-                )}
+                ) : null}
                 <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {mode === 'gastos' && onMoveCategoriaGasto && (
                     <button
@@ -974,6 +1014,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   ingresoEsExtraordinarioRow
                     ? labelCategoriaIngresoExtraordinario((item as Ingreso).subTipo)
                     : null;
+                const gastoObsRow =
+                  mode === 'gastos' ? gastoObservacionParaLista(item as Gasto) : null;
+                const gastoEtiquetasRow =
+                  mode === 'gastos' ? gastoListaEtiquetas(item as Gasto, showClasificacionFinanciera) : null;
                 return (
                 <tr
                   key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
@@ -1022,12 +1066,13 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       </div>
                     ) : (
                       <div>
-                        <p className="text-xs font-semibold text-gray-800">
-                          {(item as Gasto).motivo || CATEGORIAS_GASTO_LABELS[(item as Gasto).categoria]}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {(item as Gasto).subcategoria || (item as Gasto).subTipo || '—'}
-                        </p>
+                        <p className="text-xs font-semibold text-gray-800">{gastoEtiquetasRow?.primary}</p>
+                        {gastoEtiquetasRow?.secondary ? (
+                          <p className="text-[11px] text-gray-500 mt-0.5">{gastoEtiquetasRow.secondary}</p>
+                        ) : null}
+                        {gastoObsRow ? (
+                          <p className="text-[11px] text-gray-600 mt-0.5 line-clamp-2 leading-snug">{gastoObsRow}</p>
+                        ) : null}
                         <p className="mt-1 inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 text-[11px] font-semibold">
                           Vehículo: {getVehicleIdPlaca((item as Gasto).vehicleId)}
                         </p>
@@ -1558,11 +1603,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
 
                 {/* ─ Contexto operativo (gastos) ─ */}
-                {(viewItem as Gasto).detalleOperativo && (
+                {gastoDetalleUi?.detalleOperativo && (
                   <div>
                     <dt className="text-xs text-gray-500 font-medium mb-1">Detalle operativo</dt>
                     <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
-                      {(viewItem as Gasto).detalleOperativo}
+                      {gastoDetalleUi.detalleOperativo}
                     </dd>
                   </div>
                 )}
@@ -1644,14 +1689,14 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
               ) : null
             ) : (
-              viewItem.comentarios?.trim() && (
+              gastoDetalleUi?.observacion ? (
                 <div>
                   <dt className="text-xs text-gray-500 font-medium mb-1">Observaciones</dt>
                   <dd className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words">
-                    {cleanGastoComentario((viewItem as Gasto).comentarios)}
+                    {gastoDetalleUi.observacion}
                   </dd>
                 </div>
-              )
+              ) : null
             )}
 
             {mode === 'ingresos' && isAdminRole(role) && ingresoDetalleUi?.auditRaw && (
@@ -1659,6 +1704,15 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <dt className="text-xs text-gray-500 font-medium mb-1">Notas técnicas (importación)</dt>
                 <dd className="text-xs text-gray-500 bg-slate-100 rounded-lg p-3 break-words font-mono whitespace-pre-wrap">
                   {ingresoDetalleUi.auditRaw}
+                </dd>
+              </div>
+            )}
+
+            {mode === 'gastos' && isAdminRole(role) && gastoDetalleUi?.auditRaw && (
+              <div>
+                <dt className="text-xs text-gray-500 font-medium mb-1">Notas técnicas (importación)</dt>
+                <dd className="text-xs text-gray-500 bg-slate-100 rounded-lg p-3 break-words font-mono whitespace-pre-wrap">
+                  {gastoDetalleUi.auditRaw}
                 </dd>
               </div>
             )}

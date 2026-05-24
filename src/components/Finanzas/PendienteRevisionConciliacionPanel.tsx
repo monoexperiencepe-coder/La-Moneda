@@ -17,6 +17,8 @@ import {
   normalizeSubtipoForTipoGasto,
   tipoGastoRequiereVehiculo,
 } from '../../utils/gastoMoveCategoriaDefaults';
+import type { ApplyGastoLocalOpts } from '../../utils/gastoLocalMutations';
+import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { getOperativoSubtipoLabel } from '../../utils/operativoSubtipo';
 import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
@@ -49,8 +51,13 @@ type Props = {
   canMoveToTipo?: (tipo: string) => boolean;
   userLabel: string;
   categoriaOptions: CategoriaMovimientoOption[];
-  upsertGasto: (g: Gasto, opts?: { reloadSummary?: boolean }) => void;
-  removeGastoLocal?: (id: string, opts?: { reloadSummary?: boolean }) => void;
+  applyGastoMovedLocal?: (
+    before: Gasto,
+    after: Gasto,
+    opts?: ApplyGastoLocalOpts & { movedOutOfView?: boolean },
+  ) => void;
+  upsertGasto: (g: Gasto, opts?: ApplyGastoLocalOpts) => void;
+  removeGastoLocal?: (id: string, opts?: ApplyGastoLocalOpts) => void;
   /** Operador restringido: UPDATE sin SELECT si destino no es tab visible. */
   operatorClassifyMode?: boolean;
   toast: ToastApi;
@@ -94,6 +101,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   canMoveToTipo,
   userLabel,
   categoriaOptions,
+  applyGastoMovedLocal,
   upsertGasto,
   removeGastoLocal,
   operatorClassifyMode = false,
@@ -227,13 +235,14 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         return false;
       }
 
-      const localSyncSilent = operatorClassifyMode ? { reloadSummary: false as const } : undefined;
+      const localSyncSilent = operatorClassifyMode
+        ? ({ reloadSummary: false as const, source: 'user' as const })
+        : ({ source: 'user' as const });
 
-      if (res.movedOutOfView) {
-        removeGastoLocal?.(String(gasto.id), localSyncSilent);
-      } else {
-        upsertGasto(res.gasto, localSyncSilent);
-      }
+      applyGastoMovedLocal?.(gasto, res.gasto, {
+        movedOutOfView: res.movedOutOfView,
+        ...localSyncSilent,
+      });
       const subFinal = res.gasto.subtipo_gasto ?? subtipo;
       setConcState(
         recordConciliacionMove({
@@ -277,15 +286,18 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
               { operatorClassifyMode },
             );
             if (!rev.ok) throw new Error('undo_failed');
-            const undoSync = operatorClassifyMode ? { reloadSummary: false as const } : undefined;
-            if (rev.movedOutOfView) removeGastoLocal?.(String(gasto.id), undoSync);
-            else upsertGasto(rev.gasto, undoSync);
+            applyGastoMovedLocal?.(res.gasto, rev.gasto, {
+              movedOutOfView: rev.movedOutOfView,
+              ...(operatorClassifyMode
+                ? { reloadSummary: false as const, source: 'undo' as const }
+                : { source: 'undo' as const }),
+            });
           },
         },
       });
       return true;
     },
-    [vehicles, upsertGasto, removeGastoLocal, operatorClassifyMode, toast, showUndoToast, userLabel, canMoveToTipo, tenantEmpresaId],
+    [vehicles, applyGastoMovedLocal, operatorClassifyMode, toast, showUndoToast, userLabel, canMoveToTipo, tenantEmpresaId],
   );
 
   const handleQuickApply = async (advance: boolean) => {
@@ -479,9 +491,12 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                     quickGasto.vehicleId != null ? Number(quickGasto.vehicleId) : null,
                   )}
                 </p>
-                {quickGasto.comentarios?.trim() ? (
-                  <p className="text-xs text-slate-600 line-clamp-3">{quickGasto.comentarios}</p>
-                ) : null}
+                {(() => {
+                  const nota = gastoObservacionParaLista(quickGasto);
+                  return nota ? (
+                    <p className="text-xs text-slate-600 line-clamp-2 leading-snug">{nota}</p>
+                  ) : null;
+                })()}
               </div>
               {quickSugerencia ? (
                 <div className="rounded-lg border border-violet-200 bg-violet-50/80 px-3 py-2 text-xs text-violet-900">
@@ -601,6 +616,12 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                     <span className="tabular-nums">{formatCurrency(g.monto)}</span>
                     <br />
                     <span className="text-slate-700 line-clamp-1">{g.motivo}</span>
+                    {(() => {
+                      const nota = gastoObservacionParaLista(g);
+                      return nota ? (
+                        <span className="block text-slate-500 text-[10px] line-clamp-2 leading-snug">{nota}</span>
+                      ) : null;
+                    })()}
                     {sug ? (
                       <span className="text-violet-700 text-[10px]">
                         Sug.: {labelTipoGastoFinanciero(sug.tipo_gasto)}

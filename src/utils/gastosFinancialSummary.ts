@@ -136,6 +136,17 @@ export function formatGastosGlobalTotalDisplay(state: GastosGlobalTotalState): s
 }
 
 /** Parrilla Gastos: { count, monto } por tab tipo_gasto. */
+/** Clona summary para parches optimistas inmutables. */
+export function cloneGastosFinancialSummary(
+  summary: GastosFinancialSummary,
+): GastosFinancialSummary {
+  return {
+    totalGastos: summary.totalGastos,
+    totalCount: summary.totalCount,
+    byTipoGasto: { ...summary.byTipoGasto },
+  };
+}
+
 export function resumenPorCategoriaFromSummary(
   summary: GastosFinancialSummary,
   tipos: string[],

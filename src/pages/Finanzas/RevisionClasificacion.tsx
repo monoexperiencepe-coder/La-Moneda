@@ -13,6 +13,7 @@ import {
 } from '../../utils/clasificacionGasto';
 import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
+import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { useAuth } from '../../context/AuthContext';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { vehicleIdKey } from '../../utils/vehicleId';
@@ -260,9 +261,16 @@ const RevisionClasificacion: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-700 max-w-[160px]">{labelVeh(g.vehicleId)}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 max-w-[240px]">
-                        <span className="line-clamp-2" title={g.comentarios}>
-                          {g.comentarios || '—'}
-                        </span>
+                        {(() => {
+                          const nota = gastoObservacionParaLista(g);
+                          return nota ? (
+                            <span className="line-clamp-2" title={nota}>
+                              {nota}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 align-top">
                         {draft ? (

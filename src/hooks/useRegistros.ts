@@ -64,7 +64,16 @@ import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
 import { sortRegistrosByLatestCreatedOrDate } from '../utils/sortRegistrosByLatestCreatedOrDate';
 import { useAuth } from '../context/AuthContext';
-import { canUseIngresos, canUseInversiones, permissionUserFromAuth } from '../utils/permissions';
+import { canUseIngresos, canUseInversiones, isFinancialOperadorRestricted, isOperadorVisibleTipoGasto, permissionUserFromAuth } from '../utils/permissions';
+import {
+  type ApplyGastoLocalOpts,
+  type GastoHistorialSyncEvent,
+  type GastoMovedLocalOptions,
+  devLogGastoLocalMutation,
+  patchSummaryAddGasto,
+  patchSummaryForGastoMove,
+  patchSummaryRemoveGasto,
+} from '../utils/gastoLocalMutations';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -214,6 +223,8 @@ export const useRegistros = () => {
   const [gastosFinancialSummary, setGastosFinancialSummary] = useState<GastosFinancialSummary | null>(null);
   const [isLoadingGastosSummary, setIsLoadingGastosSummary] = useState(false);
   const reloadGastosSummaryRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
+  const historialSyncListenersRef = useRef(new Set<(event: GastoHistorialSyncEvent) => void>());
+  const summaryReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Vacía datos tenant/financieros al cerrar sesión o cambiar de usuario (evita mezclar operador ↔ admin). */
   const clearFinancialRegistrosState = useCallback(() => {
@@ -386,6 +397,165 @@ export const useRegistros = () => {
   }, [profile?.empresa_id]);
 
   reloadGastosSummaryRef.current = reloadGastosFinancialSummary;
+
+  const includeTipoInSummaryPatch = useCallback(
+    (tipo: string | null | undefined) => {
+      if (!permissionUser || !isFinancialOperadorRestricted(permissionUser)) return true;
+      return isOperadorVisibleTipoGasto(tipo);
+    },
+    [permissionUser],
+  );
+
+  const notifyGastoHistorialSync = useCallback((event: GastoHistorialSyncEvent) => {
+    historialSyncListenersRef.current.forEach((fn) => {
+      try {
+        fn(event);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[localMutation:gasto] historial listener error', e);
+      }
+    });
+  }, []);
+
+  const subscribeGastoHistorialSync = useCallback((listener: (event: GastoHistorialSyncEvent) => void) => {
+    historialSyncListenersRef.current.add(listener);
+    return () => {
+      historialSyncListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const scheduleSummaryReconcile = useCallback((opts?: { silent?: boolean }) => {
+    if (summaryReconcileTimerRef.current) clearTimeout(summaryReconcileTimerRef.current);
+    summaryReconcileTimerRef.current = setTimeout(() => {
+      summaryReconcileTimerRef.current = null;
+      void reloadGastosSummaryRef.current({ silent: true, ...opts });
+    }, 900);
+  }, []);
+
+  const patchFinancialSummary = useCallback(
+    (
+      patcher: (summary: GastosFinancialSummary) => GastosFinancialSummary,
+      opts?: ApplyGastoLocalOpts,
+    ) => {
+      if (opts?.optimisticSummary === false) return;
+      setGastosFinancialSummary((prev) => {
+        if (!prev) return prev;
+        const next = patcher(prev);
+        if (import.meta.env.DEV) {
+          devLogGastoLocalMutation('updated', {
+            action: 'summary-patch',
+            source: opts?.source,
+            totalBefore: prev.totalGastos,
+            totalAfter: next.totalGastos,
+          });
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const applyGastoCreatedLocal = useCallback(
+    (gasto: Gasto, opts?: ApplyGastoLocalOpts) => {
+      setGastos((prev) => mergeGastoSorted(prev, gasto));
+      patchFinancialSummary(
+        (s) => patchSummaryAddGasto(s, gasto, (t) => includeTipoInSummaryPatch(t)),
+        opts,
+      );
+      notifyGastoHistorialSync({ kind: 'created', gasto });
+      devLogGastoLocalMutation('created', {
+        id: gasto.id,
+        tipo_gasto: gasto.tipo_gasto,
+        monto: gasto.monto,
+        source: opts?.source,
+        updatedSummary: opts?.optimisticSummary !== false,
+      });
+      if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
+    },
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+  );
+
+  const applyGastoRemovedLocal = useCallback(
+    (id: string, before?: Gasto | null, opts?: ApplyGastoLocalOpts) => {
+      let snapshot = before ?? null;
+      setGastos((prev) => {
+        if (!snapshot) snapshot = prev.find((g) => String(g.id) === String(id)) ?? null;
+        return prev.filter((g) => String(g.id) !== String(id));
+      });
+      if (snapshot) {
+        patchFinancialSummary(
+          (s) => patchSummaryRemoveGasto(s, snapshot!, (t) => includeTipoInSummaryPatch(t)),
+          opts,
+        );
+      }
+      notifyGastoHistorialSync({ kind: 'removed', id: String(id), before: snapshot });
+      devLogGastoLocalMutation('removed', {
+        id,
+        fromTipo: snapshot?.tipo_gasto,
+        deltaMonto: snapshot ? -snapshot.monto : 0,
+        source: opts?.source,
+        updatedSummary: opts?.optimisticSummary !== false && !!snapshot,
+      });
+      if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
+    },
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+  );
+
+  const applyGastoUpdatedLocal = useCallback(
+    (before: Gasto, after: Gasto, opts?: ApplyGastoLocalOpts) => {
+      setGastos((prev) => mergeGastoSorted(prev, after));
+      const tipoChanged = before.tipo_gasto !== after.tipo_gasto;
+      const montoChanged = before.monto !== after.monto;
+      if (tipoChanged || montoChanged) {
+        patchFinancialSummary(
+          (s) => patchSummaryForGastoMove(s, before, after, (t) => includeTipoInSummaryPatch(t)),
+          opts,
+        );
+      }
+      notifyGastoHistorialSync({ kind: 'updated', before, after });
+      devLogGastoLocalMutation('updated', {
+        id: after.id,
+        fromTipo: before.tipo_gasto,
+        toTipo: after.tipo_gasto,
+        deltaMonto: after.monto - before.monto,
+        source: opts?.source,
+      });
+      if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
+    },
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+  );
+
+  const applyGastoMovedLocal = useCallback(
+    (before: Gasto, after: Gasto, options?: GastoMovedLocalOptions) => {
+      const movedOut = options?.movedOutOfView === true || options?.removeFromVisible === true;
+      if (movedOut) {
+        setGastos((prev) => prev.filter((g) => String(g.id) !== String(before.id)));
+      } else {
+        setGastos((prev) => mergeGastoSorted(prev, after));
+      }
+      patchFinancialSummary(
+        (s) => patchSummaryForGastoMove(s, before, movedOut ? null : after, (t) => includeTipoInSummaryPatch(t)),
+        options,
+      );
+      notifyGastoHistorialSync({
+        kind: 'moved',
+        before,
+        after,
+        movedOutOfView: movedOut,
+        removeFromVisible: movedOut,
+      });
+      devLogGastoLocalMutation('moved', {
+        id: before.id,
+        fromTipo: before.tipo_gasto,
+        toTipo: after.tipo_gasto,
+        deltaMonto: before.monto,
+        movedOut,
+        source: options?.source,
+        updatedSummary: options?.optimisticSummary !== false,
+      });
+      if (options?.reloadSummary !== false) scheduleSummaryReconcile();
+    },
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+  );
 
   /** Recarga bootstrap (recientes + tipos críticos) + summary BD. */
   const reloadGastosOnly = useCallback(async () => {
@@ -631,20 +801,11 @@ export const useRegistros = () => {
       };
       const created = await insertGasto(row, profile?.empresa_id);
       if (!created) throw new Error('No se pudo guardar el gasto en Supabase.');
-      setGastos((prev) => {
-        if (import.meta.env.DEV) {
-          console.debug('[useRegistros addGasto]', { prevLen: prev.length, createdId: created.id, fecha: created.fecha });
-        }
-        const merged = mergeGastoSorted(prev, created);
-        if (import.meta.env.DEV) {
-          console.debug('[useRegistros addGasto] tras merge', { nextLen: merged.length });
-        }
-        return merged;
-      });
-      void reloadGastosSummaryRef.current({ silent: true });
+      applyGastoCreatedLocal(created, { source: 'user', reloadSummary: false });
+      scheduleSummaryReconcile();
       return created;
     },
-    [vehicles, profile?.empresa_id],
+    [vehicles, profile?.empresa_id, applyGastoCreatedLocal, scheduleSummaryReconcile],
   );
 
   const addMantenimiento = useCallback((mant: Omit<Mantenimiento, 'id' | 'createdAt'>) => {
@@ -842,38 +1003,78 @@ export const useRegistros = () => {
     }
   }, [profile?.empresa_id]);
 
-  const deleteGasto = useCallback(async (id: string) => {
-    let prevSnapshot: Gasto[] = [];
-    setGastos((prev) => {
-      prevSnapshot = prev;
-      return prev.filter((g) => String(g.id) !== String(id));
-    });
-    const ok = await removeGasto(id, profile?.empresa_id);
-    if (!ok) {
-      setGastos(prevSnapshot);
-      throw new Error('No se pudo eliminar el gasto.');
-    }
-    void reloadGastosSummaryRef.current();
-  }, [profile?.empresa_id]);
-
-  const upsertGasto = useCallback((row: Gasto, opts?: { reloadSummary?: boolean }) => {
-    setGastos((prev) => {
-      if (import.meta.env.DEV) {
-        console.debug('[useRegistros upsertGasto]', { prevLen: prev.length, id: row.id });
+  const deleteGasto = useCallback(
+    async (id: string) => {
+      let before: Gasto | null = null;
+      setGastos((prev) => {
+        before = prev.find((g) => String(g.id) === String(id)) ?? null;
+        return prev;
+      });
+      applyGastoRemovedLocal(String(id), before, { source: 'user', reloadSummary: false });
+      const ok = await removeGasto(id, profile?.empresa_id);
+      if (!ok) {
+        if (before) applyGastoCreatedLocal(before, { source: 'user', reloadSummary: false });
+        throw new Error('No se pudo eliminar el gasto.');
       }
-      return mergeGastoSorted(prev, row);
-    });
-    if (opts?.reloadSummary !== false) {
-      void reloadGastosSummaryRef.current({ silent: true });
-    }
-  }, []);
+      scheduleSummaryReconcile();
+      return true;
+    },
+    [profile?.empresa_id, applyGastoRemovedLocal, applyGastoCreatedLocal, scheduleSummaryReconcile],
+  );
 
-  const removeGastoLocal = useCallback((id: string, opts?: { reloadSummary?: boolean }) => {
-    setGastos((prev) => prev.filter((g) => String(g.id) !== String(id)));
-    if (opts?.reloadSummary !== false) {
-      void reloadGastosSummaryRef.current({ silent: true });
-    }
-  }, []);
+  const upsertGasto = useCallback(
+    (row: Gasto, opts?: ApplyGastoLocalOpts) => {
+      const before = gastosAuditRef.current.find((g) => String(g.id) === String(row.id)) ?? null;
+      setGastos((prev) => {
+        if (import.meta.env.DEV) {
+          console.debug('[useRegistros upsertGasto]', {
+            prevLen: prev.length,
+            id: row.id,
+            hadBefore: !!before,
+          });
+        }
+        return mergeGastoSorted(prev, row);
+      });
+      if (before) {
+        const tipoChanged = before.tipo_gasto !== row.tipo_gasto;
+        const montoChanged = before.monto !== row.monto;
+        if (tipoChanged || montoChanged) {
+          patchFinancialSummary(
+            (s) => patchSummaryForGastoMove(s, before, row, (t) => includeTipoInSummaryPatch(t)),
+            { ...opts, source: opts?.source ?? 'user' },
+          );
+        }
+        notifyGastoHistorialSync({ kind: 'updated', before, after: row });
+        devLogGastoLocalMutation('updated', {
+          id: row.id,
+          fromTipo: before.tipo_gasto,
+          toTipo: row.tipo_gasto,
+          source: opts?.source ?? 'user',
+        });
+      } else {
+        patchFinancialSummary(
+          (s) => patchSummaryAddGasto(s, row, (t) => includeTipoInSummaryPatch(t)),
+          { ...opts, source: opts?.source ?? 'user' },
+        );
+        notifyGastoHistorialSync({ kind: 'created', gasto: row });
+        devLogGastoLocalMutation('created', { id: row.id, tipo_gasto: row.tipo_gasto, source: opts?.source ?? 'user' });
+      }
+      if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
+    },
+    [
+      includeTipoInSummaryPatch,
+      notifyGastoHistorialSync,
+      patchFinancialSummary,
+      scheduleSummaryReconcile,
+    ],
+  );
+
+  const removeGastoLocal = useCallback(
+    (id: string, opts?: ApplyGastoLocalOpts) => {
+      applyGastoRemovedLocal(String(id), null, { ...opts, source: opts?.source ?? 'user' });
+    },
+    [applyGastoRemovedLocal],
+  );
 
   const upsertIngreso = useCallback((row: Ingreso) => {
     setIngresos((prev) => mergeIngresoSorted(prev, row));
@@ -1106,6 +1307,11 @@ export const useRegistros = () => {
     deleteGasto,
     upsertGasto,
     removeGastoLocal,
+    applyGastoCreatedLocal,
+    applyGastoUpdatedLocal,
+    applyGastoRemovedLocal,
+    applyGastoMovedLocal,
+    subscribeGastoHistorialSync,
     upsertIngreso,
     removeIngresoLocal,
     upsertConductor,

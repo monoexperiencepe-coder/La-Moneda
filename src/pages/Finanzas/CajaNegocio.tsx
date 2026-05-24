@@ -10,6 +10,7 @@ import type { CajaNegocioVehiculo } from '../../data/types';
 import MonthlyBarChartCard from '../../components/Charts/MonthlyBarChartCard';
 import { MESES } from '../../data/catalogs';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { cleanOperationalCommentForUi } from '../../utils/cleanOperationalComment';
 
 function inRange(fecha: string, desde: string, hasta: string): boolean {
   const d = toDateOnlyString(fecha);
@@ -446,7 +447,10 @@ const CajaNegocio: React.FC = () => {
                       <p className="shrink-0 text-sm font-bold tabular-nums text-teal-900">{formatCurrency(row.monto)}</p>
                     </div>
                     <p className="mt-2 text-sm text-slate-900">{row.concepto}</p>
-                    {row.comentarios ? <p className="mt-1 text-xs text-slate-500">{row.comentarios}</p> : null}
+                    {(() => {
+                      const nota = cleanOperationalCommentForUi(row.comentarios);
+                      return nota ? <p className="mt-1 text-xs text-slate-500 line-clamp-2">{nota}</p> : null;
+                    })()}
                   </div>
                 ))}
               </div>
@@ -489,9 +493,16 @@ const CajaNegocio: React.FC = () => {
                         {formatCurrency(row.monto)}
                       </td>
                       <td className="hidden max-w-[200px] px-4 py-2.5 text-xs text-slate-500 lg:table-cell">
-                        <span className="line-clamp-2" title={row.comentarios || undefined}>
-                          {row.comentarios || '—'}
-                        </span>
+                        {(() => {
+                          const nota = cleanOperationalCommentForUi(row.comentarios);
+                          return nota ? (
+                            <span className="line-clamp-2" title={nota}>
+                              {nota}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))

@@ -29,6 +29,7 @@ import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtim
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
 import type { GastosFinancialSummary } from '../utils/gastosFinancialSummary';
+import type { ApplyGastoLocalOpts, GastoHistorialSyncEvent } from '../utils/gastoLocalMutations';
 import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
 import {
   undoCreateConductor,
@@ -101,9 +102,19 @@ interface RegistrosContextValue {
   deleteIngreso: (id: string) => Promise<boolean>;
   deleteGasto: (id: string) => Promise<boolean>;
   /** Actualiza o inserta un gasto en el estado local (misma orden que fetch). */
-  upsertGasto: (g: Gasto, opts?: { reloadSummary?: boolean }) => void;
+  upsertGasto: (g: Gasto, opts?: ApplyGastoLocalOpts) => void;
   /** Quita un gasto del estado local (p. ej. operador clasificó fuera de tabs visibles). */
-  removeGastoLocal: (id: string, opts?: { reloadSummary?: boolean }) => void;
+  removeGastoLocal: (id: string, opts?: ApplyGastoLocalOpts) => void;
+  applyGastoCreatedLocal: (g: Gasto, opts?: ApplyGastoLocalOpts) => void;
+  applyGastoUpdatedLocal: (before: Gasto, after: Gasto, opts?: ApplyGastoLocalOpts) => void;
+  applyGastoRemovedLocal: (id: string, before?: Gasto | null, opts?: ApplyGastoLocalOpts) => void;
+  applyGastoMovedLocal: (
+    before: Gasto,
+    after: Gasto,
+    opts?: ApplyGastoLocalOpts & { movedOutOfView?: boolean; removeFromVisible?: boolean },
+  ) => void;
+  /** Sincroniza historial paginado (Gastos.tsx) con mutaciones locales. */
+  subscribeGastoHistorialSync: (listener: (event: GastoHistorialSyncEvent) => void) => () => void;
   /** Actualiza o inserta un ingreso en el estado local (misma orden que fetch). */
   upsertIngreso: (i: Ingreso) => void;
   deleteDescuento: (id: number) => void;
@@ -190,8 +201,10 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const realtimeHandlers = useMemo(
     () => ({
-      upsertGasto: registros.upsertGasto,
-      removeGastoLocal: registros.removeGastoLocal,
+      upsertGasto: (g: Gasto, opts?: ApplyGastoLocalOpts) =>
+        registros.upsertGasto(g, { ...opts, source: opts?.source ?? 'realtime' }),
+      removeGastoLocal: (id: string, opts?: ApplyGastoLocalOpts) =>
+        registros.removeGastoLocal(id, { ...opts, source: opts?.source ?? 'realtime' }),
       upsertIngreso: registros.upsertIngreso,
       removeIngresoLocal: registros.removeIngresoLocal,
       upsertConductor: registros.upsertConductor,
@@ -308,7 +321,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       showUndoToast({
         message: 'Gasto registrado',
         detail: `-S/ ${data.monto.toFixed(2)} — ${data.motivo}${data.pagadoA?.trim() ? ` · ${data.pagadoA.trim()}` : ''}`,
-        undoAction: undoCreateGasto(result, (id) => registros.deleteGasto(id)),
+        undoAction: undoCreateGasto(result, async (id) => {
+          await registros.deleteGasto(id);
+        }),
       });
       return result;
     } catch (e) {
@@ -693,6 +708,11 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       deleteGasto: handleDeleteGasto,
       upsertGasto: registros.upsertGasto,
       removeGastoLocal: registros.removeGastoLocal,
+      applyGastoCreatedLocal: registros.applyGastoCreatedLocal,
+      applyGastoUpdatedLocal: registros.applyGastoUpdatedLocal,
+      applyGastoRemovedLocal: registros.applyGastoRemovedLocal,
+      applyGastoMovedLocal: registros.applyGastoMovedLocal,
+      subscribeGastoHistorialSync: registros.subscribeGastoHistorialSync,
       upsertIngreso: registros.upsertIngreso,
       deleteDescuento: registros.deleteDescuento,
       deletePrestamo: registros.deletePrestamo,
