@@ -49,6 +49,7 @@ export type AppSection =
   | 'reportes'
   | 'metas'
   | 'configuracion'
+  | 'asistente'
   | 'admin';
 
 export function normalizeEmail(email: string | null | undefined): string {
@@ -210,6 +211,9 @@ export function canViewSection(user: PermissionUser | null | undefined, section:
       return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
     case 'configuracion':
       return true;
+    case 'asistente':
+      if (isFinancialOperadorRestricted(user)) return true;
+      return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
     case 'admin':
       return user.role === 'admin';
     default:

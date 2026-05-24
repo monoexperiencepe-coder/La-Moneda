@@ -2,6 +2,20 @@
  * Búsqueda de texto en historiales (frontend): case-insensitive, parcial, sin tildes.
  */
 import { cleanOperationalCommentForUi } from './cleanOperationalComment';
+import {
+  isGeneralRecord,
+  queryHasGeneralSearchIntent,
+  splitGeneralSearchQuery,
+  type GeneralRecordLike,
+} from './generalRecordSearch';
+
+export {
+  isGeneralRecord,
+  queryHasGeneralSearchIntent,
+  splitGeneralSearchQuery,
+  stripGeneralSearchTerms,
+} from './generalRecordSearch';
+export type { GeneralRecordLike } from './generalRecordSearch';
 
 /** Campos habituales de observaciones / notas en registros. */
 export const RECORD_SEARCH_COMMENT_KEYS = [
@@ -109,6 +123,39 @@ export function recordMatchesSearch(
 ): boolean {
   const parts = extractSearchablePartsFromRecord(record, extraParts);
   return matchesSearchQuery(parts, query);
+}
+
+/**
+ * Búsqueda de historial con soporte «general / generales / sin vehículo».
+ * Combina filtro por registros sin vehículo + texto libre + coincidencia por unidad.
+ */
+export function matchesHistorialRecordSearch(
+  record: GeneralRecordLike,
+  query: string,
+  haystackParts: (string | number | null | undefined)[],
+  opts?: {
+    vehicleMatch?: boolean;
+    vehicleStrict?: boolean;
+  },
+): boolean {
+  const q = query.trim();
+  if (!q) return true;
+
+  const { wantsGeneral, textQuery } = splitGeneralSearchQuery(q);
+  const haystack = buildSearchHaystack(...haystackParts);
+
+  if (opts?.vehicleStrict && opts.vehicleMatch !== undefined) {
+    return opts.vehicleMatch;
+  }
+
+  if (wantsGeneral) {
+    if (!isGeneralRecord(record)) return false;
+    if (!textQuery) return true;
+    return matchesSearchHaystack(haystack, textQuery);
+  }
+
+  if (opts?.vehicleMatch) return true;
+  return matchesSearchHaystack(haystack, q);
 }
 
 /** Haystack normalizado para filas de ingreso en RegistrosTable. */

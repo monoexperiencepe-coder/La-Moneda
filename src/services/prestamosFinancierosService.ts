@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
+import { nextTramoOrden, recalcularCuotaMensualPrestamo } from '../utils/prestamoMovimientos';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -420,10 +421,10 @@ export async function insertPrestamoTramo(
   prestamoFinancieroId: number,
   input: PrestamoTramoInsertInput,
   tenantEmpresaId?: string | null,
-): Promise<{ error: string | null }> {
+): Promise<{ id: number | null; error: string | null }> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) {
-    return { error: 'Falta empresa_id en el entorno.' };
+    return { id: null, error: 'Falta empresa_id en el entorno.' };
   }
   const row: Record<string, unknown> = {
     empresa_id: empresaId,
@@ -442,6 +443,348 @@ export async function insertPrestamoTramo(
     nota: input.nota ?? '',
     orden: input.orden,
   };
-  const { error } = await supabase.from('prestamos_tramos').insert(row);
+  const { data, error } = await supabase.from('prestamos_tramos').insert(row).select('id').single();
+  if (error) {
+    return { id: null, error: error.message };
+  }
+  const rid = data?.id != null ? Number(data.id) : NaN;
+  return { id: Number.isFinite(rid) ? rid : null, error: null };
+}
+
+export async function deletePrestamoTramo(
+  prestamoFinancieroId: number,
+  tramoId: number,
+  tenantEmpresaId?: string | null,
+): Promise<{ error: string | null }> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
+  }
+  const { error } = await supabase
+    .from('prestamos_tramos')
+    .delete()
+    .eq('id', tramoId)
+    .eq('prestamo_financiero_id', prestamoFinancieroId)
+    .eq('empresa_id', empresaId);
   return { error: error?.message ?? null };
+}
+
+export async function deletePrestamoFinanciero(
+  prestamoId: number,
+  tenantEmpresaId?: string | null,
+): Promise<{ error: string | null }> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.' };
+  }
+  const { error: eTramos } = await supabase
+    .from('prestamos_tramos')
+    .delete()
+    .eq('prestamo_financiero_id', prestamoId)
+    .eq('empresa_id', empresaId);
+  if (eTramos) {
+    return { error: eTramos.message };
+  }
+  const { error } = await supabase
+    .from('prestamos_financieros')
+    .delete()
+    .eq('id', prestamoId)
+    .eq('empresa_id', empresaId);
+  return { error: error?.message ?? null };
+}
+
+/** Restaura cabecera + tramos tras undo de eliminación (nuevos ids en BD). */
+export async function restorePrestamoFinancieroDetalle(
+  snapshot: PrestamoFinancieroDetalle,
+  tenantEmpresaId?: string | null,
+): Promise<{ detalle: PrestamoFinancieroDetalle | null; error: string | null }> {
+  const p = snapshot.prestamo;
+  const { id: newId, error: eIns } = await insertPrestamoFinanciero(
+    {
+      codigo: p.codigo,
+      prestamista: p.prestamista,
+      titulo: p.titulo,
+      monedaCapital: p.monedaCapital,
+      monedaPago: p.monedaPago,
+      modalidadPago: p.modalidadPago,
+      montoOriginal: p.montoOriginal,
+      capitalActualEstimado: p.capitalActualEstimado,
+      tasaAnual: p.tasaAnual,
+      cuotaFijaMensual: p.cuotaFijaMensual,
+      interesMensualActual: p.interesMensualActual,
+      fechaInicio: p.fechaInicio,
+      estado: p.estado,
+      fechaCancelacion: p.fechaCancelacion,
+      requiereTramos: p.requiereTramos,
+      notas: p.notas,
+      observaciones: p.observaciones,
+    },
+    tenantEmpresaId,
+  );
+  if (eIns || newId == null) {
+    return { detalle: null, error: eIns ?? 'No se obtuvo id al restaurar.' };
+  }
+  const tramosRestored: PrestamoFinancieroTramo[] = [];
+  for (const t of [...snapshot.tramos].sort((a, b) => a.orden - b.orden || a.id - b.id)) {
+    const { id: tramoId, error: eTr } = await insertPrestamoTramo(
+      newId,
+      {
+        monedaCapital: t.monedaCapital,
+        monedaPago: t.monedaPago,
+        modalidadPago: t.modalidadPago,
+        desde: t.desde,
+        hasta: t.hasta,
+        capitalReferencial: t.capitalReferencial,
+        tasaAnual: t.tasaAnual,
+        cuotaFijaMensual: t.cuotaFijaMensual,
+        interesMensual: t.interesMensual,
+        evento: t.evento,
+        nota: t.nota,
+        orden: t.orden,
+      },
+      tenantEmpresaId,
+    );
+    if (eTr) {
+      return { detalle: null, error: `Préstamo restaurado (id ${newId}) pero falló un tramo: ${eTr}` };
+    }
+    tramosRestored.push({
+      ...t,
+      id: tramoId ?? t.id,
+      prestamoFinancieroId: newId,
+    });
+  }
+  const { detalle: rows } = await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
+  const fresh = rows.find((r) => r.prestamo.id === newId);
+  if (fresh) {
+    return { detalle: fresh, error: null };
+  }
+  return {
+    detalle: {
+      prestamo: { ...p, id: newId },
+      tramos: tramosRestored,
+    },
+    error: null,
+  };
+}
+
+function dayBeforeIso(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+export type MovimientoCapitalPrestamoInput = {
+  prestamo: PrestamoFinanciero;
+  tramos: PrestamoFinancieroTramo[];
+  tipo: 'retiro_capital' | 'aumento_capital';
+  monto: number;
+  fecha: string;
+  comentario: string;
+};
+
+export type MovimientoCapitalPrestamoResult = {
+  error: string | null;
+  newTramoId: number | null;
+  detalle: PrestamoFinancieroDetalle | null;
+};
+
+/** Retiro o aumento de capital: cierra tramo vigente, inserta tramo histórico y actualiza snapshot. */
+export async function aplicarMovimientoCapitalPrestamo(
+  input: MovimientoCapitalPrestamoInput,
+  tenantEmpresaId?: string | null,
+): Promise<MovimientoCapitalPrestamoResult> {
+  const { prestamo, tramos, tipo, monto, fecha, comentario } = input;
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) {
+    return { error: 'Falta empresa_id en el entorno.', newTramoId: null, detalle: null };
+  }
+  if (!Number.isFinite(monto) || monto <= 0) {
+    return { error: 'El monto debe ser mayor que cero.', newTramoId: null, detalle: null };
+  }
+  const capActual = prestamo.capitalActualEstimado;
+  const delta = tipo === 'retiro_capital' ? -monto : monto;
+  const nuevoCapital = Math.round((capActual + delta) * 100) / 100;
+  if (tipo === 'retiro_capital' && nuevoCapital < 0) {
+    return { error: 'El retiro supera el capital actual.', newTramoId: null, detalle: null };
+  }
+
+  const nuevaCuota = recalcularCuotaMensualPrestamo(prestamo, nuevoCapital);
+
+  const tramosOrd = [...tramos].sort((a, b) => a.orden - b.orden || a.id - b.id);
+  const tramoAbierto = [...tramosOrd].reverse().find((t) => !t.hasta?.trim());
+  if (tramoAbierto) {
+    const hastaCierre = dayBeforeIso(fecha);
+    if (hastaCierre >= tramoAbierto.desde.slice(0, 10)) {
+      const { error: eClose } = await updatePrestamoTramo(
+        prestamo.id,
+        tramoAbierto.id,
+        { hasta: hastaCierre },
+        tenantEmpresaId,
+      );
+      if (eClose) {
+        return { error: eClose, newTramoId: null, detalle: null };
+      }
+    }
+  }
+
+  const orden = nextTramoOrden(tramosOrd);
+  const nota =
+    comentario.trim() ||
+    (tipo === 'retiro_capital' ? `Retiro parcial ${monto}` : `Aumento de capital ${monto}`);
+
+  const { id: newTramoId, error: eTr } = await insertPrestamoTramo(
+    prestamo.id,
+    {
+      monedaCapital: prestamo.monedaCapital,
+      monedaPago: prestamo.monedaPago,
+      modalidadPago: prestamo.modalidadPago,
+      desde: fecha.slice(0, 10),
+      hasta: null,
+      capitalReferencial: nuevoCapital,
+      tasaAnual: prestamo.tasaAnual,
+      cuotaFijaMensual: prestamo.cuotaFijaMensual,
+      interesMensual: nuevaCuota,
+      evento: tipo,
+      nota,
+      orden,
+    },
+    tenantEmpresaId,
+  );
+  if (eTr) {
+    return { error: eTr, newTramoId: null, detalle: null };
+  }
+
+  const { error: eUp } = await updatePrestamoFinanciero(
+    prestamo.id,
+    {
+      capitalActualEstimado: nuevoCapital,
+      interesMensualActual: nuevaCuota,
+    },
+    tenantEmpresaId,
+  );
+  if (eUp) {
+    if (newTramoId != null) {
+      await deletePrestamoTramo(prestamo.id, newTramoId, tenantEmpresaId);
+    }
+    return { error: eUp, newTramoId: null, detalle: null };
+  }
+
+  const { detalle: rows } = await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
+  const fresh = rows.find((r) => r.prestamo.id === prestamo.id) ?? null;
+  return { error: null, newTramoId, detalle: fresh };
+}
+
+export type RegistroHistorialEdicionInput = {
+  prestamo: PrestamoFinanciero;
+  tramos: PrestamoFinancieroTramo[];
+  capitalAnterior: number;
+  capitalNuevo: number;
+  interesAnterior: number;
+  interesNuevo: number;
+  fecha: string;
+  comentario?: string;
+};
+
+/** Inserta tramo de historial cuando edición cambia condiciones financieras. */
+export async function registrarHistorialEdicionPrestamo(
+  input: RegistroHistorialEdicionInput,
+  tenantEmpresaId?: string | null,
+): Promise<{ newTramoId: number | null; error: string | null }> {
+  const { prestamo, tramos, capitalNuevo, interesNuevo, fecha, comentario } = input;
+  const tramosOrd = [...tramos].sort((a, b) => a.orden - b.orden || a.id - b.id);
+  const tramoAbierto = [...tramosOrd].reverse().find((t) => !t.hasta?.trim());
+  if (tramoAbierto) {
+    const hastaCierre = dayBeforeIso(fecha);
+    if (hastaCierre >= tramoAbierto.desde.slice(0, 10)) {
+      const { error: eClose } = await updatePrestamoTramo(
+        prestamo.id,
+        tramoAbierto.id,
+        { hasta: hastaCierre },
+        tenantEmpresaId,
+      );
+      if (eClose) return { newTramoId: null, error: eClose };
+    }
+  }
+  const orden = nextTramoOrden(tramosOrd);
+  const { id, error } = await insertPrestamoTramo(
+    prestamo.id,
+    {
+      monedaCapital: prestamo.monedaCapital,
+      monedaPago: prestamo.monedaPago,
+      modalidadPago: prestamo.modalidadPago,
+      desde: fecha.slice(0, 10),
+      hasta: null,
+      capitalReferencial: capitalNuevo,
+      tasaAnual: prestamo.tasaAnual,
+      cuotaFijaMensual: prestamo.cuotaFijaMensual,
+      interesMensual: interesNuevo,
+      evento: 'edicion',
+      nota: comentario?.trim() || 'Edición de condiciones',
+      orden,
+    },
+    tenantEmpresaId,
+  );
+  return { newTramoId: id, error };
+}
+
+/** Revierte movimiento de capital o tramo de edición (undo). */
+export async function revertirMovimientoPrestamo(
+  prestamoId: number,
+  snapshot: PrestamoFinancieroDetalle,
+  newTramoId: number | null,
+  tenantEmpresaId?: string | null,
+): Promise<{ error: string | null }> {
+  if (newTramoId != null) {
+    const { error: eDel } = await deletePrestamoTramo(prestamoId, newTramoId, tenantEmpresaId);
+    if (eDel) return { error: eDel };
+  }
+  const p = snapshot.prestamo;
+  const { error: eUp } = await updatePrestamoFinanciero(
+    prestamoId,
+    {
+      codigo: p.codigo,
+      prestamista: p.prestamista,
+      titulo: p.titulo,
+      monedaCapital: p.monedaCapital,
+      monedaPago: p.monedaPago,
+      modalidadPago: p.modalidadPago,
+      montoOriginal: p.montoOriginal,
+      capitalActualEstimado: p.capitalActualEstimado,
+      tasaAnual: p.tasaAnual,
+      cuotaFijaMensual: p.cuotaFijaMensual,
+      interesMensualActual: p.interesMensualActual,
+      fechaInicio: p.fechaInicio,
+      estado: p.estado,
+      fechaCancelacion: p.fechaCancelacion,
+      requiereTramos: p.requiereTramos,
+      notas: p.notas,
+      observaciones: p.observaciones,
+    },
+    tenantEmpresaId,
+  );
+  if (eUp) return { error: eUp };
+
+  for (const t of snapshot.tramos) {
+    const { error: eT } = await updatePrestamoTramo(
+      prestamoId,
+      t.id,
+      {
+        monedaCapital: t.monedaCapital,
+        monedaPago: t.monedaPago,
+        modalidadPago: t.modalidadPago,
+        desde: t.desde,
+        hasta: t.hasta,
+        capitalReferencial: t.capitalReferencial,
+        tasaAnual: t.tasaAnual,
+        cuotaFijaMensual: t.cuotaFijaMensual,
+        interesMensual: t.interesMensual,
+        evento: t.evento,
+        nota: t.nota,
+        orden: t.orden,
+      },
+      tenantEmpresaId,
+    );
+    if (eT) return { error: eT };
+  }
+  return { error: null };
 }

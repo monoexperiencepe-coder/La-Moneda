@@ -9,10 +9,14 @@ import type {
 import {
   insertPrestamoFinanciero,
   insertPrestamoTramo,
+  registrarHistorialEdicionPrestamo,
   updatePrestamoFinanciero,
   updatePrestamoTramo,
+  fetchPrestamosFinancierosDetalle,
 } from '../../services/prestamosFinancierosService';
 import { useAuth } from '../../context/AuthContext';
+import { useRegistrosContext } from '../../context/RegistrosContext';
+import { undoCreatePrestamoFinanciero, undoUpdatePrestamoFinanciero } from '../../undo/factories';
 import { cuotaMensualDesdeCapitalYTasaAnual } from '../../utils/prestamosFinancierosCalc';
 
 type TramoForm = {
@@ -68,16 +72,36 @@ type DraftTramoInicial = {
   nota: string;
 };
 
+export type PrestamoSavedPayload = {
+  before?: PrestamoFinancieroDetalle;
+  after?: PrestamoFinancieroDetalle;
+  createdId?: number;
+  newTramoId?: number | null;
+};
+
 interface PrestamoEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   mode: 'create' | 'edit';
   detalle: PrestamoFinancieroDetalle | null;
-  onSaved: () => void | Promise<void>;
+  onSaved: (payload?: PrestamoSavedPayload) => void | Promise<void>;
+  onUndoRemoveLocal?: (prestamoId: number) => void;
+  onUndoUpsertLocal?: (row: PrestamoFinancieroDetalle) => void;
+  onDelete?: () => void | Promise<void>;
 }
 
-const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, mode, detalle, onSaved }) => {
+const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({
+  isOpen,
+  onClose,
+  mode,
+  detalle,
+  onSaved,
+  onUndoRemoveLocal,
+  onUndoUpsertLocal,
+  onDelete,
+}) => {
   const { profile } = useAuth();
+  const { showUndoToast } = useRegistrosContext();
   const tenantEmpresaId = profile?.empresa_id;
   const isCreate = mode === 'create';
   const p = detalle?.prestamo;
@@ -399,7 +423,18 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
             setFormError(`Préstamo creado (id ${newId}), pero el tramo inicial falló: ${eTr}`);
             return;
           }
-          await Promise.resolve(onSaved());
+          const { detalle: rowsAfterCreate } = await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
+          const afterCreate = rowsAfterCreate.find((r) => r.prestamo.id === newId);
+          await Promise.resolve(onSaved({ createdId: newId, after: afterCreate }));
+          showUndoToast({
+            message: 'Préstamo registrado',
+            detail: 'Podés deshacerlo desde «Deshacer».',
+            undoAction: undoCreatePrestamoFinanciero(
+              newId,
+              (id) => onUndoRemoveLocal?.(id),
+              tenantEmpresaId,
+            ),
+          });
           onClose();
           return;
         }
@@ -413,12 +448,24 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
           setFormError('No se obtuvo el id del préstamo creado.');
           return;
         }
-        await Promise.resolve(onSaved());
+        const { detalle: rowsAfterCreate } = await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
+        const afterCreate = rowsAfterCreate.find((r) => r.prestamo.id === newId);
+        await Promise.resolve(onSaved({ createdId: newId, after: afterCreate }));
+        showUndoToast({
+          message: 'Préstamo registrado',
+          detail: 'Podés deshacerlo desde «Deshacer».',
+          undoAction: undoCreatePrestamoFinanciero(
+            newId,
+            (id) => onUndoRemoveLocal?.(id),
+            tenantEmpresaId,
+          ),
+        });
         onClose();
         return;
       }
 
-      if (!p) return;
+      if (!p || !detalle) return;
+      const beforeSnapshot = detalle;
 
       const { error: e1 } = await updatePrestamoFinanciero(p.id, payloadBase, tenantEmpresaId);
       if (e1) {
@@ -458,7 +505,60 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
         }
       }
 
-      await Promise.resolve(onSaved());
+      const capChanged = Math.abs(ca - p.capitalActualEstimado) > 0.005;
+      const intChanged = Math.abs(cuotaMes - p.interesMensualActual) > 0.005;
+      const tasaChanged =
+        modalidadPago === 'tasa_anual' &&
+        Math.abs((tasaDecimal ?? 0) - (p.tasaAnual ?? 0)) > 0.0000001;
+      const modChanged = modalidadPago !== p.modalidadPago;
+      const cuotaFijaChanged =
+        modalidadPago === 'cuota_fija' &&
+        Math.abs((cuotaFijaVal ?? 0) - (p.cuotaFijaMensual ?? 0)) > 0.005;
+
+      let newTramoId: number | null = null;
+      if (capChanged || intChanged || tasaChanged || modChanged || cuotaFijaChanged) {
+        const fechaHist = todayIso();
+        const { newTramoId: nt, error: eHist } = await registrarHistorialEdicionPrestamo(
+          {
+            prestamo: { ...p, ...payloadBase },
+            tramos: detalle.tramos,
+            capitalAnterior: p.capitalActualEstimado,
+            capitalNuevo: ca,
+            interesAnterior: p.interesMensualActual,
+            interesNuevo: cuotaMes,
+            fecha: fechaHist,
+            comentario: obsTrim || 'Edición de condiciones',
+          },
+          tenantEmpresaId,
+        );
+        if (eHist) {
+          setFormError(`Condiciones guardadas, pero el historial falló: ${eHist}`);
+          return;
+        }
+        newTramoId = nt;
+      }
+
+      const { detalle: rowsAfterEdit } = await fetchPrestamosFinancierosDetalle(tenantEmpresaId);
+      const afterEdit = rowsAfterEdit.find((r) => r.prestamo.id === p.id);
+      await Promise.resolve(
+        onSaved({
+          before: beforeSnapshot,
+          after: afterEdit,
+          newTramoId,
+        }),
+      );
+      if (onUndoUpsertLocal && (capChanged || intChanged || tasaChanged || modChanged || cuotaFijaChanged)) {
+        showUndoToast({
+          message: 'Préstamo actualizado',
+          detail: 'Condiciones e historial registrados.',
+          undoAction: undoUpdatePrestamoFinanciero(
+            beforeSnapshot,
+            newTramoId,
+            onUndoUpsertLocal,
+            tenantEmpresaId,
+          ),
+        });
+      }
       onClose();
     } finally {
       setSaving(false);
@@ -502,6 +602,16 @@ const PrestamoEditModal: React.FC<PrestamoEditModalProps> = ({ isOpen, onClose, 
       size="xl"
       footer={
         <>
+          {!isCreate && onDelete ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={saving}
+              className="mr-auto rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
+            >
+              Eliminar préstamo
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}

@@ -8,7 +8,7 @@ import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
-import { matchesSearchQuery } from '../../utils/recordSearch';
+import { matchesHistorialRecordSearch } from '../../utils/recordSearch';
 import type { TipoControlFecha } from '../../data/types';
 import { ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
 
@@ -84,7 +84,9 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
       !busquedaPagina.trim()
         ? controlFechasHistory
         : controlFechasHistory.filter((c) =>
-            matchesSearchQuery(
+            matchesHistorialRecordSearch(
+              c,
+              busquedaPagina,
               [
                 c.id,
                 c.tipo,
@@ -92,7 +94,6 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({ p
                 c.fechaVencimiento,
                 getVehicleLabel(c.vehicleId),
               ],
-              busquedaPagina,
             ),
           );
     return [...rows].sort((a, b) => {

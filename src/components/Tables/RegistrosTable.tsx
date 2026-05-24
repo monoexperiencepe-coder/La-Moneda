@@ -20,6 +20,7 @@ import {
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
 import { undoUpdateGastoDetalle } from '../../undo/factories';
+import { isGastoRecentlyReclassified } from '../../utils/gastoHistorialOrder';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import Input from '../Common/Input';
 import {
@@ -44,6 +45,12 @@ import { isIngresoExtraordinario, isIngresoVehicular } from '../../utils/ingreso
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
+import {
+  gastoSearchHaystack,
+  ingresoSearchHaystack,
+  matchesHistorialRecordSearch,
+  queryHasGeneralSearchIntent,
+} from '../../utils/recordSearch';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { sortRegistrosByLatestCreatedOrDate } from '../../utils/sortRegistrosByLatestCreatedOrDate';
@@ -52,11 +59,6 @@ import { useBootstrapPending } from '../../hooks/useBootstrapPending';
 import { useGastosDataPending } from '../../hooks/useGastosDataPending';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { RegistroCountLabel, SkeletonTableRows, TableBodySurface, UpdatingChrome } from '../Loading';
-import {
-  gastoSearchHaystack,
-  ingresoSearchHaystack,
-  matchesSearchHaystack,
-} from '../../utils/recordSearch';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -81,6 +83,18 @@ interface RegistrosTableProps {
     onPageChange: (page: number) => void;
     loading?: boolean;
   };
+  /** Búsqueda controlada por el padre (historial gastos server-side). */
+  serverHistorialSearch?: {
+    query: string;
+    onQueryChange: (q: string) => void;
+    serverSide: boolean;
+    scopeRecent?: boolean;
+    totalInCategory?: number;
+  };
+  /** Pin local tras mover — badge «Reclasificado». */
+  recentlyReclassifiedAt?: ReadonlyMap<string, number>;
+  /** No reordenar filas ya ordenadas por Supabase. */
+  preserveServerOrder?: boolean;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -248,6 +262,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   onMoveCategoriaGasto,
   onGastoDetalleSaved,
   serverPagination,
+  serverHistorialSearch,
+  recentlyReclassifiedAt,
+  preserveServerOrder = false,
 }) => {
   const { role, isFinancialOperador, profile } = useAuth();
   const { toast, showUndoToast } = useRegistrosContext();
@@ -255,7 +272,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const showDeleteGasto = mode !== 'gastos' || !isFinancialOperador;
   const tenantEmpresaId = profile?.empresa_id;
   const colCount = 5;
-  const [query, setQuery] = useState('');
+  const [localQuery, setLocalQuery] = useState('');
+  const query = serverHistorialSearch?.serverSide ? serverHistorialSearch.query : localQuery;
+  const setQuery = serverHistorialSearch?.serverSide
+    ? serverHistorialSearch.onQueryChange
+    : setLocalQuery;
   const [sortKey, setSortKey] = useState<string>('fecha');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
@@ -508,6 +529,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     [query, vehicleSearchIds],
   );
 
+  const generalSearchIntent = useMemo(() => queryHasGeneralSearchIntent(query), [query]);
+
   const deferredVehicleSearchIds = useMemo(
     () => extractVehicleSearchIds(deferredQuery, vehicles),
     [deferredQuery, vehicles],
@@ -521,6 +544,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const filtered = useMemo(() => {
     let data = rawData;
 
+    if (serverHistorialSearch?.serverSide) return data;
+
     /* ── Búsqueda libre ── */
     if (!deferredQuery.trim()) return data;
     const idSet = new Set(deferredVehicleSearchIds);
@@ -530,24 +555,24 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       const vidNum = vidRaw != null && Number.isFinite(Number(vidRaw)) ? Number(vidRaw) : null;
       const byVehicleId = idSet.size > 0 && vidNum != null && idSet.has(vidNum);
 
-      if (deferredVehicleSearchStrict) {
-        return byVehicleId;
-      }
-
       const vehicleLabel = getVehicleLabel('vehicleId' in item ? item.vehicleId : null);
-      if (mode === 'ingresos') {
-        const haystack = ingresoSearchHaystack(item as Ingreso, vehicleLabel);
-        return byVehicleId || matchesSearchHaystack(haystack, deferredQuery);
-      }
-      const haystack = gastoSearchHaystack(item as Gasto, vehicleLabel);
-      return byVehicleId || matchesSearchHaystack(haystack, deferredQuery);
+      const haystackParts =
+        mode === 'ingresos'
+          ? [ingresoSearchHaystack(item as Ingreso, vehicleLabel)]
+          : [gastoSearchHaystack(item as Gasto, vehicleLabel)];
+
+      return matchesHistorialRecordSearch(item, deferredQuery, haystackParts, {
+        vehicleMatch: byVehicleId,
+        vehicleStrict: deferredVehicleSearchStrict,
+      });
     });
-  }, [rawData, deferredQuery, mode, vehicles, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict]);
+  }, [rawData, deferredQuery, mode, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict, serverHistorialSearch?.serverSide]);
 
   const rowVehicleRank = (item: Ingreso | Gasto) =>
     vehicleIdSortRank('vehicleId' in item ? item.vehicleId : null);
 
   const sorted = useMemo(() => {
+    if (serverMode && preserveServerOrder) return filtered;
     return [...filtered].sort((a, b) => {
       if (sortKey === 'fecha' || sortKey === 'registro') {
         const cmp = sortRegistrosByLatestCreatedOrDate(a, b);
@@ -566,7 +591,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       }
       return sortRegistrosByLatestCreatedOrDate(a, b);
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, serverMode, preserveServerOrder]);
 
   const totalPages = serverMode
     ? Math.max(1, Math.ceil((serverPagination!.total || 0) / serverPagination!.pageSize))
@@ -675,8 +700,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             onChange={e => { setQuery(e.target.value); setPage(1); }}
             placeholder={
               mode === 'ingresos'
-                ? 'Buscar ingresos (texto, observaciones, fecha, #3, carro 5, placa…)'
-                : 'Buscar gastos (texto, observaciones, fecha, #3, carro 5, placa…)'
+                ? 'Buscar ingresos (texto, general, #3, carro 5, placa…)'
+                : 'Buscar gastos (texto, general, #3, carro 5, placa…)'
             }
             className="input-field pl-9 text-sm"
             aria-describedby={vehicleSearchIds.length > 0 ? 'registros-busqueda-vehiculo' : undefined}
@@ -691,6 +716,23 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   #{id} — {getVehicleLabel(id)}
                 </span>
               ))}
+            </p>
+          ) : null}
+          {generalSearchIntent ? (
+            <p className="mt-1.5 pl-1 text-[11px] leading-snug text-indigo-800">
+              <span className="font-semibold">Filtrando:</span> registros sin vehículo (generales / flota general)
+            </p>
+          ) : null}
+          {serverHistorialSearch?.scopeRecent && query.trim().length >= 2 && !serverHistorialSearch.serverSide ? (
+            <p className="mt-1.5 pl-1 text-[11px] leading-snug text-amber-800">
+              No aparece en la carga rápida. Usa «Historial completo» para buscar en toda la categoría.
+            </p>
+          ) : null}
+          {serverHistorialSearch?.serverSide && serverHistorialSearch.totalInCategory != null ? (
+            <p className="mt-1.5 pl-1 text-[11px] leading-snug text-slate-500">
+              {serverHistorialSearch.totalInCategory} registro
+              {serverHistorialSearch.totalInCategory === 1 ? '' : 's'} en esta categoría
+              {query.trim() ? ' · búsqueda en servidor' : ''}
             </p>
           ) : null}
         </div>
@@ -752,6 +794,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               mode === 'gastos' ? gastoObservacionParaLista(item as Gasto) : null;
             const gastoEtiquetasMobile =
               mode === 'gastos' ? gastoListaEtiquetas(item as Gasto, showClasificacionFinanciera) : null;
+            const gastoReclassifiedMobile =
+              mode === 'gastos' &&
+              isGastoRecentlyReclassified(
+                item as Gasto,
+                recentlyReclassifiedAt?.get(String((item as Gasto).id)),
+              );
             return (
             <div
               key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
@@ -838,6 +886,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       <span className="text-[10px] text-gray-500 truncate max-w-[10rem]">
                         {gastoEtiquetasMobile.secondary}
                       </span>
+                    ) : null}
+                    {gastoReclassifiedMobile ? (
+                      <Badge variant="secondary" size="sm">Reclasificado</Badge>
                     ) : null}
                   </div>
                   {gastoObsMobile ? (
@@ -1018,6 +1069,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                   mode === 'gastos' ? gastoObservacionParaLista(item as Gasto) : null;
                 const gastoEtiquetasRow =
                   mode === 'gastos' ? gastoListaEtiquetas(item as Gasto, showClasificacionFinanciera) : null;
+                const gastoReclassifiedRow =
+                  mode === 'gastos' &&
+                  isGastoRecentlyReclassified(
+                    item as Gasto,
+                    recentlyReclassifiedAt?.get(String((item as Gasto).id)),
+                  );
                 return (
                 <tr
                   key={mode === 'ingresos' ? `ingreso-${(item as Ingreso).id}` : `gasto-${(item as Gasto).id}`}
@@ -1069,6 +1126,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                         <p className="text-xs font-semibold text-gray-800">{gastoEtiquetasRow?.primary}</p>
                         {gastoEtiquetasRow?.secondary ? (
                           <p className="text-[11px] text-gray-500 mt-0.5">{gastoEtiquetasRow.secondary}</p>
+                        ) : null}
+                        {gastoReclassifiedRow ? (
+                          <p className="mt-1">
+                            <Badge variant="secondary" size="sm">Reclasificado</Badge>
+                          </p>
                         ) : null}
                         {gastoObsRow ? (
                           <p className="text-[11px] text-gray-600 mt-0.5 line-clamp-2 leading-snug">{gastoObsRow}</p>

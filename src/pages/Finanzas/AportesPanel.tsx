@@ -11,12 +11,12 @@ import {
   aporteMontoNeto,
   deleteAporteAccionista,
   fetchAportesAccionistas,
-  insertAporteAccionista,
 } from '../../services/aportesAccionistasService';
 import type { AporteAccionista, Moneda } from '../../data/types';
 import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { canUseFinanciamiento, permissionUserFromAuth } from '../../utils/permissions';
+import { undoCreateAporte, undoDeleteAporte } from '../../undo/factories';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -150,13 +150,21 @@ const AportesPanel: React.FC = () => {
     async (row: AporteAccionista) => {
       const esRetiro = String(row.tipo ?? '').trim() === APORTE_TIPO_RETIRO;
       setRows((prev) => mergeAporteRow(prev, row));
-      await reload({ background: true });
       toast.success(
         esRetiro ? 'Retiro registrado' : 'Aporte registrado',
         `${row.accionista || 'Accionista'} · ${montoFmt(Math.abs(row.monto), row.moneda)}`,
       );
+      showUndoToast({
+        message: esRetiro ? 'Retiro registrado' : 'Aporte registrado',
+        detail: 'Podés deshacerlo desde «Deshacer».',
+        undoAction: undoCreateAporte(
+          row,
+          (id) => setRows((prev) => prev.filter((x) => x.id !== id)),
+          tenantEmpresaId,
+        ),
+      });
     },
-    [reload, toast],
+    [toast, showUndoToast, tenantEmpresaId],
   );
 
   const totalesPorMoneda = useMemo(() => {
@@ -214,46 +222,31 @@ const AportesPanel: React.FC = () => {
       const tipoTxt = esRetiro ? 'retiro' : 'aporte';
       const msg = `¿Eliminar este ${tipoTxt} de ${r.accionista || '(sin nombre)'} — ${montoFmt(Math.abs(r.monto), r.moneda)}? Podrás deshacerlo desde el aviso «Deshacer».`;
       if (!window.confirm(msg)) return;
+      const snapshot = r;
+      setRows((prev) => prev.filter((x) => x.id !== r.id));
       setDeletingId(r.id);
       try {
         const { error: delErr } = await deleteAporteAccionista(r.id, tenantEmpresaId);
         if (delErr) {
+          setRows((prev) => mergeAporteRow(prev, snapshot));
           toast.error('No se pudo eliminar', delErr);
           return;
         }
-        await reload({ background: true });
         showUndoToast({
           message: 'Registro eliminado',
           detail: `${tipoTxt} quitado de la lista.`,
-          undoAction: {
-            type: 'delete',
-            label: `Restaurar ${esRetiro ? 'retiro' : 'aporte'}`,
-            entityType: 'aporte',
-            entityId: r.id,
-            undo: async () => {
-              const { error: insErr } = await insertAporteAccionista(
-                {
-                  accionista: r.accionista,
-                  vehiculoReferencia: r.vehiculoReferencia,
-                  monto: r.monto,
-                  moneda: r.moneda,
-                  fechaAporte: r.fechaAporte,
-                  generaInteres: r.generaInteres,
-                  tipo: r.tipo,
-                  observaciones: r.observaciones,
-                },
-                tenantEmpresaId,
-              );
-              if (insErr) throw new Error(insErr);
-              await reload({ background: true });
-            },
-          },
+          undoAction: undoDeleteAporte(
+            snapshot,
+            (row) => setRows((prev) => mergeAporteRow(prev, row)),
+            (id) => setRows((prev) => prev.filter((x) => x.id !== id)),
+            tenantEmpresaId,
+          ),
         });
       } finally {
         setDeletingId(null);
       }
     },
-    [canEditFinances, reload, toast, showUndoToast],
+    [canEditFinances, toast, showUndoToast, tenantEmpresaId],
   );
 
   const busy = loading || refreshing;

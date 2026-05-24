@@ -9,7 +9,7 @@ import type {
 } from '../../data/types';
 import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { matchesSearchQuery } from '../../utils/recordSearch';
 
 function montoFmt(amount: number, moneda: Moneda): string {
@@ -137,6 +137,7 @@ export interface PrestamosRegistroTableProps {
   detalle: PrestamoFinancieroDetalle[];
   canEdit: boolean;
   onEdit: (row: PrestamoFinancieroDetalle) => void;
+  onDelete?: (row: PrestamoFinancieroDetalle) => void;
   scrollToCardId: (prestamoId: number) => void;
 }
 
@@ -144,6 +145,7 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
   detalle,
   canEdit,
   onEdit,
+  onDelete,
   scrollToCardId,
 }) => {
   const [busqueda, setBusqueda] = useState('');
@@ -455,13 +457,25 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
                         Ver en tarjeta
                       </button>
                       {canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => onEdit(row)}
-                          className="text-left rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-900 hover:bg-indigo-100"
-                        >
-                          Editar condiciones
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onEdit(row)}
+                            className="text-left rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-900 hover:bg-indigo-100"
+                          >
+                            Editar condiciones
+                          </button>
+                          {onDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => onDelete(row)}
+                              className="inline-flex items-center gap-1 text-left rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-800 hover:bg-red-100"
+                            >
+                              <Trash2 className="h-3 w-3" aria-hidden />
+                              Eliminar
+                            </button>
+                          ) : null}
+                        </>
                       ) : null}
                       {tieneTramos || p.requiereTramos ? (
                         <button

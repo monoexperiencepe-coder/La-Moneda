@@ -12,7 +12,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
-      <main className="relative flex-1 pt-16">
+      <main className="relative flex-1 pt-14 lg:pt-16">
         <DataBootstrapOverlay />
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
           <PageTransition>{children}</PageTransition>

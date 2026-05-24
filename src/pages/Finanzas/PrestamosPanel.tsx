@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ChevronDown, Plus, RefreshCw } from 'lucide-react';
+import { ArrowDown, ChevronDown, History, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import { supabase } from '../../lib/supabase';
-import { fetchPrestamosFinancierosDetalle } from '../../services/prestamosFinancierosService';
+import {
+  deletePrestamoFinanciero,
+  fetchPrestamosFinancierosDetalle,
+} from '../../services/prestamosFinancierosService';
 import type {
   Moneda,
   PrestamoFinanciero,
@@ -14,9 +17,20 @@ import { calcularPrestamoFinancieroInfo, interesMensualEfectivoTramo } from '../
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
+import { useRegistrosContext } from '../../context/RegistrosContext';
 import { canUseFinanciamiento, permissionUserFromAuth } from '../../utils/permissions';
 import PrestamoEditModal from '../../components/Finanzas/PrestamoEditModal';
+import PrestamoCapitalModal, { type PrestamoCapitalModalMode } from '../../components/Finanzas/PrestamoCapitalModal';
+import PrestamoHistorialTimeline from '../../components/Finanzas/PrestamoHistorialTimeline';
 import PrestamosRegistroTable from '../../components/Finanzas/PrestamosRegistroTable';
+import {
+  applyPrestamoDetalleRemoved,
+  applyPrestamoDetalleUpsert,
+  devLogPrestamoMutation,
+  sumCapitalActualDetalle,
+  sumCuotaMensualDetalle,
+} from '../../utils/prestamoLocalMutations';
+import { undoDeletePrestamoFinanciero, undoUpdatePrestamoFinanciero } from '../../undo/factories';
 
 function montoFmt(amount: number, moneda: Moneda): string {
   return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
@@ -75,14 +89,111 @@ function modalidadEtiqueta(p: PrestamoFinanciero): string {
   return p.modalidadPago === 'cuota_fija' ? 'Cuota fija mensual' : 'Tasa anual';
 }
 
+function PrestamoCardEditActions({
+  onEdit,
+  onDelete,
+  onModificarCapital,
+  onToggleHistorial,
+  historialOpen,
+  deleting,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+  onModificarCapital: (mode: PrestamoCapitalModalMode) => void;
+  onToggleHistorial: () => void;
+  historialOpen: boolean;
+  deleting?: boolean;
+}) {
+  return (
+    <PrestamoCardActionsBar
+      onEdit={onEdit}
+      onDelete={onDelete}
+      onModificarCapital={onModificarCapital}
+      onToggleHistorial={onToggleHistorial}
+      historialOpen={historialOpen}
+      deleting={deleting}
+    />
+  );
+}
+
+function PrestamoCardActionsBar(props: {
+  onEdit: () => void;
+  onDelete: () => void;
+  onModificarCapital: (mode: PrestamoCapitalModalMode) => void;
+  onToggleHistorial: () => void;
+  historialOpen: boolean;
+  deleting?: boolean;
+}) {
+  const { onEdit, onDelete, onModificarCapital, onToggleHistorial, historialOpen, deleting } = props;
+  return (
+    <div className="flex flex-wrap justify-end gap-1">
+      <button
+        type="button"
+        onClick={onToggleHistorial}
+        className="inline-flex items-center gap-1 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 transition-colors"
+      >
+        <History className="h-3 w-3" aria-hidden />
+        {historialOpen ? 'Ocultar' : 'Historial'}
+      </button>
+      <button
+        type="button"
+        onClick={() => onModificarCapital('retiro_capital')}
+        className="inline-flex items-center gap-0.5 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 transition-colors"
+      >
+        <Minus className="h-3 w-3" aria-hidden />
+        Retirar
+      </button>
+      <button
+        type="button"
+        onClick={() => onModificarCapital('aumento_capital')}
+        className="inline-flex items-center gap-0.5 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 transition-colors"
+      >
+        <Plus className="h-3 w-3" aria-hidden />
+        Aumentar
+      </button>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/25 transition-colors"
+      >
+        Editar
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={deleting}
+        title="Eliminar préstamo"
+        className="inline-flex items-center rounded-md bg-red-500/20 px-1.5 py-0.5 text-white ring-1 ring-red-300/30 hover:bg-red-500/35 disabled:opacity-50 transition-colors"
+      >
+        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
 interface PrestamoCardProps {
   detalle: PrestamoFinancieroDetalle;
   numeroEnLista: number;
   canEdit: boolean;
   onEdit: () => void;
+  onDelete: () => void;
+  onModificarCapital: (mode: PrestamoCapitalModalMode) => void;
+  historialOpen: boolean;
+  onToggleHistorial: () => void;
+  deleting?: boolean;
 }
 
-function PrestamoEjecutivoCard({ detalle, numeroEnLista, canEdit, onEdit }: PrestamoCardProps) {
+function PrestamoEjecutivoCard({
+  detalle,
+  numeroEnLista,
+  canEdit,
+  onEdit,
+  onDelete,
+  onModificarCapital,
+  historialOpen,
+  onToggleHistorial,
+  deleting,
+}: PrestamoCardProps) {
   const { prestamo: p, tramos } = detalle;
   const calc = useMemo(() => calcularPrestamoFinancieroInfo(p, tramos), [p, tramos]);
   const tramosOrdenados = useMemo(
@@ -164,16 +275,24 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista, canEdit, onEdit }: Pres
 
           <div className="flex shrink-0 flex-col items-stretch sm:items-end gap-1">
             {canEdit ? (
-              <div className="flex flex-wrap justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={onEdit}
-                  className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/25 transition-colors"
-                >
-                  Editar condiciones
-                </button>
-              </div>
-            ) : null}
+              <PrestamoCardEditActions
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onModificarCapital={onModificarCapital}
+                onToggleHistorial={onToggleHistorial}
+                historialOpen={historialOpen}
+                deleting={deleting}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleHistorial}
+                className="inline-flex items-center gap-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/25 transition-colors"
+              >
+                <History className="h-3 w-3" aria-hidden />
+                {historialOpen ? 'Ocultar historial' : 'Ver historial'}
+              </button>
+            )}
             <div className="flex flex-col items-start sm:items-end gap-0 rounded-md bg-white/10 px-2 py-1.5 ring-1 ring-white/12 sm:min-w-[140px]">
             <span className="text-[8px] font-medium uppercase tracking-wide text-white/50 leading-none">Valor cuota</span>
             <span className="text-lg sm:text-xl font-bold tabular-nums tracking-tight text-white leading-none mt-0.5">
@@ -191,7 +310,19 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista, canEdit, onEdit }: Pres
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-1.5">
           <KpiTile label="Capital original" value={montoFmt(p.montoOriginal, p.monedaCapital)} accent />
           <KpiTile label="Capital actual" value={montoFmt(calc.capitalActualEstimado, p.monedaCapital)} accent />
-          <KpiTile label="Moneda capital" value={p.monedaCapital} />
+          <KpiTile
+            label="Cuota / interés actual"
+            value={montoFmt(p.interesMensualActual, p.monedaPago)}
+            accent
+          />
+          <KpiTile
+            label="Última actualización"
+            value={formatDate(
+              tramosOrdenados.length > 0
+                ? tramosOrdenados[tramosOrdenados.length - 1].desde
+                : p.fechaInicio,
+            )}
+          />
           <KpiTile label="Moneda pago" value={p.monedaPago} />
           <KpiTile label="Modalidad" value={modalidadEtiqueta(p)} />
           {p.modalidadPago === 'cuota_fija' ? (
@@ -222,7 +353,14 @@ function PrestamoEjecutivoCard({ detalle, numeroEnLista, canEdit, onEdit }: Pres
         </div>
       </div>
 
-      {tramosOrdenados.length > 0 ? (
+      {historialOpen ? (
+        <div className="px-2.5 pb-1.5 pt-0 sm:px-3 sm:pb-2 border-t border-slate-100">
+          <h3 className="text-[8px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+            Historial financiero
+          </h3>
+          <PrestamoHistorialTimeline prestamo={p} tramos={tramosOrdenados} compact />
+        </div>
+      ) : tramosOrdenados.length > 0 ? (
         <div className="px-2.5 pb-1.5 pt-0 sm:px-3 sm:pb-2">
           <h3 className="text-[8px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Tramos</h3>
           <TramosTimeline
@@ -399,6 +537,7 @@ type ReloadOpts = { background?: boolean };
 
 const PrestamosPanel: React.FC = () => {
   const { canEditFinances, profile, user } = useAuth();
+  const { toast, showUndoToast } = useRegistrosContext();
   const canLoadFinanciamiento = useMemo(
     () => canUseFinanciamiento(permissionUserFromAuth(user, profile?.email ?? null)),
     [user, profile?.email],
@@ -417,6 +556,26 @@ const PrestamosPanel: React.FC = () => {
   const [tramosError, setTramosError] = useState<string | null>(null);
   const debounceRealtimeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasHiddenRef = useRef(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [historialOpen, setHistorialOpen] = useState<Record<number, boolean>>({});
+  const [capitalModal, setCapitalModal] = useState<
+    | { open: false }
+    | { open: true; mode: PrestamoCapitalModalMode; detalle: PrestamoFinancieroDetalle }
+  >({ open: false });
+
+  const upsertDetalleLocal = useCallback((row: PrestamoFinancieroDetalle) => {
+    setDetalle((prev) => {
+      devLogPrestamoMutation('upsert', { id: row.prestamo.id });
+      return applyPrestamoDetalleUpsert(prev, row);
+    });
+  }, []);
+
+  const removeDetalleLocal = useCallback((prestamoId: number) => {
+    setDetalle((prev) => {
+      devLogPrestamoMutation('remove', { id: prestamoId });
+      return applyPrestamoDetalleRemoved(prev, prestamoId);
+    });
+  }, []);
 
   const reload = useCallback(async (opts?: ReloadOpts) => {
     const background = opts?.background ?? false;
@@ -548,6 +707,92 @@ const PrestamosPanel: React.FC = () => {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  const kpiTotals = useMemo(() => {
+    const activos = detalle.filter((d) => d.prestamo.estado === 'activo');
+    return {
+      capital: sumCapitalActualDetalle(activos),
+      cuota: sumCuotaMensualDetalle(activos),
+    };
+  }, [detalle]);
+
+  const handleDeletePrestamo = useCallback(
+    async (row: PrestamoFinancieroDetalle) => {
+      if (!canEditFinances) return;
+      const p = row.prestamo;
+      const label = p.prestamista || p.titulo || `#${p.id}`;
+      if (
+        !window.confirm(
+          `¿Eliminar el préstamo «${label}»? Podrás deshacerlo desde el aviso «Deshacer».`,
+        )
+      ) {
+        return;
+      }
+      const snapshot = row;
+      removeDetalleLocal(p.id);
+      setDeletingId(p.id);
+      try {
+        const { error: delErr } = await deletePrestamoFinanciero(p.id, tenantEmpresaId);
+        if (delErr) {
+          upsertDetalleLocal(snapshot);
+          toast.error('No se pudo eliminar', delErr);
+          return;
+        }
+        showUndoToast({
+          message: 'Préstamo eliminado',
+          detail: 'Quitado de la lista.',
+          undoAction: undoDeletePrestamoFinanciero(
+            snapshot,
+            upsertDetalleLocal,
+            removeDetalleLocal,
+            tenantEmpresaId,
+          ),
+        });
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [canEditFinances, removeDetalleLocal, tenantEmpresaId, toast, showUndoToast, upsertDetalleLocal],
+  );
+
+  const handleCapitalApplied = useCallback(
+    async (result: {
+      before: PrestamoFinancieroDetalle;
+      after: PrestamoFinancieroDetalle;
+      newTramoId: number | null;
+    }) => {
+      upsertDetalleLocal(result.after);
+      setHistorialOpen((prev) => ({ ...prev, [result.after.prestamo.id]: true }));
+      showUndoToast({
+        message: 'Capital actualizado',
+        detail: 'Movimiento registrado en el historial.',
+        undoAction: undoUpdatePrestamoFinanciero(
+          result.before,
+          result.newTramoId,
+          upsertDetalleLocal,
+          tenantEmpresaId,
+        ),
+      });
+    },
+    [showUndoToast, tenantEmpresaId, upsertDetalleLocal],
+  );
+
+  const handlePrestamoSaved = useCallback(
+    async (payload?: {
+      before?: PrestamoFinancieroDetalle;
+      after?: PrestamoFinancieroDetalle;
+      createdId?: number;
+      newTramoId?: number | null;
+    }) => {
+      if (payload?.after) {
+        upsertDetalleLocal(payload.after);
+      }
+      if (payload?.createdId) {
+        setHistorialOpen((prev) => ({ ...prev, [payload.createdId!]: false }));
+      }
+    },
+    [upsertDetalleLocal],
+  );
+
   const detalleOrdenado = useMemo(() => {
     return [...detalle].sort((a, b) => {
       const ca = a.prestamo.capitalActualEstimado;
@@ -613,6 +858,31 @@ const PrestamosPanel: React.FC = () => {
         </div>
       ) : null}
 
+      {detalle.length > 0 && !loading && !error ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-2 shadow-sm">
+          <KpiTile
+            label="Capital total (USD)"
+            value={montoFmt(kpiTotals.capital.usd, 'USD')}
+            accent
+          />
+          <KpiTile
+            label="Capital total (PEN)"
+            value={montoFmt(kpiTotals.capital.pen, 'PEN')}
+            accent
+          />
+          <KpiTile
+            label="Cuota mensual (USD)"
+            value={montoFmt(kpiTotals.cuota.usd, 'USD')}
+            highlight
+          />
+          <KpiTile
+            label="Cuota mensual (PEN)"
+            value={montoFmt(kpiTotals.cuota.pen, 'PEN')}
+            highlight
+          />
+        </div>
+      ) : null}
+
       {!EMPRESA_ID ? (
         <Card title="Configuración">
           <p className="text-sm text-gray-600">
@@ -668,12 +938,23 @@ const PrestamosPanel: React.FC = () => {
               numeroEnLista={idx + 1}
               canEdit={canEditFinances}
               onEdit={() => setPrestamoModal({ open: true, mode: 'edit', detalle: row })}
+              onDelete={() => void handleDeletePrestamo(row)}
+              onModificarCapital={(mode) => setCapitalModal({ open: true, mode, detalle: row })}
+              historialOpen={Boolean(historialOpen[row.prestamo.id])}
+              onToggleHistorial={() =>
+                setHistorialOpen((prev) => ({
+                  ...prev,
+                  [row.prestamo.id]: !prev[row.prestamo.id],
+                }))
+              }
+              deleting={deletingId === row.prestamo.id}
             />
           ))}
           <PrestamosRegistroTable
             detalle={detalle}
             canEdit={canEditFinances}
             onEdit={(row) => setPrestamoModal({ open: true, mode: 'edit', detalle: row })}
+            onDelete={(row) => void handleDeletePrestamo(row)}
             scrollToCardId={scrollToPrestamoCard}
           />
         </div>
@@ -684,9 +965,25 @@ const PrestamosPanel: React.FC = () => {
         mode={prestamoModal.open ? prestamoModal.mode : 'create'}
         detalle={prestamoModal.open && prestamoModal.mode === 'edit' ? prestamoModal.detalle : null}
         onClose={() => setPrestamoModal({ open: false })}
-        onSaved={async () => {
-          await reload({ background: true });
-        }}
+        onSaved={handlePrestamoSaved}
+        onUndoRemoveLocal={removeDetalleLocal}
+        onUndoUpsertLocal={upsertDetalleLocal}
+        onDelete={
+          prestamoModal.open && prestamoModal.mode === 'edit'
+            ? async () => {
+                await handleDeletePrestamo(prestamoModal.detalle);
+                setPrestamoModal({ open: false });
+              }
+            : undefined
+        }
+      />
+
+      <PrestamoCapitalModal
+        isOpen={capitalModal.open}
+        mode={capitalModal.open ? capitalModal.mode : 'retiro_capital'}
+        detalle={capitalModal.open ? capitalModal.detalle : null}
+        onClose={() => setCapitalModal({ open: false })}
+        onApplied={handleCapitalApplied}
       />
 
     </div>

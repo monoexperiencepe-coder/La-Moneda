@@ -22,6 +22,14 @@ type Regla = {
 
 const REGLAS: Regla[] = [
   {
+    test: (t) => /\b(arrancador|alternador|motor\s+de\s+arranque)\b/.test(t),
+    sug: {
+      tipo_gasto: 'operativo_vehiculo',
+      subtipo_gasto: 'motor',
+      razon: 'Texto tipo arrancador / motor de arranque',
+    },
+  },
+  {
     test: (t) => /\b(sat|multa|tramite|tramites|papeleta|infraccion)\b/.test(t),
     sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_tramites', razon: 'Texto tipo SAT / multas / trámites' },
   },
@@ -79,12 +87,20 @@ const REGLAS: Regla[] = [
   },
 ];
 
-/** Heurística local (sin IA). No aplica cambios; solo sugiere. */
-export function sugerirClasificacionGasto(g: Gasto): ClasificacionSugerencia | null {
-  const t = textoGasto(g);
+function sugerirDesdeTextoNormalizado(t: string): ClasificacionSugerencia | null {
   if (!t) return null;
   for (const r of REGLAS) {
     if (r.test(t)) return r.sug;
   }
   return null;
+}
+
+/** Heurística por texto libre (sin IA generativa). No aplica cambios. */
+export function sugerirClasificacionGastoTexto(texto: string): ClasificacionSugerencia | null {
+  return sugerirDesdeTextoNormalizado(normKey(texto));
+}
+
+/** Heurística local (sin IA). No aplica cambios; solo sugiere. */
+export function sugerirClasificacionGasto(g: Gasto): ClasificacionSugerencia | null {
+  return sugerirDesdeTextoNormalizado(textoGasto(g));
 }

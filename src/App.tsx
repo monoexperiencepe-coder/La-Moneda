@@ -43,6 +43,7 @@ const Conductores = lazy(() => import('./pages/Operaciones/Conductores'));
 const Pendientes = lazy(() => import('./pages/Operaciones/Pendientes'));
 const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
+const AIPage = lazy(() => import('./pages/AIPage'));
 const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
 
 /** Spinner mientras se verifica la sesión de Supabase. */
@@ -162,6 +163,8 @@ const AppContent: React.FC = () => {
                         {/* Metas */}
                         <Route path="/metas" element={<SectionGuard section="metas"><Metas /></SectionGuard>} />
                         <Route path="/logros" element={<Navigate to="/metas" replace />} />
+
+                        <Route path="/asistente" element={<SectionGuard section="asistente"><AIPage /></SectionGuard>} />
 
                         {/* Config */}
                         <Route path="/configuracion" element={<SectionGuard section="configuracion"><Configuracion /></SectionGuard>} />

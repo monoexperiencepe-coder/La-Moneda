@@ -62,6 +62,10 @@ import {
 import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
 import { cleanOperationalCommentForUi, gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
+import {
+  isGastoRecentlyReclassified,
+  mergeHistorialRowsWithPins,
+} from '../../utils/gastoHistorialOrder';
 import { devMemoPerf } from '../../utils/devPerf';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
@@ -298,11 +302,38 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const [historialPage, setHistorialPage] = useState(0);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [historialRefreshTick, setHistorialRefreshTick] = useState(0);
+  const [historialScope, setHistorialScope] = useState<'recent' | 'full'>('recent');
+  const [historialSearchInput, setHistorialSearchInput] = useState('');
+  const [historialSearchDebounced, setHistorialSearchDebounced] = useState('');
+  const [historialPinnedAt, setHistorialPinnedAt] = useState<Map<string, number>>(() => new Map());
+  const [historialPinnedRows, setHistorialPinnedRows] = useState<Map<string, Gasto>>(() => new Map());
   const bumpHistorial = useCallback(() => setHistorialRefreshTick((n) => n + 1), []);
 
   useEffect(() => {
+    const t = window.setTimeout(() => setHistorialSearchDebounced(historialSearchInput.trim()), 400);
+    return () => window.clearTimeout(t);
+  }, [historialSearchInput]);
+
+  useEffect(() => {
+    setHistorialScope('recent');
+    setHistorialSearchInput('');
+    setHistorialSearchDebounced('');
+    setHistorialPinnedAt(new Map());
+    setHistorialPinnedRows(new Map());
+  }, [tab?.tipo_gasto]);
+
+  const historialServerSearch =
+    historialScope === 'full' || historialSearchDebounced.length >= 2;
+
+  const pinGastoHistorial = useCallback((gasto: Gasto) => {
+    const id = String(gasto.id);
+    setHistorialPinnedAt((prev) => new Map(prev).set(id, Date.now()));
+    setHistorialPinnedRows((prev) => new Map(prev).set(id, gasto));
+  }, []);
+
+  useEffect(() => {
     setHistorialPage(0);
-  }, [tab?.tipo_gasto, historyYear, historyMonth, filterSubtipoGasto]);
+  }, [tab?.tipo_gasto, historyYear, historyMonth, filterSubtipoGasto, historialScope, historialSearchDebounced]);
 
   useEffect(() => {
     if (!tab || gastosDataPending || !tenantEmpresaId) {
@@ -322,6 +353,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         year: historyYear,
         month: historyMonth,
         subtipo: subtipoServer,
+        search: historialServerSearch ? historialSearchDebounced : undefined,
+        orderMode: 'actividad',
       },
       historialPage,
       DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
@@ -347,6 +380,9 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     filterSubtipoGasto,
     historialPage,
     historialRefreshTick,
+    historialScope,
+    historialSearchDebounced,
+    historialServerSearch,
   ]);
 
   const handleGastoDetalleSaved = useCallback(
@@ -646,17 +682,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     return out;
   }, [gastosTab, tab?.tipo_gasto]);
 
-  const historialRowsDisplayed = useMemo(() => {
-    if (filterSubtipoGasto !== SUBTIPO_FILTRO_PRESTAMO_FUSION) return historialRows;
-    return historialRows.filter((g) =>
-      gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto),
-    );
-  }, [historialRows, filterSubtipoGasto, tab?.tipo_gasto]);
-
   const gastoVisibleEnHistorial = useCallback(
     (g: Gasto) => {
       if (tab && !gastoMatchesTipoGasto(g, tab.tipo_gasto)) return false;
-      if (filterRowsByYearMonth([g], historyYear, historyMonth).length === 0) return false;
+      const pinnedAt = historialPinnedAt.get(String(g.id));
+      const skipDateFilter = isGastoRecentlyReclassified(g, pinnedAt);
+      if (!skipDateFilter && filterRowsByYearMonth([g], historyYear, historyMonth).length === 0) {
+        return false;
+      }
       if (
         filterSubtipoGasto &&
         !gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto)
@@ -665,7 +698,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       }
       return true;
     },
-    [tab, historyYear, historyMonth, filterSubtipoGasto],
+    [tab, historyYear, historyMonth, filterSubtipoGasto, historialPinnedAt],
   );
 
   const removeGastoFromHistorialLocal = useCallback((id: string) => {
@@ -686,6 +719,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         removeGastoFromHistorialLocal(id);
         return;
       }
+      pinGastoHistorial(gasto);
       setHistorialRows((prev) => {
         const idx = prev.findIndex((g) => String(g.id) === id);
         if (idx >= 0) {
@@ -697,8 +731,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         return [gasto, ...prev];
       });
     },
-    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal],
+    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal, pinGastoHistorial],
   );
+
+  const loadHistorialCompleto = useCallback(() => {
+    setHistorialScope('full');
+    setHistorialPage(0);
+    bumpHistorial();
+  }, [bumpHistorial]);
 
   useEffect(() => {
     return subscribeGastoHistorialSync((event) => {
@@ -712,11 +752,32 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         if (event.movedOutOfView || event.removeFromVisible) {
           removeGastoFromHistorialLocal(String(event.before.id));
         } else {
+          pinGastoHistorial(event.after);
           syncHistorialRowLocal(event.after);
         }
       }
     });
-  }, [subscribeGastoHistorialSync, syncHistorialRowLocal, removeGastoFromHistorialLocal]);
+  }, [subscribeGastoHistorialSync, syncHistorialRowLocal, removeGastoFromHistorialLocal, pinGastoHistorial]);
+
+  const historialRowsMerged = useMemo(() => {
+    const pinsForTab = new Map<string, Gasto>();
+    const pinsAt = new Map<string, number>();
+    for (const [id, g] of historialPinnedRows) {
+      if (!tab || !gastoMatchesTipoGasto(g, tab.tipo_gasto)) continue;
+      if (!gastoVisibleEnHistorial(g)) continue;
+      pinsForTab.set(id, g);
+      const at = historialPinnedAt.get(id);
+      if (at != null) pinsAt.set(id, at);
+    }
+    return mergeHistorialRowsWithPins(historialRows, pinsForTab, pinsAt);
+  }, [historialRows, historialPinnedRows, historialPinnedAt, tab, gastoVisibleEnHistorial]);
+
+  const historialRowsDisplayed = useMemo(() => {
+    if (filterSubtipoGasto !== SUBTIPO_FILTRO_PRESTAMO_FUSION) return historialRowsMerged;
+    return historialRowsMerged.filter((g) =>
+      gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto),
+    );
+  }, [historialRowsMerged, filterSubtipoGasto, tab?.tipo_gasto]);
 
   const handleRegistrarGasto = useCallback(
     async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
@@ -1092,6 +1153,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         movedOutOfView: result.movedOutOfView,
         ...localSyncSilent,
       });
+
+      if (
+        !result.movedOutOfView &&
+        tab &&
+        gastoMatchesTipoGasto(result.gasto, tab.tipo_gasto)
+      ) {
+        pinGastoHistorial(result.gasto);
+      }
 
       if (isFinancialOperador) {
         toast.success('Gasto clasificado correctamente');
@@ -1567,8 +1636,23 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
             <h2 className="text-base font-semibold tracking-tight text-slate-900">Historial · {tab.label}</h2>
+            {historialTotal > 0 ? (
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {historialTotal} registro{historialTotal === 1 ? '' : 's'} en esta categoría
+                {historialScope === 'full' ? ' · historial completo' : ' · carga paginada'}
+              </p>
+            ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-end [&_.label]:mb-0.5 [&_.label]:text-[10px] [&_.label]:font-semibold [&_.label]:text-slate-600">
+            <Button
+              type="button"
+              variant={historialScope === 'full' ? 'primary' : 'secondary'}
+              className="!text-xs !py-2 !px-3 shrink-0"
+              onClick={loadHistorialCompleto}
+              disabled={historialLoading || historialScope === 'full'}
+            >
+              {historialScope === 'full' ? 'Historial completo activo' : 'Ver historial completo'}
+            </Button>
             <div className="w-full min-w-0 sm:w-[7.5rem]">
               <Select
                 label="Historial — año"
@@ -1620,6 +1704,18 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             showClasificacionFinanciera
             onMoveCategoriaGasto={canEditFinances ? openMoveModal : undefined}
             onGastoDetalleSaved={canEditFinances ? handleGastoDetalleSaved : undefined}
+            preserveServerOrder
+            recentlyReclassifiedAt={historialPinnedAt}
+            serverHistorialSearch={{
+              query: historialSearchInput,
+              onQueryChange: (q) => {
+                setHistorialSearchInput(q);
+                setHistorialPage(0);
+              },
+              serverSide: historialServerSearch,
+              scopeRecent: historialScope === 'recent',
+              totalInCategory: historialTotal,
+            }}
             serverPagination={{
               total: historialTotal,
               page: historialPage,

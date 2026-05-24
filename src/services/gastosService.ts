@@ -20,6 +20,7 @@ import {
 } from '../utils/uuidColumn';
 import { isOperadorVisibleTipoGasto } from '../utils/permissions';
 import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
+import { splitGeneralSearchQuery } from '../utils/generalRecordSearch';
 
 const MSG_GASTO_ID_INVALID =
   'Este registro no tiene ID válido. Recarga la página o revisa el mapeo desde Supabase.';
@@ -1058,12 +1059,16 @@ export async function fetchGastosByTipo(
   );
 }
 
+export type GastosHistorialOrderMode = 'fecha' | 'actividad';
+
 export type GastosHistorialFilters = {
   tipo_gasto: string;
   year?: string;
   month?: string;
   subtipo?: string;
   search?: string;
+  /** `actividad`: revisado_at → fecha (movimientos recientes arriba). */
+  orderMode?: GastosHistorialOrderMode;
 };
 
 /** Historial paginado server-side (tab detalle Gastos). */
@@ -1111,16 +1116,30 @@ export async function fetchGastosHistorialPage(
 
       const search = filters.search?.trim();
       if (search) {
-        const esc = search.replace(/[%_,]/g, '');
+        const { wantsGeneral, textQuery } = splitGeneralSearchQuery(search);
+        if (wantsGeneral) {
+          q = q.or('vehicle_id.is.null,vehicle_id.eq.0,es_global_flota.eq.true');
+        }
+        const textForSearch = wantsGeneral ? textQuery : search;
+        const esc = textForSearch.replace(/[%_,]/g, '');
         if (esc) {
-          q = q.or(`motivo.ilike.%${esc}%,comentarios.ilike.%${esc}%`);
+          q = q.or(
+            `motivo.ilike.%${esc}%,comentarios.ilike.%${esc}%,pagado_a.ilike.%${esc}%,subtipo_gasto.ilike.%${esc}%`,
+          );
         }
       }
 
-      const { data, error, count } = await q
-        .order('fecha', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, to);
+      const orderMode = filters.orderMode ?? 'actividad';
+      if (orderMode === 'actividad') {
+        q = q
+          .order('revisado_at', { ascending: false, nullsFirst: false })
+          .order('fecha', { ascending: false })
+          .order('id', { ascending: false });
+      } else {
+        q = q.order('fecha', { ascending: false }).order('id', { ascending: false });
+      }
+
+      const { data, error, count } = await q.range(from, to);
 
       if (error) {
         console.error('[fetchGastosHistorialPage]', error.message);
@@ -1135,6 +1154,9 @@ export async function fetchGastosHistorialPage(
     (r) => ({ page, pageSize, total: r.total, rows: r.rows.length, tipo: filters.tipo_gasto }),
   );
 }
+
+/** Alias: historial paginado completo por categoría (server-side, sin bootstrap global). */
+export { fetchGastosHistorialPage as fetchGastosByTipoFull };
 
 export async function insertGasto(
   row: Omit<Gasto, 'id' | 'createdAt'>,
