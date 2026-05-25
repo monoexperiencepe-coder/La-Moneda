@@ -1038,19 +1038,38 @@ export const useRegistros = () => {
       if (before) {
         const tipoChanged = before.tipo_gasto !== row.tipo_gasto;
         const montoChanged = before.monto !== row.monto;
+        const revisionChanged = Boolean(before.requiere_revision) !== Boolean(row.requiere_revision);
+        const src = opts?.source ?? 'user';
         if (tipoChanged || montoChanged) {
           patchFinancialSummary(
             (s) => patchSummaryForGastoMove(s, before, row, (t) => includeTipoInSummaryPatch(t)),
-            { ...opts, source: opts?.source ?? 'user' },
+            { ...opts, source: src },
           );
         }
-        notifyGastoHistorialSync({ kind: 'updated', before, after: row });
-        devLogGastoLocalMutation('updated', {
-          id: row.id,
-          fromTipo: before.tipo_gasto,
-          toTipo: row.tipo_gasto,
-          source: opts?.source ?? 'user',
-        });
+        if (tipoChanged || revisionChanged) {
+          notifyGastoHistorialSync({
+            kind: 'moved',
+            before,
+            after: row,
+            movedOutOfView: false,
+            removeFromVisible: false,
+          });
+          devLogGastoLocalMutation('moved', {
+            id: row.id,
+            fromTipo: before.tipo_gasto,
+            toTipo: row.tipo_gasto,
+            revisionChanged,
+            source: src,
+          });
+        } else {
+          notifyGastoHistorialSync({ kind: 'updated', before, after: row });
+          devLogGastoLocalMutation('updated', {
+            id: row.id,
+            fromTipo: before.tipo_gasto,
+            toTipo: row.tipo_gasto,
+            source: src,
+          });
+        }
       } else {
         patchFinancialSummary(
           (s) => patchSummaryAddGasto(s, row, (t) => includeTipoInSummaryPatch(t)),

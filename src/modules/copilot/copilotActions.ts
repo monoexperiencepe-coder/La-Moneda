@@ -129,11 +129,21 @@ export function navigateToInversiones(
   }
   const params = buildQueryParams(filters);
   const subLabel: Record<string, string> = {
-    inversion_terreno:  'terrenos',
+    adquisicion_vehiculo: 'vehículos',
+    compra_terreno: 'terrenos',
+    acondicionamiento_areas: 'acondicionamiento',
+    laptops: 'laptops',
+    electrodomesticos: 'electrodomésticos',
+    sistema_seguridad: 'seguridad',
+    equipamiento_taller: 'taller',
+    compra_software_gestion: 'software',
+    muebles_enseres: 'muebles',
+    equipamiento_oficina: 'oficina',
+    inversion_terreno: 'terrenos',
     inversion_inmueble: 'inmuebles',
-    inversion_general:  'general',
-    otros_activos:      'otros activos',
-    inversion_vehicular:'vehiculares',
+    inversion_general: 'general',
+    otros_activos: 'otros activos',
+    inversion_vehicular: 'vehiculares',
   };
   const sub = filters.subtipo_inversion;
   return {

@@ -4,6 +4,7 @@ import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
 import { normalizeOperativoSubtipo } from './operativoSubtipo';
 import { normalizeInversionSubtipo } from './inversionSubtipo';
+import { normalizeAdministrativoSubtipo } from './administrativoSubtipo';
 import {
   TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   TIPO_GASTO_OPERATIVO_VEHICULO,
@@ -61,7 +62,7 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
     case 'administrativo_empresa':
       return 'administrativo_general';
     case 'inversion_compra':
-      return 'inversion_vehicular';
+      return 'adquisicion_vehiculo';
     case 'gastos_globales':
       return 'global_no_asignado';
     case TIPO_GASTO_OPERATIVO_VEHICULO:
@@ -112,7 +113,20 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
     const n = normalizeInversionSubtipo(trimmed);
     if (n) return n;
     if (trimmed) return trimmed;
-    return 'inversion_vehicular';
+    return 'adquisicion_vehiculo';
+  }
+
+  if (tipoGasto.trim() === 'administrativo_empresa') {
+    const n = normalizeAdministrativoSubtipo(trimmed);
+    if (n) return n;
+    const lower = trimmed.toLowerCase();
+    if (valid.size > 0) {
+      for (const v of valid) {
+        if (v.toLowerCase() === lower) return v;
+      }
+    }
+    if (trimmed) return trimmed;
+    return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
   if (valid.size === 0) return trimmed;

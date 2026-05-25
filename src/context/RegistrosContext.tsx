@@ -26,6 +26,7 @@ import type { ControlFechasHistoryFilters } from '../services/controlFechasServi
 import { useAuth } from './AuthContext';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
+import { resolveEmpresaRealtimeId } from '../utils/resolveEmpresaRealtimeId';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
 import type { GastosFinancialSummary } from '../utils/gastosFinancialSummary';
@@ -194,10 +195,24 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     [permissionUser, registros.gastos],
   );
 
+  const empresaRealtimeId = useMemo(
+    () => resolveEmpresaRealtimeId(profile?.empresa_id),
+    [profile?.empresa_id],
+  );
+
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     console.log('[summary-context]', registros.gastosFinancialSummary);
   }, [registros.gastosFinancialSummary]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !isAuthenticated) return;
+    if (!empresaRealtimeId) {
+      console.warn(
+        '[realtime] Sin empresa_id: la suscripción realtime no arranca. Revisa profile.empresa_id o VITE_EMPRESA_ID.',
+      );
+    }
+  }, [isAuthenticated, empresaRealtimeId]);
 
   const realtimeHandlers = useMemo(
     () => ({
@@ -266,7 +281,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 
   const { connected: registrosRealtimeConnected } = useEmpresaRegistrosRealtime({
-    enabled: isAuthenticated && registros.registrosBootstrapComplete,
+    enabled:
+      isAuthenticated && registros.registrosBootstrapComplete && Boolean(empresaRealtimeId),
+    empresaId: empresaRealtimeId,
     permissionUser,
     handlers: realtimeHandlers,
     onRemoteActivity: handleRemoteRegistrosActivity,

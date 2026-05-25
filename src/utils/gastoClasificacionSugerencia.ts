@@ -88,9 +88,42 @@ const REGLAS: Regla[] = [
       razon: 'Menciona pieza mecánica (arrancador/alternador) + contexto vehículo',
     },
   },
+  // Trámites / movilidad específicos ANTES del catch-all multas_tramites
   {
-    test: (t) => /\b(sat|multa|tramite|tramites|papeleta|infraccion)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_tramites', razon: 'Texto tipo SAT / multas / trámites' },
+    test: (t) => /\b(pasaje|pasajes|traslado|traslados|movilidad)\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'movilidad', razon: 'Texto tipo movilidad / pasaje / traslado' },
+  },
+  {
+    test: (t) => /\b(multa(s)?\s+callao|callao\s+multa)\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_callao', razon: 'Texto multa Callao' },
+  },
+  {
+    test: (t) => /\batu\b/.test(t) || /\bpermiso\s+atu\b/.test(t) || /\bautorizacion\s+atu\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'atu', razon: 'Texto tipo ATU / permiso ATU' },
+  },
+  {
+    test: (t) => /\bsat\b/.test(t) && !/\bsatellite\b/.test(t),
+    sug: { tipo_gasto: 'administrativo_empresa', subtipo_gasto: 'sat', razon: 'Texto tipo SAT' },
+  },
+  {
+    test: (t) => /\b(sunarp|suanrp)\b/.test(t),
+    sug: { tipo_gasto: 'administrativo_empresa', subtipo_gasto: 'sunarp', razon: 'Texto tipo SUNARP' },
+  },
+  {
+    test: (t) => /\bsunat\b/.test(t),
+    sug: { tipo_gasto: 'administrativo_empresa', subtipo_gasto: 'sunat', razon: 'Texto tipo SUNAT' },
+  },
+  {
+    test: (t) => /\bsutran\b/.test(t),
+    sug: { tipo_gasto: 'administrativo_empresa', subtipo_gasto: 'sutran', razon: 'Texto tipo SUTRAN' },
+  },
+  {
+    test: (t) => /\btaxi\b/.test(t) || /\brt\s+taxi\b/.test(t) || /\brevision\s+tecnica\s+taxi\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'taxi', razon: 'Texto tipo taxi / RT taxi' },
+  },
+  {
+    test: (t) => /\b(multa|tramite|tramites|papeleta|infraccion)\b/.test(t) && !/\b(sat|sunat|sunarp|suanrp|sutran|callao)\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_tramites', razon: 'Texto tipo multas / trámites' },
   },
   {
     test: (t) => /\b(soat|afocat|seguro\s+vehicular|poliza)\b/.test(t),
@@ -149,31 +182,70 @@ const REGLAS: Regla[] = [
   // Inversión — subtipos específicos ANTES del fallback genérico
   {
     test: (t) =>
-      /\b(compra\s+(de\s+)?(carro|auto|coche|vehiculo|vehículo|unidad|bus|minivan)|placa\s+[a-z]{3}[\s-]?\d{3}|adquisici[oó]n\s+vehiculo|gnv\s+vehiculo)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_vehicular', razon: 'Texto compra de vehículo' },
+      /\b(compra\s+(de\s+)?(carro|auto|coche|vehiculo|vehículo|unidad|bus|minivan)|placa\s+[a-z]{3}[\s-]?\d{3}|adquisici[oó]n\s+(de\s+)?vehiculo|gnv\s+vehiculo)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'adquisicion_vehiculo', razon: 'Texto compra de vehículo' },
   },
   {
     test: (t) =>
-      /\b(terreno|lote|lote\s+de\s+terreno|propiedad\s+terreno|parcela)\b/.test(t) &&
-      !/\b(inmueble|departamento|oficina|local)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_terreno', razon: 'Texto compra terreno / lote' },
+      /\b(terreno|lote|predio|parcela|propiedad\s+terreno)\b/.test(t) &&
+      !/\b(inmueble|departamento|local\s+comercial)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'compra_terreno', razon: 'Texto compra terreno / lote / predio' },
   },
   {
     test: (t) =>
-      /\b(inmueble|departamento|dpto|local\s+comercial|oficina|casa\s+comercial|propiedad\s+inmueble)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_inmueble', razon: 'Texto compra inmueble / departamento / oficina' },
+      /\b(acondicionamiento|acondicionamientos|remodelacion|remodelación|obras|areas|áreas)\b/.test(t),
+    sug: {
+      tipo_gasto: 'inversion_compra',
+      subtipo_gasto: 'acondicionamiento_areas',
+      razon: 'Texto acondicionamiento / obras / áreas',
+    },
+  },
+  {
+    test: (t) => /\b(laptop|laptops|computadora\s+portatil|computadora\s+portátil)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'laptops', razon: 'Texto laptops / computadora portátil' },
+  },
+  {
+    test: (t) => /\b(electrodomestico|electrodoméstico|refrigeradora|microondas)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'electrodomesticos', razon: 'Texto electrodomésticos' },
+  },
+  {
+    test: (t) => /\b(camara|cámara|camaras|cámaras|alarma|seguridad|sistema\s+seguridad)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'sistema_seguridad', razon: 'Texto sistema de seguridad / cámaras' },
+  },
+  {
+    test: (t) => /\b(taller|herramientas|elevador|compresora|equipamiento\s+taller)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'equipamiento_taller', razon: 'Texto equipamiento de taller' },
+  },
+  {
+    test: (t) =>
+      /\b(software|licencia|sistema\s+gestion|sistema\s+de\s+gestion|app|aplicacion|aplicación)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'compra_software_gestion', razon: 'Texto software / licencia / gestión' },
+  },
+  {
+    test: (t) => /\b(mueble|muebles|enseres|enseres|escritorio|silla|mobiliario)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'muebles_enseres', razon: 'Texto muebles y enseres' },
+  },
+  {
+    test: (t) =>
+      /\b(equipamiento\s+oficina|oficina|impresora|scanner|escaner)\b/.test(t) &&
+      !/\b(almuerzo|cena|representacion)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'equipamiento_oficina', razon: 'Texto equipamiento oficina' },
+  },
+  {
+    test: (t) =>
+      /\b(inmueble|departamento|dpto|local\s+comercial|casa\s+comercial|propiedad\s+inmueble)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_inmueble', razon: 'Texto inmueble (legacy histórico)' },
   },
   {
     test: (t) =>
       /\b(maquinaria|maquina|equipo\s+industrial|activo\s+fijo|herramienta\s+mayor)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'otros_activos', razon: 'Texto maquinaria / equipo / activo fijo' },
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'otros_activos', razon: 'Texto maquinaria / activo fijo (legacy)' },
   },
-  // Inversión genérica (fallback — cubre compra_activo, inversion sin subtipo claro)
   {
     test: (t) =>
       /\b(compra\s+activo|inversion|inversi[oó]n)\b/.test(t) &&
-      !/\b(terreno|lote|inmueble|dpto|departamento|vehiculo|vehículo|carro|auto|placa|maquinaria)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_general', razon: 'Texto inversión genérica sin subtipo claro' },
+      !/\b(terreno|lote|vehiculo|vehículo|carro|auto|placa|laptop|software|taller|mueble|oficina)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_general', razon: 'Texto inversión genérica (legacy)' },
   },
   {
     test: (t) => /\b(almuerzo|cena|representacion|socio|reunion)\b/.test(t),
@@ -184,11 +256,13 @@ const REGLAS: Regla[] = [
     },
   },
   {
-    test: (t) => /\b(sunat|notarial|tributari|oficina|administrativ)\b/.test(t),
+    test: (t) =>
+      /\b(notarial|tributari|oficina|administrativ)\b/.test(t)
+      && !/\b(sunat|sunarp|suanrp|sat|sutran|atu|taxi|movilidad|multa)\b/.test(t),
     sug: {
       tipo_gasto: 'administrativo_empresa',
       subtipo_gasto: 'administrativo_general',
-      razon: 'Texto tipo administrativo / tributario',
+      razon: 'Texto tipo administrativo / tributario genérico',
     },
   },
   {
@@ -204,8 +278,8 @@ const REGLAS: Regla[] = [
     sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'combustible', razon: 'Texto tipo GLP' },
   },
   {
-    test: (t) => /\b(soat|afocat|brevete|licencia\s+conducir|atu|permiso\s+atu)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'documentos', razon: 'Texto tipo SOAT / documentos / ATU' },
+    test: (t) => /\b(soat|afocat|brevete|licencia\s+conducir)\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'documentos', razon: 'Texto tipo SOAT / documentos vehículo' },
   },
   {
     test: (t) => /\b(gps|rastreo|chip|telemetria)\b/.test(t),

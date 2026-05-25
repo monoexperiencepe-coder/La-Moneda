@@ -1172,7 +1172,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       setMoveSubtipo(defaultSub);
       const newNeedsVehicle =
         newTipo === 'operativo_vehiculo' ||
-        (newTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'inversion_vehicular'));
+        (newTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'adquisicion_vehiculo'));
       if (!newNeedsVehicle) {
         setMoveVehicleId('');
       } else {
@@ -1202,7 +1202,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const isOperativoFlotaTarget = moveTipo === 'operativo_flota_general';
   const isInversionTarget = moveTipo === 'inversion_compra';
   const isInversionVehicularTarget =
-    isInversionTarget && inversionSubtipoRequiereVehiculo(moveSubtipo || 'inversion_vehicular');
+    isInversionTarget && inversionSubtipoRequiereVehiculo(moveSubtipo || 'adquisicion_vehiculo');
   const targetNeedsVehicle =
     moveTipo === 'operativo_vehiculo' ||
     isInversionVehicularTarget;

@@ -6,21 +6,21 @@ import {
   getOperativoSubtipoLabel,
   resolveOperativoSubtipoGastoCanon,
 } from './operativoSubtipo';
-import { getInversionSubtipoLabel, normalizeInversionSubtipo } from './inversionSubtipo';
+import { getInversionSubtipoDedupeKey, getInversionSubtipoLabel, normalizeInversionSubtipo } from './inversionSubtipo';
+import {
+  getAdministrativoSubtipoLabel,
+  normalizeAdministrativoSubtipo,
+  resolveAdministrativoSubtipoGastoCanon,
+} from './administrativoSubtipo';
 import { tipoGastoUsaSubtipoOperativo } from './gastoMoveCategoriaDefaults';
+import { normKey } from './normKey';
+
+export { normKey } from './normKey';
 
 /** Valor interno de filtro: agrupa cuota / préstamo / interés sin tocar BD. */
 export const SUBTIPO_FILTRO_PRESTAMO_FUSION = '__ui_prestamo_cuota_interes__';
 
 const PRESTAMO_KEYS = new Set(['cuota', 'prestamo', 'interes']);
-
-export function normKey(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
 
 export function isPrestamoFinancieroFusionRaw(subtipo: string | null | undefined): boolean {
   const k = normKey(subtipo ?? '');
@@ -46,9 +46,12 @@ export function getSubtipoFinancieroLabel(
     const c = resolveOperativoSubtipoGastoCanon(s);
     return c ? getOperativoSubtipoLabel(c) : '—';
   }
+  if (tg === 'administrativo_empresa') {
+    const adminNorm = normalizeAdministrativoSubtipo(s);
+    if (adminNorm) return getAdministrativoSubtipoLabel(adminNorm);
+  }
   if (tg === 'inversion_compra') {
-    const invNorm = normalizeInversionSubtipo(s);
-    if (invNorm) return getInversionSubtipoLabel(invNorm);
+    return getInversionSubtipoLabel(s);
   }
   const repCanon = normalizeRepresentacionInternaSubtipo(s);
   if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
@@ -69,6 +72,9 @@ export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string |
   }
   if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(t) ?? '';
+  }
+  if (tabTipoGasto === 'administrativo_empresa') {
+    return resolveAdministrativoSubtipoGastoCanon(t) ?? '';
   }
   if (tabTipoGasto === 'inversion_compra') {
     return normalizeInversionSubtipo(t) ?? t;
@@ -94,8 +100,11 @@ export function gastoMatchesSubtipoFinancieroFilter(
   if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
   }
+  if (tabTipoGasto === 'administrativo_empresa') {
+    return resolveAdministrativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
+  }
   if (tabTipoGasto === 'inversion_compra') {
-    return (normalizeInversionSubtipo(subtipoGasto ?? '') ?? (subtipoGasto ?? '').trim()) === filterValue;
+    return getInversionSubtipoDedupeKey(subtipoGasto ?? '') === getInversionSubtipoDedupeKey(filterValue);
   }
   return (subtipoGasto ?? '').trim() === filterValue;
 }

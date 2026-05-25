@@ -224,14 +224,28 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       description:
         'Lista inversiones no vehiculares registradas: terrenos, inmuebles, maquinaria, activos generales. ' +
         'Usa para: "¿cuánto invertimos en terrenos?", "inversiones en inmuebles", "activos no vehiculares", "todos los activos fijos". ' +
-        'Filtra por subtipo: inversion_terreno, inversion_inmueble, inversion_general, otros_activos. ' +
+        'Filtra por subtipo canónico: compra_terreno, laptops, equipamiento_oficina, etc. (también acepta legacy inversion_terreno). ' +
         'NO usar para vehículos (usar getRankingInversionVehiculos). Solo roles financieros.',
       parameters: {
         type: 'object',
         properties: {
           subtipo: {
             type: 'string',
-            enum: ['inversion_terreno', 'inversion_inmueble', 'inversion_general', 'otros_activos'],
+            enum: [
+              'compra_terreno',
+              'acondicionamiento_areas',
+              'laptops',
+              'electrodomesticos',
+              'sistema_seguridad',
+              'equipamiento_taller',
+              'compra_software_gestion',
+              'muebles_enseres',
+              'equipamiento_oficina',
+              'inversion_terreno',
+              'inversion_inmueble',
+              'inversion_general',
+              'otros_activos',
+            ],
             description: 'Filtrar por subtipo específico. Omitir para ver todos los no-vehiculares.',
           },
           ...periodParams.properties,

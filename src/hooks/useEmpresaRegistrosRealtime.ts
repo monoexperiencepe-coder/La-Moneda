@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { EMPRESA_ID } from '../config/app';
+import {
+  realtimeLogCleanup,
+  realtimeLogEvent,
+  realtimeLogSubscribe,
+  realtimeLogUpdate,
+  realtimeRegistry,
+} from '../utils/realtimeDebug';
 import {
   mapCajaNegocioVehiculoRow,
   mapConductorRow,
@@ -76,6 +82,8 @@ export type EmpresaRealtimeHandlers = {
 
 type Options = {
   enabled: boolean;
+  /** Preferir `profile.empresa_id`; fallback `VITE_EMPRESA_ID`. */
+  empresaId: string | null | undefined;
   permissionUser: PermissionUser | null;
   handlers: EmpresaRealtimeHandlers;
   onRemoteActivity?: (info: { count: number }) => void;
@@ -121,6 +129,7 @@ function idFromRow(row: Record<string, unknown> | null, numeric: boolean): strin
 
 export function useEmpresaRegistrosRealtime({
   enabled,
+  empresaId: empresaIdInput,
   permissionUser,
   handlers,
   onRemoteActivity,
@@ -166,20 +175,28 @@ export function useEmpresaRegistrosRealtime({
   });
 
   useEffect(() => {
-    if (!enabled || !EMPRESA_ID) {
+    const empresaId = (empresaIdInput ?? '').trim();
+    if (!enabled || !empresaId) {
       setConnected(false);
       return;
     }
 
-    const empresaFilter = `empresa_id=eq.${EMPRESA_ID}`;
-    const h = handlersRef;
+    const empresaFilter = `empresa_id=eq.${empresaId}`;
+    const channelName = `empresa-registros-${empresaId}`;
 
     const handleGastos = (payload: RealtimePayload) => {
       const { eventType } = payload;
       if (eventType === 'DELETE') {
         const id = idFromRow(payload.old, false);
         if (typeof id === 'string' && id) {
-          h.current.removeGastoLocal(id);
+          realtimeLogUpdate({
+            channel: channelName,
+            table: 'gastos',
+            event: 'DELETE',
+            rowId: id,
+            empresaId,
+          });
+          handlersRef.current.removeGastoLocal(id, { source: 'realtime' });
           scheduleBatch.current();
         }
         return;
@@ -187,10 +204,18 @@ export function useEmpresaRegistrosRealtime({
       const raw = payload.new;
       if (!raw) return;
       const mapped = mapGastoRow(raw);
+      realtimeLogUpdate({
+        channel: channelName,
+        table: 'gastos',
+        event: eventType,
+        rowId: mapped.id,
+        empresaId,
+        extra: { tipo_gasto: mapped.tipo_gasto },
+      });
       if (!canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null)) {
-        h.current.removeGastoLocal(mapped.id);
+        handlersRef.current.removeGastoLocal(mapped.id, { source: 'realtime' });
       } else {
-        h.current.upsertGasto(mapped);
+        handlersRef.current.upsertGasto(mapped, { source: 'realtime' });
       }
       scheduleBatch.current();
     };
@@ -202,13 +227,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, false);
         if (typeof id === 'string' && id) {
-          h.current.removeIngresoLocal(id);
+          handlersRef.current.removeIngresoLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertIngreso(mapIngresoRow(payload.new));
+        handlersRef.current.upsertIngreso(mapIngresoRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -217,13 +242,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, false);
         if (typeof id === 'string' && id) {
-          h.current.removeConductorLocal(id);
+          handlersRef.current.removeConductorLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertConductor(mapConductorRow(payload.new));
+        handlersRef.current.upsertConductor(mapConductorRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -232,13 +257,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, false);
         if (typeof id === 'string' && id) {
-          h.current.removeUnidadLocal(id);
+          handlersRef.current.removeUnidadLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertUnidad(mapUnidadRow(payload.new));
+        handlersRef.current.upsertUnidad(mapUnidadRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -247,13 +272,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeVehicleLocal(id);
+          handlersRef.current.removeVehicleLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertVehicle(mapVehiculoRow(payload.new));
+        handlersRef.current.upsertVehicle(mapVehiculoRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -267,13 +292,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeKilometrajeLocal(id);
+          handlersRef.current.removeKilometrajeLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.mergeKilometraje(mapKilometrajeRow(payload.new));
+        handlersRef.current.mergeKilometraje(mapKilometrajeRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -282,13 +307,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removePendienteLocal(id);
+          handlersRef.current.removePendienteLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.mergePendiente(mapPendienteRow(payload.new));
+        handlersRef.current.mergePendiente(mapPendienteRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -297,13 +322,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeRegistroTiempoLocal(id);
+          handlersRef.current.removeRegistroTiempoLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertRegistroTiempo(mapRegistroTiempoRow(payload.new));
+        handlersRef.current.upsertRegistroTiempo(mapRegistroTiempoRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -313,13 +338,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeInversionVehiculoLocal(id);
+          handlersRef.current.removeInversionVehiculoLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertInversionVehiculo(mapInversionVehiculoRow(payload.new));
+        handlersRef.current.upsertInversionVehiculo(mapInversionVehiculoRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -329,13 +354,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeGastoCajaLocal(id);
+          handlersRef.current.removeGastoCajaLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertGastoCaja(mapGastoCajaRow(payload.new));
+        handlersRef.current.upsertGastoCaja(mapGastoCajaRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -345,13 +370,13 @@ export function useEmpresaRegistrosRealtime({
       if (payload.eventType === 'DELETE') {
         const id = idFromRow(payload.old, true);
         if (typeof id === 'number') {
-          h.current.removeCajaNegocioLocal(id);
+          handlersRef.current.removeCajaNegocioLocal(id);
           scheduleBatch.current();
         }
         return;
       }
       if (payload.new) {
-        h.current.upsertCajaNegocio(mapCajaNegocioVehiculoRow(payload.new));
+        handlersRef.current.upsertCajaNegocio(mapCajaNegocioVehiculoRow(payload.new));
         scheduleBatch.current();
       }
     };
@@ -371,7 +396,13 @@ export function useEmpresaRegistrosRealtime({
       caja_negocio_vehiculo: handleCajaNegocio,
     };
 
-    const channelName = `empresa-registros-${EMPRESA_ID}`;
+    realtimeLogSubscribe({
+      channel: channelName,
+      empresaId,
+      extra: { tables: [...EMPRESA_TABLES] },
+    });
+    realtimeRegistry.register(channelName);
+
     let channel = supabase.channel(channelName);
 
     for (const table of EMPRESA_TABLES) {
@@ -379,7 +410,15 @@ export function useEmpresaRegistrosRealtime({
         'postgres_changes',
         { event: '*', schema: 'public', table, filter: empresaFilter },
         (payload) => {
-          tableHandlers[table](parsePayload(payload));
+          const parsed = parsePayload(payload);
+          realtimeLogEvent({
+            channel: channelName,
+            table,
+            event: parsed.eventType,
+            rowId: idFromRow(parsed.new ?? parsed.old, table === 'gastos' ? false : true),
+            empresaId,
+          });
+          tableHandlers[table](parsed);
         },
       );
     }
@@ -402,9 +441,11 @@ export function useEmpresaRegistrosRealtime({
 
     channel.subscribe((status) => {
       setConnected(status === 'SUBSCRIBED');
-      if (import.meta.env.DEV) {
-        console.info('[realtime] empresa registros', status, EMPRESA_TABLES.join(', '));
-      }
+      realtimeLogSubscribe({
+        channel: channelName,
+        empresaId,
+        extra: { status },
+      });
     });
 
     channelRef.current = channel;
@@ -413,12 +454,14 @@ export function useEmpresaRegistrosRealtime({
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
       if (controlFechasDebounceRef.current) clearTimeout(controlFechasDebounceRef.current);
       setConnected(false);
+      realtimeLogCleanup({ channel: channelName, empresaId });
+      realtimeRegistry.unregister(channelName);
       if (channelRef.current) {
         void supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
     };
-  }, [enabled, permissionUser?.email, permissionUser?.role]);
+  }, [enabled, empresaIdInput, permissionUser?.email, permissionUser?.role]);
 
   return { connected };
 }

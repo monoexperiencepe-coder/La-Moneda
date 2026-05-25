@@ -158,7 +158,7 @@ function emptyForm(): FormState {
 function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState {
   if (finanzaPreset === 'inversion_compra') {
     const cat: FinanzaGastoRegistroValue = 'inversion_compra';
-    const defaultCanon: InversionSubtipoCanon = 'inversion_vehicular';
+    const defaultCanon: InversionSubtipoCanon = 'adquisicion_vehiculo';
     const { tipo: t0, subTipo: s0 } = getDefaultFactTipoSubtipoForInversionCanon(defaultCanon);
     const y = getDetallesMetodoPago('Yape')[0];
     return {
@@ -289,7 +289,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     if (!form.metodoPagoDetalle.trim()) newErrors.metodoPagoDetalle = 'Selecciona la cuenta de pago';
     const inversionNecesitaVehiculo =
       form.categoriaFinanciera === 'inversion_compra' &&
-      inversionSubtipoRequiereVehiculo(form.subtipoInversionCanon || 'inversion_vehicular');
+      inversionSubtipoRequiereVehiculo(form.subtipoInversionCanon || 'adquisicion_vehiculo');
     if (
       (form.categoriaFinanciera === 'operativo_vehiculo' || inversionNecesitaVehiculo)
       && !form.vehicleId.trim()
@@ -327,7 +327,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         : tipoGastoUsaSubtipoOperativo(catFin)
           ? form.subtipoOperativoCanon.trim()
           : esInversion
-            ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'inversion_vehicular')
+            ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
             : (form.subTipo || null)
               ? form.subTipo.trim()
               : null;
@@ -593,7 +593,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     error={errors.subtipoInversionCanon}
                     required
                     disabled={seleccionesBloqueadas}
-                    helper="Se guarda como subtipo_gasto canónico (vehicular / terreno / inmueble / etc.)."
+                    helper="Se guarda como subtipo_gasto canónico (10 tipos oficiales). Los valores antiguos siguen visibles solo como histórico."
                   />
                   <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-700">
                     <p className="font-semibold text-gray-600">Tipo Fact (metadata)</p>

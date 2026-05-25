@@ -17,6 +17,11 @@ import { sugerirClasificacionGastoCompleta, sugerirClasificacionGastoFromGasto }
 import { fetchClasificacionMemoriaActivas } from '../../../services/ai/clasificacionMemoriaService';
 import { cleanOperationalCommentForUi } from '../../../utils/cleanOperationalComment';
 import { enrichToolPayloadForLlm } from '../toolEmptyResults';
+import {
+  getInversionSubtipoDedupeKey,
+  getInversionSubtipoLabel,
+  isInversionSubtipoVehicularStored,
+} from '../../../utils/inversionSubtipo';
 
 // ─── Debug logging ────────────────────────────────────────────────────────────
 
@@ -577,39 +582,24 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       const subtipoFilter = typeof args.subtipo === 'string' ? args.subtipo.trim() : null;
       const dateRange = resolveAiDateRange(args);
 
-      // Non-vehicular investment subtypes
-      const NON_VEHICULAR_SUBTIPOS = new Set([
-        'inversion_terreno',
-        'inversion_inmueble',
-        'inversion_general',
-        'otros_activos',
-        // Legacy Fact values that map to non-vehicular
-        'TERRENO',
-        'INMUEBLE',
-        'MAQUINARIA',
-        'OFICINA',
-        'LAPTOPS',
-        'COMPUTADORAS',
-        'EQUIPOS DE CÓMPUTO',
-      ]);
-
       const all = await fetchGastosByTipo('inversion_compra', ctx.empresaId);
       const accessible = filterGastosForUser(ctx.user, all);
 
-      // Filter out vehicular
-      const nonVehicular = accessible.filter((g) => {
-        const sub = (g.subtipo_gasto ?? '').trim();
-        if (sub === 'inversion_vehicular' || sub === 'VEHÍCULO' || sub === 'compra_activo_vehiculo' || sub === 'Adquisición vehículo') return false;
-        if (sub === '' || sub === 'inversion_compra') return false; // legacy generic without subtipo = vehicular era
-        return NON_VEHICULAR_SUBTIPOS.has(sub) || (subtipoFilter ? sub === subtipoFilter : true);
-      });
+      const nonVehicular = accessible.filter(
+        (g) => !isInversionSubtipoVehicularStored(g.subtipo_gasto ?? ''),
+      );
 
       const filtered = dateRange
         ? filterByDateRange(nonVehicular, dateRange)
         : nonVehicular;
 
       const finalFiltered = subtipoFilter
-        ? filtered.filter((g) => (g.subtipo_gasto ?? '') === subtipoFilter)
+        ? filtered.filter(
+            (g) =>
+              getInversionSubtipoDedupeKey(g.subtipo_gasto ?? '') ===
+                getInversionSubtipoDedupeKey(subtipoFilter)
+              || (g.subtipo_gasto ?? '').trim() === subtipoFilter,
+          )
         : filtered;
 
       const totalesByCurrency = sumMontosByCurrency(finalFiltered);
@@ -626,24 +616,13 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
         bySubtipo[sub] = entry;
       }
 
-      const SUBTIPO_LABELS: Record<string, string> = {
-        inversion_terreno:  'Terreno',
-        inversion_inmueble: 'Inmueble',
-        inversion_general:  'Inversión general',
-        otros_activos:      'Otros activos',
-        TERRENO:            'Terreno',
-        INMUEBLE:           'Inmueble',
-        MAQUINARIA:         'Maquinaria',
-        OFICINA:            'Oficina',
-      };
-
       const ultimas = finalFiltered
         .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))
         .slice(0, 20)
         .map((g) => ({
           fecha: g.fecha,
           subtipo: g.subtipo_gasto,
-          subtipo_label: SUBTIPO_LABELS[g.subtipo_gasto ?? ''] ?? g.subtipo_gasto,
+          subtipo_label: getInversionSubtipoLabel(g.subtipo_gasto ?? ''),
           monto: g.monto,
           monto_formatted: formatCurrencyByCode(g.monto ?? 0, 'PEN'),
           moneda: 'PEN',

@@ -218,7 +218,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         toSubtipoGasto: subtipo,
         vehicleId: (
           tipo === 'operativo_vehiculo' ||
-          (tipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(subtipo || 'inversion_vehicular'))
+          (tipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(subtipo || 'adquisicion_vehiculo'))
         ) ? vehicleId : null,
         motivo,
         vehicles,
@@ -327,7 +327,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   const selectedRows = sortedPendientes.filter((g) => selectedIds.has(g.id));
   const bulkNeedsVehicle =
     bulkTipo === 'operativo_vehiculo' ||
-    (bulkTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(bulkSubtipo || 'inversion_vehicular'));
+    (bulkTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(bulkSubtipo || 'adquisicion_vehiculo'));
 
   const handleBulkConfirm = async () => {
     if (!canEdit || selectedRows.length === 0) return;
@@ -534,7 +534,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                     setMoveSubtipo(defaultSub);
                     const needsVehicle =
                       v === 'operativo_vehiculo' ||
-                      (v === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'inversion_vehicular'));
+                      (v === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'adquisicion_vehiculo'));
                     if (!needsVehicle) setMoveVehicleId('');
                   }}
                 />
@@ -545,7 +545,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                   onChange={setMoveSubtipo}
                 />
                 {(moveTipo === 'operativo_vehiculo' ||
-                  (moveTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(moveSubtipo || 'inversion_vehicular'))
+                  (moveTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(moveSubtipo || 'adquisicion_vehiculo'))
                 ) ? (
                   <Select
                     label={moveTipo === 'inversion_compra' ? 'Vehículo (inversión vehicular)' : 'Vehículo'}

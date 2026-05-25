@@ -1,4 +1,5 @@
 import { normKey } from './subtipoFinancieroLabel';
+import { normalizeTramitesMovilidadSubtipo } from './tramitesMovilidadSubtipo';
 
 export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'motor', label: 'Motor' },
@@ -7,6 +8,14 @@ export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string 
   { value: 'combustible', label: 'Combustible' },
   { value: 'documentos', label: 'Documentos / SOAT' },
   { value: 'multas_tramites', label: 'Multas y trámites' },
+  { value: 'movilidad', label: 'Movilidad' },
+  { value: 'multas_callao', label: 'Multas Callao' },
+  { value: 'atu', label: 'ATU' },
+  { value: 'sat', label: 'SAT' },
+  { value: 'sunarp', label: 'SUNARP' },
+  { value: 'sunat', label: 'SUNAT' },
+  { value: 'sutran', label: 'SUTRAN' },
+  { value: 'taxi', label: 'Taxi' },
   { value: 'mantenimiento', label: 'Mantenimiento' },
   { value: 'accesorios', label: 'Accesorios' },
   { value: 'arreglo_linea_escape', label: 'Arreglo línea de escape' },
@@ -33,6 +42,14 @@ const FACT_DEFAULT_BY_CANON: Record<string, { tipo: string; subTipo: string }> =
   combustible: { tipo: 'MECÁNICOS', subTipo: 'COMBUSTIBLE' },
   documentos: { tipo: 'DOCUMENTOS', subTipo: 'SOAT' },
   multas_tramites: { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
+  movilidad: { tipo: 'OTROS GASTOS', subTipo: 'VIATICOS' },
+  multas_callao: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'PAPELETAS /MULTAS' },
+  atu: { tipo: 'SEGUROS /DOCUMENTOS', subTipo: 'AUTORIZACIÓN ATU' },
+  sat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SAT' },
+  sunarp: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNARP' },
+  sunat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNAT' },
+  sutran: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUTRAN' },
+  taxi: { tipo: 'DOCUMENTOS', subTipo: 'RT-TAXI' },
   mantenimiento: { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
   accesorios: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
   arreglo_linea_escape: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
@@ -67,7 +84,7 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('SOAT', 'documentos');
   add('AFOCAT', 'documentos');
   add('RT-PARTICULAR', 'multas_tramites');
-  add('RT-TAXI', 'multas_tramites');
+  add('RT-TAXI', 'taxi');
   add('PERMISOS VARIOS', 'multas_tramites');
   add('VIGENCIA DE PODER', 'documentos');
   add('MANTENIMIENTO COMPLETO', 'mantenimiento');
@@ -91,10 +108,17 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('OTROS /ESPECIFICAR', 'otros_operativo');
   add('CIA DE SEGUROS', 'documentos');
   add('REVISIÓN TÉCNICA PARTICULAR', 'multas_tramites');
-  add('REVISIÓN TÉCNICA TAXI', 'multas_tramites');
+  add('REVISIÓN TÉCNICA TAXI', 'taxi');
   add('PAPELETAS /MULTAS', 'multas_tramites');
-  add('AUTORIZACIÓN ATU', 'multas_tramites');
+  add('AUTORIZACIÓN ATU', 'atu');
   add('PERMISO POLARIZADO', 'multas_tramites');
+  add('SAT', 'sat');
+  add('SUNARP', 'sunarp');
+  add('SUNAT', 'sunat');
+  add('SUTRAN', 'sutran');
+  add('TAXI', 'taxi');
+  add('VIATICOS', 'movilidad');
+  add('DELIVERY', 'movilidad');
   return m;
 })();
 
@@ -117,6 +141,9 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
   const fromFact = NORM_FACT_SUBTIPO_TO_CANON[k];
   if (fromFact) return fromFact;
 
+  const tram = normalizeTramitesMovilidadSubtipo(s0);
+  if (tram) return tram;
+
   const nk = normKey(s0.replace(/_/g, ' '));
   if (nk.includes('bater')) return 'bateria';
   if (nk.includes('chip') || nk.includes('gps') || nk === 'chips') return 'gps_chips';
@@ -135,14 +162,9 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
     || nk.includes('tramite legal')
     || nk.includes('permiso municipal')
     || nk.includes('permisos municipales')
-    || nk.includes('multa')
+    || (nk.includes('multa') && !nk.includes('callao'))
     || nk.includes('papeleta')
-    || nk.includes('sunat')
-    || nk === 'sat'
-    || nk.startsWith('sat ')
-    || nk.endsWith(' sat')
-    || nk.includes(' sat ')
-    || nk.includes('revision tecnica')
+    || nk.includes('revision tecnica particular')
     || nk.includes('revisiones')
     || nk.includes('brevete')
     || nk === 'licencia'

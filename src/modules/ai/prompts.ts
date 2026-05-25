@@ -43,12 +43,12 @@ INVERSIÓN NO VEHICULAR (terrenos, inmuebles, activos, maquinaria):
   • "inversiones en inmuebles", "locales", "departamentos", "oficinas"
   • "maquinaria", "equipos", "activos fijos", "otros activos"
   • "inversiones no vehiculares", "activos de la empresa (no carros)"
-→ Parámetro subtipo (opcional): inversion_terreno | inversion_inmueble | inversion_general | otros_activos
+→ Parámetro subtipo (opcional): compra_terreno | laptops | equipamiento_oficina | acondicionamiento_areas | etc.
   Ejemplos:
-    "¿cuánto invertimos en terrenos?" → subtipo="inversion_terreno"
-    "¿cuánto en inmuebles?" → subtipo="inversion_inmueble"
+    "¿cuánto invertimos en terrenos?" → subtipo="compra_terreno"
+    "¿cuánto en laptops?" → subtipo="laptops"
     "todos los activos no vehiculares" → sin subtipo (devuelve todos)
-→ NOTA: estos registros son type_gasto=inversion_compra con subtipo_gasto canónico. No confundir con inversiones vehiculares.
+→ NOTA: registros nuevos usan subtipos canónicos (adquisicion_vehiculo, compra_terreno, …). Legacy (inversion_terreno, inversion_inmueble) sigue visible en histórico.
 
 GASTOS OPERATIVOS (recurrentes):
 → Usa getGastosPeriodo, getGastosPorCategoria, getVehiculosConMasGasto cuando:

@@ -10,12 +10,19 @@ import {
 } from '../data/finanzaGastoRegistro';
 import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
 import { OPERATIVO_SUBTIPO_OPTIONS } from '../utils/operativoSubtipo';
+import { INVERSION_SUBTIPO_OPTIONS } from '../utils/inversionSubtipo';
 import {
   getRepresentacionInternaSubtipoLabel,
   normalizeRepresentacionInternaSubtipo,
 } from '../utils/representacionInternaSubtipoLabel';
 import { getOperativoSubtipoLabel, resolveOperativoSubtipoGastoCanon } from '../utils/operativoSubtipo';
 import { getInversionSubtipoDedupeKey, getInversionSubtipoLabel, normalizeInversionSubtipo } from '../utils/inversionSubtipo';
+import {
+  ADMINISTRATIVO_SUBTIPO_OPTIONS,
+  getAdministrativoSubtipoLabel,
+  normalizeAdministrativoSubtipo,
+  resolveAdministrativoSubtipoGastoCanon,
+} from '../utils/administrativoSubtipo';
 import { getSubtipoFinancieroLabel, normKey } from '../utils/subtipoFinancieroLabel';
 import { tipoGastoUsaSubtipoOperativo } from '../utils/gastoMoveCategoriaDefaults';
 import { dedupeOptionsByKey } from '../utils/dedupeSelectOptions';
@@ -56,6 +63,14 @@ export const EXCEL_CATEGORIA_A_TIPO_GASTO: Record<string, GastoSubtipoCategoria>
 const EXCEL_EXTRAS_POR_CATEGORIA: Partial<Record<FinanzaGastoRegistroValue, readonly string[]>> = {
   administrativo_empresa: [
     'administrativo_general',
+    'movilidad',
+    'multas_callao',
+    'atu',
+    'sat',
+    'sunarp',
+    'sunat',
+    'sutran',
+    'taxi',
     'EQUIPAMIENTO DE TALLER',
     'ÚTILES DE OFICINA',
     'MOBILIARIO',
@@ -71,18 +86,16 @@ const EXCEL_EXTRAS_POR_CATEGORIA: Partial<Record<FinanzaGastoRegistroValue, read
     'tarjeta_banco',
   ],
   inversion_compra: [
-    // Subtipos canónicos nuevos (snake_case) — aparecen primero en filtros/historial
-    'inversion_vehicular',
-    'inversion_terreno',
-    'inversion_inmueble',
-    'inversion_general',
-    'otros_activos',
-    // Legacy (compatibilidad hacia atrás)
-    'inversion_compra',
-    'Adquisición vehículo',
-    'LAPTOPS',
-    'COMPUTADORAS',
-    'EQUIPOS DE CÓMPUTO',
+    'adquisicion_vehiculo',
+    'compra_terreno',
+    'acondicionamiento_areas',
+    'laptops',
+    'electrodomesticos',
+    'sistema_seguridad',
+    'equipamiento_taller',
+    'compra_software_gestion',
+    'muebles_enseres',
+    'equipamiento_oficina',
   ],
   representacion_interna: ['regalos', 'alojamientos'],
   gastos_globales: ['global_no_asignado'],
@@ -96,9 +109,15 @@ export const SUBTIPO_ALIASES_NORM_KEY: Record<string, string> = {
   prestamos: 'prestamo',
   intereses: 'interes',
   cuotas: 'cuota',
-  adquisicion_vehiculo: 'Adquisición vehículo',
-  adquisicion_auto: 'VEHÍCULO',
-  vehiculo: 'VEHÍCULO',
+  adquisicion_auto: 'adquisicion_vehiculo',
+  vehiculo: 'adquisicion_vehiculo',
+  inversion_vehicular: 'adquisicion_vehiculo',
+  compra_activo_vehiculo: 'adquisicion_vehiculo',
+  inversion_terreno: 'compra_terreno',
+  terreno: 'compra_terreno',
+  laptops: 'laptops',
+  computadoras: 'laptops',
+  equipos_de_computo: 'laptops',
   arreglo_linea_escape: 'arreglo_linea_escape',
   linea_escape: 'arreglo_linea_escape',
   tubo_escape: 'arreglo_linea_escape',
@@ -108,6 +127,25 @@ export const SUBTIPO_ALIASES_NORM_KEY: Record<string, string> = {
   autopartes: 'autopartes',
   repuesto: 'autopartes',
   repuestos: 'autopartes',
+  movilidad: 'movilidad',
+  pasaje: 'movilidad',
+  pasajes: 'movilidad',
+  traslado: 'movilidad',
+  traslados: 'movilidad',
+  multas_callao: 'multas_callao',
+  multa_callao: 'multas_callao',
+  'multas callao': 'multas_callao',
+  atu: 'atu',
+  'autorizacion atu': 'atu',
+  sat: 'sat',
+  sunarp: 'sunarp',
+  suanrp: 'sunarp',
+  sunat: 'sunat',
+  sutran: 'sutran',
+  taxi: 'taxi',
+  'rt-taxi': 'taxi',
+  'rt taxi': 'taxi',
+  'revision tecnica taxi': 'taxi',
 };
 
 function unionFactSubtiposForFinanza(cat: FinanzaGastoRegistroValue): string[] {
@@ -165,6 +203,9 @@ function getSubtipoOptionDedupeKeyForCat(cat: FinanzaGastoRegistroValue, value: 
   const v = value.trim();
   if (!v) return '';
   if (cat === 'inversion_compra') return getInversionSubtipoDedupeKey(v);
+  if (cat === 'administrativo_empresa') {
+    return resolveAdministrativoSubtipoGastoCanon(v) ?? normKey(v);
+  }
   if (cat === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(v) || normKey(v);
   }
@@ -179,6 +220,9 @@ function getSubtipoOptionCanonicalValueForCat(cat: FinanzaGastoRegistroValue, va
   const v = value.trim();
   if (!v) return v;
   if (cat === 'inversion_compra') return normalizeInversionSubtipo(v) ?? v;
+  if (cat === 'administrativo_empresa') {
+    return normalizeAdministrativoSubtipo(v) ?? v;
+  }
   if (cat === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(v) || v;
   }
@@ -231,12 +275,17 @@ function buildOficialesLista(cat: FinanzaGastoRegistroValue): readonly string[] 
     appendUniqueStable(base, EXCEL_EXTRAS_POR_CATEGORIA.representacion_interna ?? []);
     return base;
   }
-  const out: string[] = [];
-  appendUniqueStable(out, EXCEL_EXTRAS_POR_CATEGORIA[cat] ?? []);
-  if (cat === 'inversion_compra') {
+  if (cat === 'administrativo_empresa') {
+    const out: string[] = ADMINISTRATIVO_SUBTIPO_OPTIONS.map((o) => o.value);
+    appendUniqueStable(out, EXCEL_EXTRAS_POR_CATEGORIA.administrativo_empresa ?? []);
     appendFactSubtiposSinDuplicarCanon(out, cat, unionFactSubtiposForFinanza(cat));
     return out.map((v) => getSubtipoOptionCanonicalValueForCat(cat, v));
   }
+  if (cat === 'inversion_compra') {
+    return INVERSION_SUBTIPO_OPTIONS.map((o) => o.value);
+  }
+  const out: string[] = [];
+  appendUniqueStable(out, EXCEL_EXTRAS_POR_CATEGORIA[cat] ?? []);
   appendUniqueStable(out, unionFactSubtiposForFinanza(cat));
   return out;
 }
@@ -290,6 +339,9 @@ export function labelForSubtipoCatalogo(tipoGasto: string, value: string): strin
   }
   if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
     return getOperativoSubtipoLabel(v);
+  }
+  if (cat === 'administrativo_empresa') {
+    return getAdministrativoSubtipoLabel(v);
   }
   if (cat === 'inversion_compra') {
     return getInversionSubtipoLabel(v);
