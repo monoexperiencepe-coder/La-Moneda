@@ -146,9 +146,34 @@ const REGLAS: Regla[] = [
     test: (t) => /\b(planilla|sueldo|gratificacion|cts|essalud\s+laboral)\b/.test(t),
     sug: { tipo_gasto: 'planilla_laboral', subtipo_gasto: 'planilla', razon: 'Texto tipo planilla laboral' },
   },
+  // Inversión — subtipos específicos ANTES del fallback genérico
   {
-    test: (t) => /\b(compra\s+activo|inversion|inversi[oó]n|compra\s+carro|compra\s+vehiculo|compra\s+unidad)\b/.test(t),
-    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_compra', razon: 'Texto tipo inversión / compra activo' },
+    test: (t) =>
+      /\b(compra\s+(de\s+)?(carro|auto|coche|vehiculo|vehículo|unidad|bus|minivan)|placa\s+[a-z]{3}[\s-]?\d{3}|adquisici[oó]n\s+vehiculo|gnv\s+vehiculo)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_vehicular', razon: 'Texto compra de vehículo' },
+  },
+  {
+    test: (t) =>
+      /\b(terreno|lote|lote\s+de\s+terreno|propiedad\s+terreno|parcela)\b/.test(t) &&
+      !/\b(inmueble|departamento|oficina|local)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_terreno', razon: 'Texto compra terreno / lote' },
+  },
+  {
+    test: (t) =>
+      /\b(inmueble|departamento|dpto|local\s+comercial|oficina|casa\s+comercial|propiedad\s+inmueble)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_inmueble', razon: 'Texto compra inmueble / departamento / oficina' },
+  },
+  {
+    test: (t) =>
+      /\b(maquinaria|maquina|equipo\s+industrial|activo\s+fijo|herramienta\s+mayor)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'otros_activos', razon: 'Texto maquinaria / equipo / activo fijo' },
+  },
+  // Inversión genérica (fallback — cubre compra_activo, inversion sin subtipo claro)
+  {
+    test: (t) =>
+      /\b(compra\s+activo|inversion|inversi[oó]n)\b/.test(t) &&
+      !/\b(terreno|lote|inmueble|dpto|departamento|vehiculo|vehículo|carro|auto|placa|maquinaria)\b/.test(t),
+    sug: { tipo_gasto: 'inversion_compra', subtipo_gasto: 'inversion_general', razon: 'Texto inversión genérica sin subtipo claro' },
   },
   {
     test: (t) => /\b(almuerzo|cena|representacion|socio|reunion)\b/.test(t),

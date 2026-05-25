@@ -14,6 +14,7 @@ const EMPTY_MESSAGES: Partial<Record<AiToolName, string>> = {
   getPendientesConSugerencia: 'No hay pendientes ni gastos globales para sugerir clasificación.',
   getRankingInversionVehiculos: 'No encontré registros de inversión vehicular registrados.',
   getDetalleInversionVehiculo: 'No encontré inversión registrada para ese vehículo.',
+  getInversionesNoVehiculares: 'No encontré inversiones no vehiculares registradas para ese subtipo o periodo.',
 };
 
 export function emptyResultMessageForTool(tool: AiToolName): string {

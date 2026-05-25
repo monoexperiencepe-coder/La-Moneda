@@ -26,6 +26,8 @@ const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
   // Inversiones vehiculares (datos de adquisición)
   'getRankingInversionVehiculos',
   'getDetalleInversionVehiculo',
+  // Inversiones no vehiculares (gastos.inversion_compra con subtipos no vehiculares)
+  'getInversionesNoVehiculares',
 ]);
 
 /** ¿Puede usar el asistente IA? (operador restringido + roles financieros + admin). */

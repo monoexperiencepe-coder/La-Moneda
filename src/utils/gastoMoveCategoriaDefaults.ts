@@ -3,6 +3,7 @@ import { getSubtiposGasto } from '../data/factCatalog';
 import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/finanzaGastoRegistro';
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
 import { normalizeOperativoSubtipo } from './operativoSubtipo';
+import { normalizeInversionSubtipo } from './inversionSubtipo';
 import {
   TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   TIPO_GASTO_OPERATIVO_VEHICULO,
@@ -60,7 +61,7 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
     case 'administrativo_empresa':
       return 'administrativo_general';
     case 'inversion_compra':
-      return 'inversion_compra';
+      return 'inversion_vehicular';
     case 'gastos_globales':
       return 'global_no_asignado';
     case TIPO_GASTO_OPERATIVO_VEHICULO:
@@ -85,26 +86,36 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
 export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): string {
   const trimmed = raw.trim();
   const valid = getValidSubtiposForTipoGastoFinanza(tipoGasto);
-  if (valid.size === 0) return trimmed;
 
   if (tipoGasto.trim() === 'representacion_interna') {
     const n = normalizeRepresentacionInternaSubtipo(trimmed);
-    if (n && valid.has(n)) return n;
+    if (n && (valid.size === 0 || valid.has(n))) return n;
     if (trimmed) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
   if (tipoGastoUsaSubtipoOperativo(tipoGasto)) {
     const n = normalizeOperativoSubtipo(trimmed);
-    if (n && valid.has(n)) return n;
+    if (n) return n;
     const lower = trimmed.toLowerCase();
-    for (const v of valid) {
-      if (v.toLowerCase() === lower) return v;
+    if (valid.size > 0) {
+      for (const v of valid) {
+        if (v.toLowerCase() === lower) return v;
+      }
     }
     if (trimmed) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
+  // Inversión: normalizar al canónico
+  if (tipoGasto.trim() === 'inversion_compra') {
+    const n = normalizeInversionSubtipo(trimmed);
+    if (n) return n;
+    if (trimmed) return trimmed;
+    return 'inversion_vehicular';
+  }
+
+  if (valid.size === 0) return trimmed;
   if (!trimmed) return getDefaultSubtipoForTipoGasto(tipoGasto);
   if (valid.has(trimmed)) return trimmed;
   const lower = trimmed.toLowerCase();

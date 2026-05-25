@@ -31,6 +31,14 @@ import {
   getDefaultFactTipoSubtipoForOperativoCanon,
   getOperativoSubtipoLabel,
 } from '../../utils/operativoSubtipo';
+import {
+  getDefaultFactTipoSubtipoForInversionCanon,
+  getInversionSubtipoLabel,
+  getInversionSubtipoOptions,
+  inversionSubtipoRequiereVehiculo,
+  normalizeInversionSubtipo,
+  type InversionSubtipoCanon,
+} from '../../utils/inversionSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
 import {
@@ -45,6 +53,7 @@ const EXPENSE_VALIDATION_SCROLL_ORDER: (keyof FormState)[] = [
   'categoriaFinanciera',
   'fecha',
   'vehicleId',
+  'subtipoInversionCanon',
   'subtipoOperativoCanon',
   'subtipoRepresentacion',
   'tipo',
@@ -57,6 +66,7 @@ const EXPENSE_FIELD_SCROLL_IDS: Partial<Record<keyof FormState, string>> = {
   categoriaFinanciera: 'expense-field-categoria-financiera',
   fecha: 'expense-field-fecha',
   vehicleId: 'expense-field-vehicle',
+  subtipoInversionCanon: 'expense-field-subtipo-inversion',
   subtipoOperativoCanon: 'expense-field-subtipo-operativo',
   subtipoRepresentacion: 'expense-field-subtipo-representacion',
   tipo: 'expense-field-tipo-fact',
@@ -106,6 +116,8 @@ interface FormState {
   subtipoRepresentacion: string;
   /** Solo `operativo_vehiculo`: valor canónico persistido en `subtipo_gasto` (snake_case). */
   subtipoOperativoCanon: string;
+  /** Solo `inversion_compra`: subtipo canónico (vehicular / terreno / inmueble / general / otros). */
+  subtipoInversionCanon: string;
   fechaDesde: string;
   fechaHasta: string;
   metodoPago: string;
@@ -128,6 +140,7 @@ function emptyForm(): FormState {
     categoriaFinanciera: '',
     fecha: todayStr(),
     vehicleId: '',
+    subtipoInversionCanon: '',
     tipo: tipo0,
     subTipo: getSubtiposGasto(tipo0)[0] ?? '',
     subtipoRepresentacion: '',
@@ -145,16 +158,18 @@ function emptyForm(): FormState {
 function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState {
   if (finanzaPreset === 'inversion_compra') {
     const cat: FinanzaGastoRegistroValue = 'inversion_compra';
-    const t0 = firstFactTipoForFinanza(cat);
+    const defaultCanon: InversionSubtipoCanon = 'inversion_vehicular';
+    const { tipo: t0, subTipo: s0 } = getDefaultFactTipoSubtipoForInversionCanon(defaultCanon);
     const y = getDetallesMetodoPago('Yape')[0];
     return {
       categoriaFinanciera: cat,
       fecha: todayStr(),
       vehicleId: '',
       tipo: t0,
-      subTipo: getSubtiposGasto(t0)[0] ?? '',
+      subTipo: s0,
       subtipoRepresentacion: '',
       subtipoOperativoCanon: '',
+      subtipoInversionCanon: defaultCanon,
       fechaDesde: '',
       fechaHasta: '',
       metodoPago: 'Yape',
@@ -272,13 +287,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       newErrors.monto = 'Ingresa un monto válido';
     }
     if (!form.metodoPagoDetalle.trim()) newErrors.metodoPagoDetalle = 'Selecciona la cuenta de pago';
+    const inversionNecesitaVehiculo =
+      form.categoriaFinanciera === 'inversion_compra' &&
+      inversionSubtipoRequiereVehiculo(form.subtipoInversionCanon || 'inversion_vehicular');
     if (
-      (form.categoriaFinanciera === 'operativo_vehiculo' || form.categoriaFinanciera === 'inversion_compra')
+      (form.categoriaFinanciera === 'operativo_vehiculo' || inversionNecesitaVehiculo)
       && !form.vehicleId.trim()
     ) {
       newErrors.vehicleId =
-        form.categoriaFinanciera === 'inversion_compra'
-          ? 'Indica el vehículo (inversión con utilidad va por unidad).'
+        inversionNecesitaVehiculo
+          ? 'Indica el vehículo (la inversión vehicular va por unidad).'
           : 'Operativo por vehículo: indica el N° de unidad.';
     }
     return newErrors;
@@ -303,18 +321,23 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       const esRep = catFin === 'representacion_interna';
       const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
       const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
+      const esInversion = catFin === 'inversion_compra';
       const subtipoFin = esRep
         ? form.subtipoRepresentacion.trim()
         : tipoGastoUsaSubtipoOperativo(catFin)
           ? form.subtipoOperativoCanon.trim()
-          : (form.subTipo || null)
-            ? form.subTipo.trim()
-            : null;
+          : esInversion
+            ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'inversion_vehicular')
+            : (form.subTipo || null)
+              ? form.subTipo.trim()
+              : null;
       const motivoFin = esRep
         ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
         : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
           ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
-          : (form.subTipo || form.tipo);
+          : esInversion && form.subtipoInversionCanon.trim()
+            ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
+            : (form.subTipo || form.tipo);
       const rawM = Number(Number(form.monto).toFixed(2));
       await Promise.resolve(
         onSubmit({
@@ -552,7 +575,40 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
             </p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {form.categoriaFinanciera === 'representacion_interna' ? (
+              {form.categoriaFinanciera === 'inversion_compra' ? (
+                <>
+                  <Select
+                    id="expense-field-subtipo-inversion"
+                    label="Tipo de inversión"
+                    options={getInversionSubtipoOptions()}
+                    value={form.subtipoInversionCanon}
+                    placeholder="Seleccionar…"
+                    onChange={(v) => {
+                      if (!v) return;
+                      const canon = normalizeInversionSubtipo(v) ?? (v as InversionSubtipoCanon);
+                      const { tipo: tInv, subTipo: sInv } = getDefaultFactTipoSubtipoForInversionCanon(canon);
+                      setForm((p) => ({ ...p, subtipoInversionCanon: canon, tipo: tInv, subTipo: sInv }));
+                      setErrors((e) => ({ ...e, subtipoInversionCanon: '' }));
+                    }}
+                    error={errors.subtipoInversionCanon}
+                    required
+                    disabled={seleccionesBloqueadas}
+                    helper="Se guarda como subtipo_gasto canónico (vehicular / terreno / inmueble / etc.)."
+                  />
+                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-700">
+                    <p className="font-semibold text-gray-600">Tipo Fact (metadata)</p>
+                    <p className="mt-1">
+                      <span className="text-gray-500">Tipo:</span> {form.tipo || '—'}
+                    </p>
+                    <p>
+                      <span className="text-gray-500">Sub tipo:</span> {form.subTipo || '—'}
+                    </p>
+                    <p className="mt-1.5 text-[10px] text-gray-500">
+                      Ajustado automáticamente según el tipo de inversión.
+                    </p>
+                  </div>
+                </>
+              ) : form.categoriaFinanciera === 'representacion_interna' ? (
                 <Select
                   id="expense-field-subtipo-representacion"
                   label="Subtipo (representación interna)"

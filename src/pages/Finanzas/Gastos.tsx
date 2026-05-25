@@ -55,6 +55,7 @@ import {
   tipoGastoRequiereVehiculo,
   tipoGastoUsaSubtipoOperativo,
 } from '../../utils/gastoMoveCategoriaDefaults';
+import { inversionSubtipoRequiereVehiculo } from '../../utils/inversionSubtipo';
 import {
   collectHistoricosSubtiposForTipoGasto,
   formatSubtipoOptionLabel,
@@ -1176,9 +1177,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const handleMoveTipoChange = useCallback(
     (newTipo: string) => {
+      const defaultSub = getDefaultSubtipoForTipoGasto(newTipo);
       setMoveTipo(newTipo);
-      setMoveSubtipo(getDefaultSubtipoForTipoGasto(newTipo));
-      if (!tipoGastoRequiereVehiculo(newTipo)) {
+      setMoveSubtipo(defaultSub);
+      const newNeedsVehicle =
+        newTipo === 'operativo_vehiculo' ||
+        (newTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'inversion_vehicular'));
+      if (!newNeedsVehicle) {
         setMoveVehicleId('');
       } else {
         const cur = moveTarget?.vehicleId;
@@ -1206,7 +1211,11 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const isOperativoVehiculoTarget = moveTipo === 'operativo_vehiculo';
   const isOperativoFlotaTarget = moveTipo === 'operativo_flota_general';
   const isInversionTarget = moveTipo === 'inversion_compra';
-  const targetNeedsVehicle = tipoGastoRequiereVehiculo(moveTipo);
+  const isInversionVehicularTarget =
+    isInversionTarget && inversionSubtipoRequiereVehiculo(moveSubtipo || 'inversion_vehicular');
+  const targetNeedsVehicle =
+    moveTipo === 'operativo_vehiculo' ||
+    isInversionVehicularTarget;
   const currentEffectiveTipo = moveTarget ? (tipoGastoUiCanonical(moveTarget) ?? 'gastos_globales') : '';
   const currentSubtipo = moveTarget?.subtipo_gasto?.trim() ?? '';
   const currentVehicle = moveTarget?.vehicleId != null ? String(moveTarget.vehicleId) : '';
@@ -2051,17 +2060,22 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               </p>
             )}
 
-            {isInversionTarget && (
+            {isInversionTarget && isInversionVehicularTarget && (
               <p className="text-xs text-violet-800 rounded-lg border border-violet-100 bg-violet-50/90 px-3 py-2">
-                Inversión con utilidad: el gasto debe quedar asociado a un vehículo.
+                Inversión vehicular: el gasto debe quedar asociado a un vehículo.
+              </p>
+            )}
+            {isInversionTarget && !isInversionVehicularTarget && (
+              <p className="text-xs text-emerald-800 rounded-lg border border-emerald-100 bg-emerald-50/90 px-3 py-2">
+                Inversión no vehicular (terreno / inmueble / activo): no requiere vehículo.
               </p>
             )}
 
             {targetNeedsVehicle && (
               <Select
                 label={
-                  isInversionTarget
-                    ? 'Vehículo (obligatorio para inversión con utilidad)'
+                  isInversionVehicularTarget
+                    ? 'Vehículo (obligatorio para inversión vehicular)'
                     : 'Vehículo (obligatorio para operativo por vehículo)'
                 }
                 options={vehicleOptions}
@@ -2073,8 +2087,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             {isOperativoVehiculoTarget && !moveVehicleId && (
               <p className="text-xs text-amber-700">Debes seleccionar un vehículo para operativo por vehículo.</p>
             )}
-            {isInversionTarget && !moveVehicleId && (
-              <p className="text-xs text-amber-700">Debes seleccionar un vehículo para inversión con utilidad.</p>
+            {isInversionVehicularTarget && !moveVehicleId && (
+              <p className="text-xs text-amber-700">Debes seleccionar un vehículo para inversión vehicular.</p>
             )}
 
             <div>

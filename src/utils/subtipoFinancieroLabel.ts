@@ -6,6 +6,7 @@ import {
   getOperativoSubtipoLabel,
   resolveOperativoSubtipoGastoCanon,
 } from './operativoSubtipo';
+import { getInversionSubtipoLabel, normalizeInversionSubtipo } from './inversionSubtipo';
 import { tipoGastoUsaSubtipoOperativo } from './gastoMoveCategoriaDefaults';
 
 /** Valor interno de filtro: agrupa cuota / préstamo / interés sin tocar BD. */
@@ -45,6 +46,10 @@ export function getSubtipoFinancieroLabel(
     const c = resolveOperativoSubtipoGastoCanon(s);
     return c ? getOperativoSubtipoLabel(c) : '—';
   }
+  if (tg === 'inversion_compra') {
+    const invNorm = normalizeInversionSubtipo(s);
+    if (invNorm) return getInversionSubtipoLabel(invNorm);
+  }
   const repCanon = normalizeRepresentacionInternaSubtipo(s);
   if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
   const k = normKey(s);
@@ -64,6 +69,9 @@ export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string |
   }
   if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(t) ?? '';
+  }
+  if (tabTipoGasto === 'inversion_compra') {
+    return normalizeInversionSubtipo(t) ?? t;
   }
   if (tabTipoGasto === 'financiero_prestamo' && isPrestamoFinancieroFusionRaw(t)) {
     return SUBTIPO_FILTRO_PRESTAMO_FUSION;
@@ -85,6 +93,9 @@ export function gastoMatchesSubtipoFinancieroFilter(
   }
   if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
     return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
+  }
+  if (tabTipoGasto === 'inversion_compra') {
+    return (normalizeInversionSubtipo(subtipoGasto ?? '') ?? (subtipoGasto ?? '').trim()) === filterValue;
   }
   return (subtipoGasto ?? '').trim() === filterValue;
 }

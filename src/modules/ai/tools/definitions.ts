@@ -216,6 +216,29 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       },
     },
   },
+  // ─── Inversiones no vehiculares ─────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'getInversionesNoVehiculares',
+      description:
+        'Lista inversiones no vehiculares registradas: terrenos, inmuebles, maquinaria, activos generales. ' +
+        'Usa para: "¿cuánto invertimos en terrenos?", "inversiones en inmuebles", "activos no vehiculares", "todos los activos fijos". ' +
+        'Filtra por subtipo: inversion_terreno, inversion_inmueble, inversion_general, otros_activos. ' +
+        'NO usar para vehículos (usar getRankingInversionVehiculos). Solo roles financieros.',
+      parameters: {
+        type: 'object',
+        properties: {
+          subtipo: {
+            type: 'string',
+            enum: ['inversion_terreno', 'inversion_inmueble', 'inversion_general', 'otros_activos'],
+            description: 'Filtrar por subtipo específico. Omitir para ver todos los no-vehiculares.',
+          },
+          ...periodParams.properties,
+        },
+      },
+    },
+  },
 ];
 
 export const AI_TOOL_NAMES = AI_TOOL_DEFINITIONS.map((t) => t.function.name);

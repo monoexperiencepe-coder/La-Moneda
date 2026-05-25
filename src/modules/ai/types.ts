@@ -13,9 +13,11 @@ export type AiToolName =
   | 'getHistorialVehiculo'
   | 'suggestCategoriaGasto'
   | 'getPendientesConSugerencia'
-  // Inversiones de adquisición vehicular (tablas inversiones_generales_vehiculo / inversiones_vehiculo)
+  // Inversiones de adquisición vehicular (tabla inversiones_generales_vehiculo)
   | 'getRankingInversionVehiculos'
-  | 'getDetalleInversionVehiculo';
+  | 'getDetalleInversionVehiculo'
+  // Inversiones no vehiculares (tipo_gasto = inversion_compra en gastos)
+  | 'getInversionesNoVehiculares';
 
 export type AiSuggestedAction = {
   label: string;

@@ -65,6 +65,13 @@ const EXCEL_EXTRAS_POR_CATEGORIA: Partial<Record<FinanzaGastoRegistroValue, read
     'tarjeta_banco',
   ],
   inversion_compra: [
+    // Subtipos canónicos nuevos (snake_case) — aparecen primero en filtros/historial
+    'inversion_vehicular',
+    'inversion_terreno',
+    'inversion_inmueble',
+    'inversion_general',
+    'otros_activos',
+    // Legacy (compatibilidad hacia atrás)
     'inversion_compra',
     'Adquisición vehículo',
     'LAPTOPS',

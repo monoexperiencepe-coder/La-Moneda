@@ -573,6 +573,95 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       return result;
     }
 
+    case 'getInversionesNoVehiculares': {
+      const subtipoFilter = typeof args.subtipo === 'string' ? args.subtipo.trim() : null;
+      const dateRange = resolveAiDateRange(args);
+
+      // Non-vehicular investment subtypes
+      const NON_VEHICULAR_SUBTIPOS = new Set([
+        'inversion_terreno',
+        'inversion_inmueble',
+        'inversion_general',
+        'otros_activos',
+        // Legacy Fact values that map to non-vehicular
+        'TERRENO',
+        'INMUEBLE',
+        'MAQUINARIA',
+        'OFICINA',
+        'LAPTOPS',
+        'COMPUTADORAS',
+        'EQUIPOS DE CÓMPUTO',
+      ]);
+
+      const all = await fetchGastosByTipo('inversion_compra', ctx.empresaId);
+      const accessible = filterGastosForUser(ctx.user, all);
+
+      // Filter out vehicular
+      const nonVehicular = accessible.filter((g) => {
+        const sub = (g.subtipo_gasto ?? '').trim();
+        if (sub === 'inversion_vehicular' || sub === 'VEHÍCULO' || sub === 'compra_activo_vehiculo' || sub === 'Adquisición vehículo') return false;
+        if (sub === '' || sub === 'inversion_compra') return false; // legacy generic without subtipo = vehicular era
+        return NON_VEHICULAR_SUBTIPOS.has(sub) || (subtipoFilter ? sub === subtipoFilter : true);
+      });
+
+      const filtered = dateRange
+        ? filterByDateRange(nonVehicular, dateRange)
+        : nonVehicular;
+
+      const finalFiltered = subtipoFilter
+        ? filtered.filter((g) => (g.subtipo_gasto ?? '') === subtipoFilter)
+        : filtered;
+
+      const totalesByCurrency = sumMontosByCurrency(finalFiltered);
+      const bySubtipo: Record<string, { count: number; totalsByCurrency: typeof totalesByCurrency }> = {};
+      for (const g of finalFiltered) {
+        const sub = g.subtipo_gasto ?? 'sin_subtipo';
+        const entry = bySubtipo[sub] ?? { count: 0, totalsByCurrency: {} };
+        entry.count += 1;
+        const cur = 'PEN';
+        const prev = entry.totalsByCurrency[cur] ?? { total: 0, count: 0 };
+        prev.total += g.monto ?? 0;
+        prev.count += 1;
+        entry.totalsByCurrency[cur] = prev;
+        bySubtipo[sub] = entry;
+      }
+
+      const SUBTIPO_LABELS: Record<string, string> = {
+        inversion_terreno:  'Terreno',
+        inversion_inmueble: 'Inmueble',
+        inversion_general:  'Inversión general',
+        otros_activos:      'Otros activos',
+        TERRENO:            'Terreno',
+        INMUEBLE:           'Inmueble',
+        MAQUINARIA:         'Maquinaria',
+        OFICINA:            'Oficina',
+      };
+
+      const ultimas = finalFiltered
+        .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))
+        .slice(0, 20)
+        .map((g) => ({
+          fecha: g.fecha,
+          subtipo: g.subtipo_gasto,
+          subtipo_label: SUBTIPO_LABELS[g.subtipo_gasto ?? ''] ?? g.subtipo_gasto,
+          monto: g.monto,
+          monto_formatted: formatCurrencyByCode(g.monto ?? 0, 'PEN'),
+          moneda: 'PEN',
+          comentario: g.comentarios,
+        }));
+
+      const result = {
+        count: finalFiltered.length,
+        subtipo_filtro: subtipoFilter ?? 'todos (no vehicular)',
+        totales_por_moneda: totalesByCurrency,
+        por_subtipo: bySubtipo,
+        ultimas_inversiones: ultimas,
+        nota: 'Inversiones no vehiculares (terrenos, inmuebles, activos generales). NO incluye inversiones vehiculares. Separar PEN y USD.',
+      };
+      logToolResult(name, { count: finalFiltered.length }, { range: dateRange ?? undefined, source_table: 'gastos(inversion_compra)' });
+      return result;
+    }
+
     default:
       throw new Error(`Herramienta desconocida: ${name}`);
   }

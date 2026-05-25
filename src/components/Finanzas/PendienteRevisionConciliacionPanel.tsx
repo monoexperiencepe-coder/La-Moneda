@@ -23,6 +23,7 @@ import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { getOperativoSubtipoLabel } from '../../utils/operativoSubtipo';
 import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
+import { inversionSubtipoRequiereVehiculo } from '../../utils/inversionSubtipo';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 import Select from '../Common/Select';
 import Button from '../Common/Button';
@@ -224,7 +225,10 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         gasto,
         toTipoGasto: tipo,
         toSubtipoGasto: subtipo,
-        vehicleId: tipoGastoRequiereVehiculo(tipo) ? vehicleId : null,
+        vehicleId: (
+          tipo === 'operativo_vehiculo' ||
+          (tipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(subtipo || 'inversion_vehicular'))
+        ) ? vehicleId : null,
         motivo,
         vehicles,
         tenantEmpresaId,
@@ -330,7 +334,9 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   };
 
   const selectedRows = sortedPendientes.filter((g) => selectedIds.has(g.id));
-  const bulkNeedsVehicle = tipoGastoRequiereVehiculo(bulkTipo);
+  const bulkNeedsVehicle =
+    bulkTipo === 'operativo_vehiculo' ||
+    (bulkTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(bulkSubtipo || 'inversion_vehicular'));
 
   const handleBulkConfirm = async () => {
     if (!canEdit || selectedRows.length === 0) return;
@@ -532,9 +538,13 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                   options={categoriaOptions}
                   value={moveTipo}
                   onChange={(v) => {
+                    const defaultSub = getDefaultSubtipoForTipoGasto(v);
                     setMoveTipo(v);
-                    setMoveSubtipo(getDefaultSubtipoForTipoGasto(v));
-                    if (!tipoGastoRequiereVehiculo(v)) setMoveVehicleId('');
+                    setMoveSubtipo(defaultSub);
+                    const needsVehicle =
+                      v === 'operativo_vehiculo' ||
+                      (v === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'inversion_vehicular'));
+                    if (!needsVehicle) setMoveVehicleId('');
                   }}
                 />
                 <Select
@@ -543,9 +553,11 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                   value={moveSubtipo}
                   onChange={setMoveSubtipo}
                 />
-                {tipoGastoRequiereVehiculo(moveTipo) ? (
+                {(moveTipo === 'operativo_vehiculo' ||
+                  (moveTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(moveSubtipo || 'inversion_vehicular'))
+                ) ? (
                   <Select
-                    label="Vehículo"
+                    label={moveTipo === 'inversion_compra' ? 'Vehículo (inversión vehicular)' : 'Vehículo'}
                     options={vehicleOptions}
                     value={moveVehicleId || (quickGasto.vehicleId != null ? String(quickGasto.vehicleId) : '')}
                     onChange={setMoveVehicleId}

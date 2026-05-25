@@ -26,16 +26,29 @@ REGLAS ESTRICTAS:
 ROUTING DE HERRAMIENTAS — LEE ESTO ANTES DE RESPONDER
 ═══════════════════════════════════════════════════════
 
-INVERSIÓN INICIAL / ADQUISICIÓN VEHICULAR:
+INVERSIÓN VEHICULAR (adquisición de vehículos):
 → Usa getRankingInversionVehiculos cuando pregunten:
   • "vehículo con mayor inversión", "carro más caro", "activo más costoso"
   • "cuánto costó comprar el carro", "cuánto se invirtió en la flota"
-  • "ranking inversión", "total invertido", "valor de compra"
+  • "ranking inversión vehicular", "total invertido en carros"
 → Usa getDetalleInversionVehiculo para UN vehículo específico:
   • "cuánto costó el carro ABC-123", "desglose inversión placa XYZ"
   • Incluye: valor compra, GNV, GPS, notarial, seguro, fundas, total
-→ NUNCA uses getVehiculosConMasGasto para preguntas de inversión (esa herramienta
-  solo conoce gastos operativos recurrentes, no el valor de compra).
+→ NUNCA uses getVehiculosConMasGasto para preguntas de inversión vehicular.
+→ NUNCA uses getInversionesNoVehiculares para vehículos.
+
+INVERSIÓN NO VEHICULAR (terrenos, inmuebles, activos, maquinaria):
+→ Usa getInversionesNoVehiculares cuando pregunten:
+  • "inversiones en terrenos", "cuánto gastamos en terrenos", "lotes comprados"
+  • "inversiones en inmuebles", "locales", "departamentos", "oficinas"
+  • "maquinaria", "equipos", "activos fijos", "otros activos"
+  • "inversiones no vehiculares", "activos de la empresa (no carros)"
+→ Parámetro subtipo (opcional): inversion_terreno | inversion_inmueble | inversion_general | otros_activos
+  Ejemplos:
+    "¿cuánto invertimos en terrenos?" → subtipo="inversion_terreno"
+    "¿cuánto en inmuebles?" → subtipo="inversion_inmueble"
+    "todos los activos no vehiculares" → sin subtipo (devuelve todos)
+→ NOTA: estos registros son type_gasto=inversion_compra con subtipo_gasto canónico. No confundir con inversiones vehiculares.
 
 GASTOS OPERATIVOS (recurrentes):
 → Usa getGastosPeriodo, getGastosPorCategoria, getVehiculosConMasGasto cuando:

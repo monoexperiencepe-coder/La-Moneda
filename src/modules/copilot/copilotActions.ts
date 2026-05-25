@@ -25,6 +25,8 @@ export type CopilotNavigateParams = {
   search?: string;
   tipo_gasto?: string;
   subtipo_gasto?: string;
+  /** Subtipo canónico de inversión no vehicular (inversion_terreno / inversion_inmueble / etc.) */
+  subtipo_inversion?: string;
   vehicleId?: number | string;
   placa?: string;
 };
@@ -66,6 +68,7 @@ function buildQueryParams(input: CopilotNavigateParams): Record<string, string> 
   if (input.search?.trim()) params.search = input.search.trim().slice(0, 120);
   if (input.tipo_gasto?.trim()) params.tipo_gasto = input.tipo_gasto.trim();
   if (input.subtipo_gasto?.trim()) params.subtipo_gasto = input.subtipo_gasto.trim();
+  if (input.subtipo_inversion?.trim()) params.subtipo_gasto = input.subtipo_inversion.trim();
   if (input.placa?.trim()) params.placa = input.placa.trim().toUpperCase();
   if (input.vehicleId != null && String(input.vehicleId).trim()) {
     params.vehicleId = String(input.vehicleId).trim();
@@ -119,12 +122,20 @@ export function navigateToGastos(
 
 export function navigateToInversiones(
   user: PermissionUser,
-  filters: Pick<CopilotNavigateParams, 'vehicleId' | 'placa'> = {},
+  filters: Pick<CopilotNavigateParams, 'vehicleId' | 'placa' | 'subtipo_inversion'> = {},
 ): CopilotNavigateResult {
   if (!canViewSection(user, 'finanzas_inversiones')) {
     return denied('No tienes permiso para ver inversiones.');
   }
   const params = buildQueryParams(filters);
+  const subLabel: Record<string, string> = {
+    inversion_terreno:  'terrenos',
+    inversion_inmueble: 'inmuebles',
+    inversion_general:  'general',
+    otros_activos:      'otros activos',
+    inversion_vehicular:'vehiculares',
+  };
+  const sub = filters.subtipo_inversion;
   return {
     ok: true,
     path: params.vehicleId || params.placa ? '/finanzas/inversiones/generales' : '/finanzas/inversiones',
@@ -133,7 +144,9 @@ export function navigateToInversiones(
       ? `Abriendo inversiones (${params.placa})…`
       : params.vehicleId
         ? `Abriendo inversiones vehículo ${params.vehicleId}…`
-        : 'Abriendo inversiones…',
+        : sub
+          ? `Abriendo inversiones ${subLabel[sub] ?? sub}…`
+          : 'Abriendo inversiones…',
   };
 }
 
