@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import AIChatPanel from '../components/AI/AIChatPanel';
 
@@ -14,6 +15,12 @@ const AIPage: React.FC = () => {
           <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
             Consulta financiera y operativa. Fase 1: solo lectura y sugerencias — sin cambios automáticos.
           </p>
+          <Link
+            to="/finanzas/ia-clasificacion"
+            className="mt-2 inline-flex text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          >
+            Centro de Clasificación IA →
+          </Link>
         </section>
       </header>
 

@@ -52,6 +52,7 @@ export type GastoCategoriaManualPatch = Partial<{
   vehicle_id: number | string | null;
   es_global_flota: boolean | null;
   clasificacion_manual: boolean | null;
+  clasificacion_confianza: number | null;
   requiere_revision: boolean | null;
   revisado_por: string | null;
   revisado_at: string | null;
@@ -537,6 +538,7 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
   }
 
   if (patch.clasificacion_manual !== undefined) row.clasificacion_manual = patch.clasificacion_manual;
+  if (patch.clasificacion_confianza !== undefined) row.clasificacion_confianza = patch.clasificacion_confianza;
   if (patch.requiere_revision !== undefined) row.requiere_revision = patch.requiere_revision;
   if (patch.revisado_por !== undefined) row.revisado_por = patch.revisado_por;
   if (patch.revisado_at !== undefined) row.revisado_at = patch.revisado_at;
@@ -546,6 +548,18 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
     if (sanitized !== null) row.excel_extra = sanitized;
   }
   return row;
+}
+
+/** Carga un gasto del tenant para reclasificación manual (respeta RLS). */
+export async function fetchGastoByIdForTenant(
+  id: string,
+  tenantEmpresaId?: string | null,
+): Promise<Gasto | null> {
+  const idNorm = normalizeGastoIdParam(id);
+  if (!isValidGastoPrimaryKey(idNorm)) return null;
+  const raw = await fetchGastoRawById(idNorm, resolveTenantId(tenantEmpresaId));
+  if (!raw) return null;
+  return mapGastoRow(raw);
 }
 
 async function fetchGastoRawById(

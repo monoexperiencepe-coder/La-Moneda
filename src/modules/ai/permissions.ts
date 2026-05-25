@@ -14,6 +14,7 @@ const OPERADOR_ALLOWED_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getGastosGlobales',
   'getMovimientosRecientes',
   'suggestCategoriaGasto',
+  'getPendientesConSugerencia',
 ]);
 
 const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
@@ -22,6 +23,9 @@ const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getVehiculosConMasGasto',
   'getPrestamosActivos',
   'getHistorialVehiculo',
+  // Inversiones vehiculares (datos de adquisición)
+  'getRankingInversionVehiculos',
+  'getDetalleInversionVehiculo',
 ]);
 
 /** ¿Puede usar el asistente IA? (operador restringido + roles financieros + admin). */

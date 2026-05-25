@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, History, Layers, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronRight, History, Layers, Sparkles, Zap } from 'lucide-react';
 import type { Gasto, Vehicle } from '../../data/types';
 import { formatCurrency } from '../../utils/formatting';
 import { sugerirClasificacionGasto } from '../../utils/gastoClasificacionSugerencia';
@@ -394,6 +395,13 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
               Progreso: {progresoPct}% · Faltan {pendingCount} · Limpiados (sesión + base):{' '}
               {concState.sessionResolvedCount + limpiadosDesdeBase} · Última conciliación: {lastConcLabel}
             </p>
+            <Link
+              to="/finanzas/ia-clasificacion"
+              className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900"
+            >
+              <Sparkles className="h-3 w-3" aria-hidden />
+              Centro de Clasificación IA (solo sugerencias)
+            </Link>
           </div>
           {canEdit ? (
             <div className="flex flex-wrap gap-2 shrink-0">

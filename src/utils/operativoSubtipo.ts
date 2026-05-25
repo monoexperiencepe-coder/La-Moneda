@@ -9,6 +9,8 @@ export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string 
   { value: 'multas_tramites', label: 'Multas y trámites' },
   { value: 'mantenimiento', label: 'Mantenimiento' },
   { value: 'accesorios', label: 'Accesorios' },
+  { value: 'arreglo_linea_escape', label: 'Arreglo línea de escape' },
+  { value: 'autopartes', label: 'Autopartes' },
   { value: 'llantas', label: 'Llantas' },
   { value: 'frenos', label: 'Frenos' },
   { value: 'suspension', label: 'Suspensión' },
@@ -33,6 +35,8 @@ const FACT_DEFAULT_BY_CANON: Record<string, { tipo: string; subTipo: string }> =
   multas_tramites: { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
   mantenimiento: { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
   accesorios: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
+  arreglo_linea_escape: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
+  autopartes: { tipo: 'ACCESORIOS', subTipo: 'AUTOPARTE' },
   llantas: { tipo: 'ACCESORIOS', subTipo: 'LLANTAS' },
   frenos: { tipo: 'MECÁNICOS', subTipo: 'FRENOS' },
   suspension: { tipo: 'MECÁNICOS', subTipo: 'DIRECCIÓN Y SUSPENSIÓN' },
@@ -79,8 +83,10 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('EQUIPOS DE SONIDO', 'accesorios');
   add('EXTINTORES', 'accesorios');
   add('RECARGAS', 'accesorios');
-  add('AUTOPARTE', 'accesorios');
-  add('REPUESTOS', 'accesorios');
+  add('AUTOPARTE', 'autopartes');
+  add('AUTOPARTES', 'autopartes');
+  add('REPUESTOS', 'autopartes');
+  add('REPUESTO', 'autopartes');
   add('FORROS Y FUNDAS', 'interior');
   add('OTROS /ESPECIFICAR', 'otros_operativo');
   add('CIA DE SEGUROS', 'documentos');
@@ -166,8 +172,28 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
   if (nk.includes('motor') || nk.includes('arreglo motor')) return 'motor';
   if (nk.includes('impuesto') || nk.includes('vehicular')) return 'impuesto_vehicular';
   if (nk.includes('planchad') || nk.includes('pintur')) return 'planchado_pintura';
+  if (
+    nk.includes('linea escape')
+    || nk.includes('linea de escape')
+    || nk.includes('tubo escape')
+    || nk.includes('silenciador')
+    || nk.includes('mofle')
+    || (nk.includes('escape') && !nk.includes('escapar'))
+  ) {
+    return 'arreglo_linea_escape';
+  }
+  if (
+    nk.includes('autoparte')
+    || nk.includes('repuesto')
+    || nk.includes('pieza')
+    || nk.includes('faro')
+    || nk.includes('parachoque')
+    || nk.includes('espejo')
+  ) {
+    return 'autopartes';
+  }
   if (nk.includes('forro') || nk.includes('funda') || nk.includes('interior')) return 'interior';
-  if (nk.includes('accesor') || nk.includes('autoparte') || nk.includes('repuesto') || nk.includes('sonido')) {
+  if (nk.includes('accesor') || nk.includes('sonido')) {
     return 'accesorios';
   }
   if (nk.includes('seguro') && nk.includes('document')) return 'documentos';

@@ -7,6 +7,11 @@ import {
   tipoGastoRequiereVehiculo,
 } from './gastoMoveCategoriaDefaults';
 import { normalizeGastoVehicleFkForDb } from './vehicleId';
+import {
+  buildTextoMemoriaFromGastoParts,
+  guardarClasificacionMemoriaHumana,
+  resolveMemoriaSourceFromOrigen,
+} from '../services/ai/clasificacionMemoriaService';
 
 export type MoveGastoCategoriaInput = {
   gasto: Gasto;
@@ -19,6 +24,13 @@ export type MoveGastoCategoriaInput = {
   tenantEmpresaId?: string | null;
   /** Operador: UPDATE sin SELECT si destino no es visible en sus tabs. */
   operatorClassifyMode?: boolean;
+  /** Origen en BD (default correccion_manual_ui). */
+  origenClasificacion?: string;
+  /** Confianza 0–1 al aplicar sugerencia IA confirmada. */
+  clasificacionConfianza?: number | null;
+  /** Persistir patrón en memoria humana (default true). */
+  registrarMemoriaHumana?: boolean;
+  userRole?: string;
 };
 
 export type MoveGastoCategoriaResult =
@@ -26,7 +38,20 @@ export type MoveGastoCategoriaResult =
   | { ok: false; message: string };
 
 export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promise<MoveGastoCategoriaResult> {
-  const { gasto, toTipoGasto, toSubtipoGasto, vehicleId, motivo = '', vehicles, tenantEmpresaId, operatorClassifyMode } = input;
+  const {
+    gasto,
+    toTipoGasto,
+    toSubtipoGasto,
+    vehicleId,
+    motivo = '',
+    vehicles,
+    tenantEmpresaId,
+    operatorClassifyMode,
+    origenClasificacion = 'correccion_manual_ui',
+    clasificacionConfianza,
+    registrarMemoriaHumana = true,
+    userRole,
+  } = input;
   const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto);
 
   let toVehicleId: number | null = null;
@@ -74,10 +99,14 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
       vehicle_id: normalizeGastoVehicleFkForDb(targetNeedsVehicle ? toVehicleId : null),
       es_global_flota: !targetNeedsVehicle,
       clasificacion_manual: true,
+      clasificacion_confianza:
+        clasificacionConfianza != null && Number.isFinite(clasificacionConfianza)
+          ? clasificacionConfianza
+          : null,
       requiere_revision: false,
       revisado_at: changedAt,
       revisado_por: REVISION_USER_LABEL,
-      origen_clasificacion: 'correccion_manual_ui',
+      origen_clasificacion: origenClasificacion,
       excel_extra: excelExtraNext,
     },
     {
@@ -90,6 +119,28 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
 
   if (!result.ok) {
     return { ok: false, message: result.message };
+  }
+
+  if (registrarMemoriaHumana) {
+    const textoMem = buildTextoMemoriaFromGastoParts({
+      motivo: gasto.motivo,
+      comentarios: gasto.comentarios,
+    });
+    void guardarClasificacionMemoriaHumana(
+      {
+        textoOriginal: textoMem,
+        tipoGastoFinal: toTipoGasto,
+        subtipoFinal: subtipoFinal ?? toSubtipoGasto,
+        vehicleContext:
+          toVehicleId != null ? String(toVehicleId) : null,
+        confidenceHumana: clasificacionConfianza ?? null,
+        source: resolveMemoriaSourceFromOrigen(origenClasificacion, userRole),
+        esCorreccion:
+          prevTipo != null &&
+          (prevTipo !== toTipoGasto || (prevSub ?? '') !== (subtipoFinal ?? '')),
+      },
+      tenantEmpresaId,
+    );
   }
 
   return {

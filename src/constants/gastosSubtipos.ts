@@ -86,6 +86,15 @@ export const SUBTIPO_ALIASES_NORM_KEY: Record<string, string> = {
   adquisicion_vehiculo: 'Adquisición vehículo',
   adquisicion_auto: 'VEHÍCULO',
   vehiculo: 'VEHÍCULO',
+  arreglo_linea_escape: 'arreglo_linea_escape',
+  linea_escape: 'arreglo_linea_escape',
+  tubo_escape: 'arreglo_linea_escape',
+  silenciador: 'arreglo_linea_escape',
+  mofle: 'arreglo_linea_escape',
+  autoparte: 'autopartes',
+  autopartes: 'autopartes',
+  repuesto: 'autopartes',
+  repuestos: 'autopartes',
 };
 
 function unionFactSubtiposForFinanza(cat: FinanzaGastoRegistroValue): string[] {

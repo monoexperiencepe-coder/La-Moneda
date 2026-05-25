@@ -1,25 +1,27 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+  createAiChatProviderFromEnv,
+  type AiProviderChatMessage,
+} from "../_shared/ai/providers/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
-
 const AI_TOOLS = [
   {
     type: "function",
     function: {
       name: "getResumenFinancieroPeriodo",
-      description: "Resumen financiero del periodo (ingresos, gastos, categorías, pendientes). Solo roles financieros.",
+      description: "Resumen financiero del periodo (ingresos, gastos, utilidad, pendientes). Solo roles financieros. Para año 2024 usa anio=2024.",
       parameters: {
         type: "object",
         properties: {
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
           desde: { type: "string" },
           hasta: { type: "string" },
+          anio: { type: "number", description: "Año histórico específico, ej: 2024" },
         },
       },
     },
@@ -28,13 +30,14 @@ const AI_TOOLS = [
     type: "function",
     function: {
       name: "getIngresosPeriodo",
-      description: "Ingresos agregados del periodo. Solo roles financieros.",
+      description: "Ingresos del periodo (totales, conteo). Solo roles financieros. Para año 2024 usa anio=2024. NO usar para gastos ni inversiones.",
       parameters: {
         type: "object",
         properties: {
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
           desde: { type: "string" },
           hasta: { type: "string" },
+          anio: { type: "number", description: "Año histórico específico, ej: 2024" },
         },
       },
     },
@@ -43,13 +46,14 @@ const AI_TOOLS = [
     type: "function",
     function: {
       name: "getGastosPeriodo",
-      description: "Gastos del periodo con totales.",
+      description: "Gastos operativos del periodo. Para año 2024 usa anio=2024. NO usar para inversión de compra vehicular.",
       parameters: {
         type: "object",
         properties: {
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
           desde: { type: "string" },
           hasta: { type: "string" },
+          anio: { type: "number", description: "Año histórico específico, ej: 2024" },
           tipo_gasto: { type: "string" },
           limit: { type: "number" },
         },
@@ -60,13 +64,14 @@ const AI_TOOLS = [
     type: "function",
     function: {
       name: "getGastosPorCategoria",
-      description: "Totales por tipo_gasto en el periodo.",
+      description: "Totales de gastos agrupados por categoría operativa en el periodo. Para año 2024 usa anio=2024.",
       parameters: {
         type: "object",
         properties: {
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
           desde: { type: "string" },
           hasta: { type: "string" },
+          anio: { type: "number", description: "Año histórico específico, ej: 2024" },
         },
       },
     },
@@ -75,11 +80,12 @@ const AI_TOOLS = [
     type: "function",
     function: {
       name: "getVehiculosConMasGasto",
-      description: "Ranking vehículos con más gasto operativo. Solo roles financieros.",
+      description: "Ranking de vehículos con mayor GASTO OPERATIVO (combustible, mantenimiento). Solo roles financieros. NO usar para inversión de compra; para eso usa getRankingInversionVehiculos.",
       parameters: {
         type: "object",
         properties: {
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
+          anio: { type: "number", description: "Año histórico específico, ej: 2024" },
           limit: { type: "number" },
         },
       },
@@ -145,11 +151,62 @@ const AI_TOOLS = [
     type: "function",
     function: {
       name: "suggestCategoriaGasto",
-      description: "Sugiere categoría/subtipo para un texto. NO modifica datos.",
+      description: "Sugiere tipo_gasto y subtipo. NO modifica datos.",
       parameters: {
         type: "object",
-        properties: { texto: { type: "string" } },
-        required: ["texto"],
+        properties: {
+          texto: { type: "string" },
+          motivo: { type: "string" },
+          comentarios: { type: "string" },
+          monto: { type: "number" },
+          vehicle_id: { type: "string" },
+          tipo_gasto: { type: "string" },
+          subtipo_gasto: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getPendientesConSugerencia",
+      description: "Pendientes y gastos globales con sugerencia de clasificación (solo lectura).",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+      },
+    },
+  },
+  // ─── Inversiones vehiculares ──────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "getRankingInversionVehiculos",
+      description:
+        "Ranking de vehículos por INVERSIÓN TOTAL de adquisición (valor compra, GNV, GPS, notarial, seguro, fundas). " +
+        "Usar para: 'vehículo con mayor inversión', 'activo más caro', 'cuánto se invirtió en la flota'. " +
+        "NO es gasto operativo; es inversión inicial. Solo roles financieros.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getDetalleInversionVehiculo",
+      description:
+        "Desglose completo de inversión de adquisición de UN vehículo (compra, GNV, GPS, seguro, notarial, total). " +
+        "Usar para: 'cuánto costó el carro X', 'desglose inversión placa ABC'. Solo roles financieros.",
+      parameters: {
+        type: "object",
+        properties: {
+          vehicle_id: { type: "string" },
+          placa: { type: "string" },
+        },
       },
     },
   },
@@ -188,17 +245,7 @@ const STRUCTURED_SCHEMA = {
   },
 };
 
-type IncomingMessage = {
-  role: string;
-  content?: string | null;
-  tool_call_id?: string;
-  name?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: string;
-    function: { name: string; arguments: string };
-  }>;
-};
+type IncomingMessage = AiProviderChatMessage;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -216,20 +263,45 @@ function safeParseArgs(raw: string): Record<string, unknown> {
   }
 }
 
+function denoEnv(): Record<string, string | undefined> {
+  return {
+    AI_PROVIDER: Deno.env.get("AI_PROVIDER") ?? undefined,
+    AI_API_KEY: Deno.env.get("AI_API_KEY") ?? undefined,
+    AI_BASE_URL: Deno.env.get("AI_BASE_URL") ?? undefined,
+    AI_MODEL: Deno.env.get("AI_MODEL") ?? undefined,
+    OPENAI_API_KEY: Deno.env.get("OPENAI_API_KEY") ?? undefined,
+    OPENAI_MODEL: Deno.env.get("OPENAI_MODEL") ?? undefined,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  if (!OPENAI_API_KEY) {
+  const { provider: chatProvider, config: aiConfig } = createAiChatProviderFromEnv(denoEnv());
+
+  if (!aiConfig.apiKey) {
+    console.error(
+      JSON.stringify({
+        event: "ai_config_error",
+        provider: aiConfig.provider,
+        message: "AI_API_KEY no configurada",
+      }),
+    );
     return jsonResponse(
       {
         status: "error",
-        error: "OPENAI_API_KEY no configurada en la Edge Function ai-assistant.",
+        configError: true,
+        provider: aiConfig.provider,
+        error:
+          "AI_API_KEY no configurada en la Edge Function ai-assistant (o OPENAI_API_KEY si AI_PROVIDER=openai).",
       },
       503,
     );
   }
+
+  const requestStarted = performance.now();
 
   try {
     const body = await req.json();
@@ -239,107 +311,191 @@ Deno.serve(async (req) => {
       return jsonResponse({ status: "error", error: "messages requerido" }, 400);
     }
 
-    const hasPendingTools = messages.some((m) => m.role === "tool");
-
-    const openAiBody: Record<string, unknown> = {
-      model: MODEL,
-      messages,
-      tools: AI_TOOLS,
-      tool_choice: "auto",
-    };
-
-  if (!hasPendingTools && messages[messages.length - 1]?.role === "user") {
-      /* primera vuelta: permitir tools */
-    } else if (messages.some((m) => m.role === "tool")) {
-      /* continuar conversación tras tools */
-    }
-
-    const firstPass = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
+    const firstResult = await chatProvider.chatCompletion(
+      {
+        model: aiConfig.model,
+        messages,
+        tools: AI_TOOLS,
+        tool_choice: "auto",
       },
-      body: JSON.stringify(openAiBody),
-    });
+      { pass: "tool_round" },
+    );
 
-    if (!firstPass.ok) {
-      const errText = await firstPass.text();
-      return jsonResponse({ status: "error", error: `OpenAI: ${errText.slice(0, 400)}` }, 502);
+    if (!firstResult.ok || !firstResult.data) {
+      return jsonResponse(
+        {
+          status: "error",
+          provider: aiConfig.provider,
+          model: firstResult.model,
+          error: `${aiConfig.provider}: ${firstResult.error ?? "Error en chat completion"}`,
+          latencyMs: firstResult.latencyMs,
+        },
+        502,
+      );
     }
 
-    const firstJson = await firstPass.json();
-    const choice = firstJson.choices?.[0];
+    const choice = firstResult.data.choices?.[0];
     const msg = choice?.message;
 
     if (!msg) {
-      return jsonResponse({ status: "error", error: "OpenAI sin mensaje" }, 502);
+      return jsonResponse(
+        {
+          status: "error",
+          provider: aiConfig.provider,
+          error: "Proveedor sin mensaje en la respuesta",
+        },
+        502,
+      );
     }
 
     if (msg.tool_calls?.length) {
-      const toolCalls = msg.tool_calls.map((tc: { id: string; function: { name: string; arguments: string } }) => ({
+      const toolCalls = msg.tool_calls.map((tc) => ({
         id: tc.id,
         name: tc.function.name,
         arguments: safeParseArgs(tc.function.arguments),
       }));
+      console.log(
+        JSON.stringify({
+          event: "ai-tool-routing",
+          tools_selected: toolCalls.map((tc) => tc.name),
+          args_summary: toolCalls.map((tc) => ({ name: tc.name, args: tc.arguments })),
+        }),
+      );
       return jsonResponse({
         status: "needs_tools",
+        provider: aiConfig.provider,
+        model: firstResult.model,
         assistantText: msg.content ?? null,
         toolCalls,
+        latencyMs: Math.round(performance.now() - requestStarted),
+        usage: firstResult.data.usage
+          ? {
+              prompt_tokens: firstResult.data.usage.prompt_tokens,
+              completion_tokens: firstResult.data.usage.completion_tokens,
+              total_tokens: firstResult.data.usage.total_tokens,
+            }
+          : undefined,
       });
     }
 
-    const finalMessages = [...messages, { role: "assistant", content: msg.content ?? "" }];
+    const finalMessages: IncomingMessage[] = [
+      ...messages,
+      { role: "assistant", content: msg.content ?? "" },
+    ];
 
-    const structuredPass = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          ...finalMessages,
-          {
-            role: "user",
-            content:
-              "Devuelve la respuesta final en JSON estructurado según el schema (summary, data, warnings, suggestedActions, confidence).",
-          },
-        ],
-        response_format: STRUCTURED_SCHEMA,
-      }),
-    });
+    let structured: Record<string, unknown> | null = null;
+    let usage = firstResult.data.usage;
+    let responseModel = firstResult.model;
 
-    if (!structuredPass.ok) {
-      return jsonResponse({
-        status: "complete",
-        assistantText: msg.content ?? "",
-        structured: {
-          summary: msg.content ?? "Listo.",
+    if (chatProvider.supportsStructuredOutput()) {
+      const structuredResult = await chatProvider.chatCompletion(
+        {
+          model: aiConfig.model,
+          messages: [
+            ...finalMessages,
+            {
+              role: "user",
+              content:
+                "Devuelve la respuesta final en JSON estructurado según el schema (summary, data, warnings, suggestedActions, confidence).",
+            },
+          ],
+          response_format: STRUCTURED_SCHEMA,
+        },
+        { pass: "structured" },
+      );
+
+      if (structuredResult.ok && structuredResult.data) {
+        usage = structuredResult.data.usage ?? usage;
+        responseModel = structuredResult.model;
+        const content = structuredResult.data.choices?.[0]?.message?.content;
+        try {
+          structured = content ? (JSON.parse(content) as Record<string, unknown>) : null;
+        } catch {
+          structured = {
+            summary: content ?? msg.content ?? "",
+            warnings: [],
+            suggestedActions: [],
+            confidence: null,
+          };
+        }
+      }
+    }
+
+    if (!structured) {
+      // Fallback: try to extract JSON from the raw assistant text
+      const rawContent = msg.content ?? "";
+      const jsonMatch =
+        rawContent.match(/```json\s*([\s\S]*?)```/i) ??
+        rawContent.match(/```\s*(\{[\s\S]*?\})\s*```/) ??
+        rawContent.match(/(\{[\s\S]{20,}\})$/);
+      if (jsonMatch?.[1]) {
+        try {
+          const extracted = JSON.parse(jsonMatch[1].trim()) as Record<string, unknown>;
+          if (typeof extracted.summary === "string") {
+            structured = extracted;
+          }
+        } catch {
+          /* noop */
+        }
+      }
+      if (!structured) {
+        // Strip any JSON/markdown from the summary text
+        let cleanContent = rawContent
+          .replace(/```json[\s\S]*?```/gi, "")
+          .replace(/```[\s\S]*?```/g, "")
+          .replace(/\n\s*\{[\s\S]{10,}\}\s*$/, "")
+          .replace(/^#{1,6}\s+(.+)$/gm, "$1")
+          .replace(/\*\*(.+?)\*\*/g, "$1")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        structured = {
+          summary: cleanContent || "Listo.",
           warnings: [],
           suggestedActions: [],
           confidence: null,
-        },
-      });
+        };
+      }
     }
 
-    const structuredJson = await structuredPass.json();
-    const content = structuredJson.choices?.[0]?.message?.content;
-    let structured = null;
-    try {
-      structured = content ? JSON.parse(content) : null;
-    } catch {
-      structured = { summary: content ?? msg.content ?? "", warnings: [], suggestedActions: [], confidence: null };
-    }
+    const totalLatencyMs = Math.round(performance.now() - requestStarted);
+
+    console.log(
+      JSON.stringify({
+        event: "ai_assistant_complete",
+        provider: aiConfig.provider,
+        model: responseModel,
+        latency_ms: totalLatencyMs,
+        prompt_tokens: usage?.prompt_tokens,
+        completion_tokens: usage?.completion_tokens,
+        total_tokens: usage?.total_tokens,
+      }),
+    );
 
     return jsonResponse({
       status: "complete",
-      assistantText: structured?.summary ?? msg.content ?? "",
+      provider: aiConfig.provider,
+      assistantText: (structured.summary as string) ?? msg.content ?? "",
       structured,
+      model: responseModel,
+      latencyMs: totalLatencyMs,
+      usage: usage
+        ? {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+          }
+        : undefined,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error interno";
-    return jsonResponse({ status: "error", error: message }, 500);
+    return jsonResponse(
+      {
+        status: "error",
+        provider: aiConfig.provider,
+        error: message,
+        latencyMs: Math.round(performance.now() - requestStarted),
+      },
+      500,
+    );
   }
 });

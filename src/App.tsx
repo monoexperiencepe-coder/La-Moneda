@@ -31,6 +31,7 @@ const FinanciamientoAportes = lazy(() => import('./pages/Finanzas/Financiamiento
 const ReportesHub = lazy(() => import('./pages/Reportes/ReportesHub'));
 const Resumen = lazy(() => import('./pages/Finanzas/Resumen'));
 const RevisionClasificacion = lazy(() => import('./pages/Finanzas/RevisionClasificacion'));
+const IAClasificacionPage = lazy(() => import('./pages/Finanzas/IAClasificacionPage'));
 const VehiculosHub = lazy(() => import('./pages/Vehiculos/VehiculosHub'));
 const Inventario = lazy(() => import('./pages/Vehiculos/Inventario'));
 const VehiculoDetalle = lazy(() => import('./pages/Vehiculos/VehiculoDetalle'));
@@ -141,6 +142,7 @@ const AppContent: React.FC = () => {
                         <Route path="/finanzas/resumen" element={<SectionGuard section="finanzas_resumen"><Resumen /></SectionGuard>} />
                         <Route path="/finanzas/utilidad-operativa" element={<SectionGuard section="finanzas_resumen"><UtilidadOperativa /></SectionGuard>} />
                         <Route path="/finanzas/revision-clasificacion" element={<SectionGuard section="finanzas"><RevisionClasificacion /></SectionGuard>} />
+                        <Route path="/finanzas/ia-clasificacion" element={<SectionGuard section="finanzas_gastos"><IAClasificacionPage /></SectionGuard>} />
 
                         {/* Vehículos */}
                         <Route path="/vehiculos" element={<SectionGuard section="vehiculos"><VehiculosHub /></SectionGuard>} />

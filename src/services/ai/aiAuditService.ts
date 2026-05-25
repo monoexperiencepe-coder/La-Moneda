@@ -28,6 +28,8 @@ export async function insertAiAssistantAuditLog(
     empresa_id: empresaId,
     question_preview: previewQuestion(entry.questionPreview),
     tools_used: entry.toolsUsed,
+    denied_tools: entry.deniedTools ?? [],
+    user_role: entry.userRole ?? null,
     duration_ms: Math.max(0, Math.trunc(entry.durationMs)),
     status: entry.status,
   });

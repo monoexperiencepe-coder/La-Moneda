@@ -4,15 +4,39 @@ import { fetchGastosByTipo, fetchGastosFinancialSummary, fetchGastosRecent } fro
 import { fetchIngresos } from '../../../services/ingresosService';
 import { fetchPrestamosFinancierosDetalle } from '../../../services/prestamosFinancierosService';
 import { fetchVehiculos } from '../../../services/vehiculosService';
+import { fetchInversionesGeneralesVehiculo } from '../../../services/inversionesGeneralesVehiculoService';
 import { filterGastosForUser, type PermissionUser } from '../../../utils/permissions';
 import type { Gasto } from '../../../data/types';
 import { labelTipoGastoFinanciero } from '../../../utils/tipoGastoLabels';
 import { summaryCategoria } from '../../../utils/gastosFinancialSummary';
-import { filterByDateRange, resolveAiDateRange, sumMontos, type AiDateRange } from '../dateRange';
+import { filterByDateRange, resolveAiDateRange, sumMontos, sumMontosByCurrency, formatCurrencyByCode, type AiDateRange } from '../dateRange';
 import { aiToolDeniedMessage, canExecuteAiTool } from '../permissions';
 import type { AiToolName } from '../types';
 
-import { sugerirClasificacionGastoTexto } from './suggestCategoria';
+import { sugerirClasificacionGastoCompleta, sugerirClasificacionGastoFromGasto } from '../../../utils/gastoClasificacionSugerencia';
+import { fetchClasificacionMemoriaActivas } from '../../../services/ai/clasificacionMemoriaService';
+import { cleanOperationalCommentForUi } from '../../../utils/cleanOperationalComment';
+import { enrichToolPayloadForLlm } from '../toolEmptyResults';
+
+// ─── Debug logging ────────────────────────────────────────────────────────────
+
+function logToolResult(tool: AiToolName, data: unknown, meta?: { range?: { desde: string; hasta: string }; source_table?: string }) {
+  if (!import.meta.env.DEV) return;
+  const d = data as Record<string, unknown> | null;
+  const rows =
+    d != null
+      ? (d.count ?? d.ranking_length ?? (Array.isArray(d.ranking) ? d.ranking.length : null) ?? (Array.isArray(d.filas) ? d.filas.length : null) ?? (Array.isArray(d.movimientos) ? d.movimientos.length : null))
+      : null;
+  console.log(
+    '[tool-result]',
+    JSON.stringify({
+      tool,
+      rows: rows ?? '?',
+      source_table: meta?.source_table ?? 'gastos',
+      date_range: meta?.range ?? null,
+    }),
+  );
+}
 
 function mapGastos(rows: Record<string, unknown>[]): Gasto[] {
   return rows.map((r) => mapGastoRow(r));
@@ -129,15 +153,46 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       const ingresos = filterByDateRange(ingresosAll, range);
       const pendientesVisibles = filterGastosForUser(ctx.user, pendientes);
       const byCat = aggregateByTipo(gastos);
-      const totalIngresos = sumMontos(ingresos);
-      const totalGastos = sumMontos(gastos);
-      const utilidad = totalIngresos - totalGastos;
+
+      // Multi-currency totals for ingresos
+      const ingresosByCurrency = sumMontosByCurrency(ingresos);
+      // Gastos are always PEN (no moneda field in Gasto)
+      const totalGastosPEN = sumMontos(gastos);
+
+      // Utilidad only meaningful within same currency
+      const totalIngresosPEN = ingresosByCurrency['PEN']?.total ?? 0;
+      const utilidadPEN = totalIngresosPEN - totalGastosPEN;
+
       const pendienteSummary = summaryCategoria(summaryAll, 'pendiente_revision');
+
+      if (import.meta.env.DEV) {
+        console.log('[currency-normalization]', JSON.stringify({
+          tool: name,
+          currencies_detected: Object.keys(ingresosByCurrency),
+          ingresos_totals: Object.entries(ingresosByCurrency).map(([cur, v]) => ({
+            currency: cur,
+            total: v.total,
+            formatted: formatCurrencyByCode(v.total, cur),
+          })),
+          gastos_total_pen: totalGastosPEN,
+          date_range: range,
+        }));
+      }
+
       return {
         periodo: range,
-        ingresos: { total: totalIngresos, count: ingresos.length },
-        gastos: { total: totalGastos, count: gastos.length },
-        utilidad,
+        ingresos: {
+          count: ingresos.length,
+          totalsByCurrency: ingresosByCurrency,
+          nota_moneda: 'Ingresos separados por moneda. Ver totalsByCurrency.',
+        },
+        gastos: {
+          total: totalGastosPEN,
+          count: gastos.length,
+          moneda: 'PEN',
+        },
+        utilidad_pen: utilidadPEN,
+        nota_utilidad: 'Utilidad calculada solo sobre PEN. Si hay ingresos USD, consulta por separado.',
         categoriasPrincipales: byCat.slice(0, 6),
         pendientesRevision: {
           count: pendienteSummary.count,
@@ -150,33 +205,65 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       const range = resolveAiDateRange(args);
       const all = await fetchIngresos(ctx.empresaId);
       const ingresos = filterByDateRange(all, range);
-      return {
+
+      const byCurrency = sumMontosByCurrency(ingresos);
+
+      // Per-currency breakdown by tipo
+      const porTipoByCurrency: Record<string, Array<{ tipo: string; monto: number; count: number }>> = {};
+      for (const ing of ingresos) {
+        const cur = ing.moneda?.toUpperCase()?.trim() || 'PEN';
+        if (!porTipoByCurrency[cur]) porTipoByCurrency[cur] = [];
+        const key = ing.tipo ?? 'sin_tipo';
+        const existing = porTipoByCurrency[cur].find((x) => x.tipo === key);
+        if (existing) {
+          existing.monto += ing.monto;
+          existing.count += 1;
+        } else {
+          porTipoByCurrency[cur].push({ tipo: key, monto: ing.monto, count: 1 });
+        }
+      }
+      for (const cur of Object.keys(porTipoByCurrency)) {
+        porTipoByCurrency[cur].sort((a, b) => b.monto - a.monto);
+      }
+
+      if (import.meta.env.DEV) {
+        console.log('[currency-normalization]', JSON.stringify({
+          tool: name,
+          currencies_detected: Object.keys(byCurrency),
+          totals: Object.entries(byCurrency).map(([cur, v]) => ({
+            currency: cur,
+            total: v.total,
+            rows: v.count,
+            formatted: formatCurrencyByCode(v.total, cur),
+          })),
+          date_range: range,
+        }));
+      }
+
+      const result = {
         periodo: range,
-        total: sumMontos(ingresos),
         count: ingresos.length,
-        porTipo: Object.entries(
-          ingresos.reduce<Record<string, number>>((acc, i) => {
-            const k = i.tipo ?? 'sin_tipo';
-            acc[k] = (acc[k] ?? 0) + i.monto;
-            return acc;
-          }, {}),
-        )
-          .map(([tipo, monto]) => ({ tipo, monto }))
-          .sort((a, b) => b.monto - a.monto),
+        totalsByCurrency: byCurrency,
+        porTipoByCurrency,
+        nota_moneda: 'Los totales están separados por moneda. NO sumes PEN y USD.',
       };
+      logToolResult(name, result, { range, source_table: 'ingresos' });
+      return result;
     }
     case 'getGastosPeriodo': {
       const range = resolveAiDateRange(args);
       const tipoGasto = typeof args.tipo_gasto === 'string' ? args.tipo_gasto : undefined;
       const limit = clampLimit(args.limit, 100, 200);
       const gastos = await fetchGastosInRange(ctx, range, { tipoGasto, limit });
-      return {
+      const result = {
         periodo: range,
         total: sumMontos(gastos),
         count: gastos.length,
         filas: gastos.map(compactGasto),
         warnings: detectAnomalies(gastos),
       };
+      logToolResult(name, result, { range, source_table: 'gastos' });
+      return result;
     }
     case 'getGastosPorCategoria': {
       const range = resolveAiDateRange(args);
@@ -283,27 +370,209 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       };
     }
     case 'suggestCategoriaGasto': {
-      const texto = String(args.texto ?? '').trim();
-      if (!texto) throw new Error('texto requerido');
-      const sug = sugerirClasificacionGastoTexto(texto);
-      if (!sug) {
-        return {
-          texto,
-          categoriaSugerida: null,
-          subtipoSugerido: null,
-          confianza: 0.25,
-          motivo: 'Sin coincidencia clara en reglas locales. Revisar manualmente o dar más contexto.',
-        };
-      }
+      const texto = String(args.texto ?? args.motivo ?? '').trim();
+      const memoria = await fetchClasificacionMemoriaActivas(ctx.empresaId);
+      const completa = sugerirClasificacionGastoCompleta(
+        {
+          motivo: typeof args.motivo === 'string' ? args.motivo : texto,
+          comentarios: typeof args.comentarios === 'string' ? args.comentarios : undefined,
+          monto: typeof args.monto === 'number' ? args.monto : undefined,
+          vehicleId:
+            typeof args.vehicle_id === 'number'
+              ? args.vehicle_id
+              : typeof args.vehicle_id === 'string' && args.vehicle_id
+                ? Number(args.vehicle_id)
+                : null,
+          subtipo_gasto: typeof args.subtipo_gasto === 'string' ? args.subtipo_gasto : undefined,
+          tipo_gasto: typeof args.tipo_gasto === 'string' ? args.tipo_gasto : undefined,
+          tipo: typeof args.tipo === 'string' ? args.tipo : undefined,
+          subTipo: typeof args.sub_tipo === 'string' ? args.sub_tipo : undefined,
+        },
+        { memoria, trackMemoriaUso: true },
+      );
       return {
-        texto,
-        categoriaSugerida: sug.tipo_gasto,
-        subtipoSugerido: sug.subtipo_gasto,
-        labelCategoria: labelTipoGastoFinanciero(sug.tipo_gasto),
-        confianza: 0.82,
-        motivo: sug.razon,
+        texto: texto || String(args.motivo ?? ''),
+        tipo_gasto_sugerido: completa.tipo_gasto_sugerido,
+        subtipo_sugerido: completa.subtipo_sugerido,
+        razon: completa.razon,
+        confianza: completa.confianza,
+        necesita_revision_humana: completa.necesita_revision_humana,
+        fuente: completa.fuente,
+        memoria_match: completa.memoria_match,
+        categoriaSugerida: completa.tipo_gasto_sugerido,
+        subtipoSugerido: completa.subtipo_sugerido,
+        labelCategoria: completa.tipo_gasto_sugerido
+          ? labelTipoGastoFinanciero(completa.tipo_gasto_sugerido)
+          : null,
+        motivo: completa.razon,
       };
     }
+    case 'getPendientesConSugerencia': {
+      const limit = clampLimit(args.limit, 40, 100);
+      const [pendientes, globales, vehiculos, memoria] = await Promise.all([
+        filterGastosForUser(ctx.user, await fetchGastosByTipo('pendiente_revision', ctx.empresaId)),
+        filterGastosForUser(ctx.user, await fetchGastosByTipo('gastos_globales', ctx.empresaId)),
+        fetchVehiculos(ctx.empresaId),
+        fetchClasificacionMemoriaActivas(ctx.empresaId),
+      ]);
+      const merged = [...pendientes, ...globales]
+        .sort((a, b) => b.fecha.localeCompare(a.fecha) || Number(b.id) - Number(a.id))
+        .slice(0, limit);
+      const placaById = new Map(vehiculos.map((v) => [String(v.id), v.placa ?? '']));
+      const sugerencias = merged.map((g) => {
+        const sug = sugerirClasificacionGastoFromGasto(g, { memoria, trackMemoriaUso: true });
+        const comentarioLimpio = cleanOperationalCommentForUi(g.comentarios) || null;
+        return {
+          id: g.id,
+          fecha: g.fecha,
+          monto: g.monto,
+          motivo: g.motivo,
+          comentario: comentarioLimpio,
+          tipo_actual: g.tipo_gasto,
+          subtipo_actual: g.subtipo_gasto,
+          vehicle_id: g.vehicleId,
+          placa: g.vehicleId != null ? placaById.get(String(g.vehicleId)) ?? null : null,
+          tipo_gasto_sugerido: sug.tipo_gasto_sugerido,
+          subtipo_sugerido: sug.subtipo_sugerido,
+          razon: sug.razon,
+          confianza: sug.confianza,
+          necesita_revision_humana: sug.necesita_revision_humana,
+          fuente: sug.fuente,
+          memoria_match: sug.memoria_match,
+        };
+      });
+      return {
+        count: sugerencias.length,
+        totalPendientes: pendientes.length,
+        totalGlobales: globales.length,
+        sugerencias,
+        nota: 'Solo sugerencias. Revisar y aplicar manualmente en Finanzas (no hay auto-aplicar en fase 1).',
+      };
+    }
+    case 'getRankingInversionVehiculos': {
+      const limit = clampLimit(args.limit, 10, 50);
+      const inversiones = await fetchInversionesGeneralesVehiculo(ctx.empresaId);
+
+      // Group totals by currency (each vehicle has its own moneda)
+      const totalesByCurrency: Record<string, { total: number; count: number }> = {};
+      for (const inv of inversiones) {
+        const cur = inv.moneda ?? 'PEN';
+        const entry = totalesByCurrency[cur] ?? { total: 0, count: 0 };
+        entry.total += inv.montoTotal;
+        entry.count += 1;
+        totalesByCurrency[cur] = entry;
+      }
+
+      const ranking = inversiones
+        .map((inv) => ({
+          vehiculo_referencia: inv.vehiculoReferencia,
+          vehiculo_numero: inv.vehiculoNumero,
+          placa: inv.placa,
+          modelo: inv.modelo,
+          fecha_compra: inv.fechaCompra,
+          moneda: inv.moneda,
+          valor_compra: inv.valorCompraUsd,
+          gasto_gnv: inv.gastoGnvUsd,
+          gasto_notarial: inv.gastoNotarialUsd,
+          seguro: inv.seguroUsd,
+          gps: inv.gpsUsd,
+          fundas_accesorios: inv.fundasAccesoriosUsd,
+          total_inversion_pen: inv.totalInversionPen,
+          monto_total: inv.montoTotal,
+          monto_total_formatted: formatCurrencyByCode(inv.montoTotal, inv.moneda ?? 'PEN'),
+        }))
+        .sort((a, b) => b.monto_total - a.monto_total)
+        .slice(0, limit);
+
+      if (import.meta.env.DEV) {
+        console.log('[currency-normalization]', JSON.stringify({
+          tool: name,
+          currencies_detected: Object.keys(totalesByCurrency),
+          totals: Object.entries(totalesByCurrency).map(([cur, v]) => ({
+            currency: cur,
+            total: v.total,
+            count: v.count,
+            formatted: formatCurrencyByCode(v.total, cur),
+          })),
+        }));
+      }
+
+      const result = {
+        count: inversiones.length,
+        totales_por_moneda: totalesByCurrency,
+        ranking,
+        nota: 'Inversión inicial de adquisición. Moneda por vehículo. No mezclar PEN y USD en totales. No incluye gastos operativos.',
+      };
+      logToolResult(name, { count: inversiones.length, ranking_length: ranking.length }, { source_table: 'inversiones_generales_vehiculo' });
+      return result;
+    }
+
+    case 'getDetalleInversionVehiculo': {
+      const vehicleIdArg = typeof args.vehicle_id === 'string' ? args.vehicle_id.trim() : '';
+      const placaArg = typeof args.placa === 'string' ? args.placa.trim().toUpperCase() : '';
+
+      const [inversiones, vehiculos] = await Promise.all([
+        fetchInversionesGeneralesVehiculo(ctx.empresaId),
+        fetchVehiculos(ctx.empresaId),
+      ]);
+
+      let found = inversiones.find((inv) =>
+        placaArg ? (inv.placa ?? '').toUpperCase() === placaArg : false,
+      );
+
+      if (!found && vehicleIdArg) {
+        const v = vehiculos.find((vv) => String(vv.id) === vehicleIdArg);
+        if (v?.placa) {
+          const vPlaca = v.placa.toUpperCase();
+          found = inversiones.find((inv) => (inv.placa ?? '').toUpperCase() === vPlaca);
+        }
+      }
+
+      if (!found && vehicleIdArg) {
+        found = inversiones.find((inv) =>
+          inv.vehiculoReferencia.toLowerCase().includes(vehicleIdArg.toLowerCase()),
+        );
+      }
+
+      if (!found) {
+        logToolResult(name, { count: 0 }, { source_table: 'inversiones_generales_vehiculo' });
+        return {
+          encontrado: false,
+          empty: true,
+          mensaje_sin_datos: `No encontré inversión registrada para "${placaArg || vehicleIdArg}". Verifica la placa o referencia.`,
+          instruccion: 'Informa al usuario con este mensaje.',
+        };
+      }
+
+      const moneda = found.moneda ?? 'PEN';
+      const result = {
+        encontrado: true,
+        vehiculo: {
+          referencia: found.vehiculoReferencia,
+          placa: found.placa,
+          modelo: found.modelo,
+          fecha_compra: found.fechaCompra,
+        },
+        desglose_inversion: {
+          moneda,
+          valor_compra: found.valorCompraUsd,
+          gasto_gnv: found.gastoGnvUsd,
+          gasto_notarial: found.gastoNotarialUsd,
+          leg_firmas: found.legFirmasUsd,
+          seguro: found.seguroUsd,
+          gps: found.gpsUsd,
+          fundas_accesorios: found.fundasAccesoriosUsd,
+          monto_total: found.montoTotal,
+          monto_total_formatted: formatCurrencyByCode(found.montoTotal, moneda),
+          equivalente_pen: found.totalInversionPen,
+          equivalente_pen_formatted: found.totalInversionPen != null ? formatCurrencyByCode(found.totalInversionPen, 'PEN') : null,
+        },
+        nota: `Moneda original: ${moneda}. Inversión inicial de adquisición. Para gastos operativos usa getHistorialVehiculo.`,
+      };
+      logToolResult(name, { count: 1 }, { source_table: 'inversiones_generales_vehiculo' });
+      return result;
+    }
+
     default:
       throw new Error(`Herramienta desconocida: ${name}`);
   }
@@ -319,7 +588,7 @@ export async function executeAiTool(
   }
   try {
     const data = await runToolImpl(name, args, ctx);
-    return { ok: true, data };
+    return { ok: true, data: enrichToolPayloadForLlm(name, data) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error al ejecutar herramienta';
     return { ok: false, error: msg };
