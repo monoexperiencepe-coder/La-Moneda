@@ -60,6 +60,7 @@ import {
   collectHistoricosSubtiposForTipoGasto,
   formatSubtipoOptionLabel,
   mergeSubtiposHistoricosConOficiales,
+  buildSubtipoSelectOptions,
 } from '../../constants/gastosSubtipos';
 import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
@@ -1127,25 +1128,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     const historicos = collectHistoricosSubtiposForTipoGasto(gastos, moveTipo);
     const extra: string[] = [];
     if (moveTarget?.subtipo_gasto?.trim()) extra.push(moveTarget.subtipo_gasto.trim());
-    const merged = mergeSubtiposHistoricosConOficiales(moveTipo, [...historicos, ...extra]);
+    const rows = buildSubtipoSelectOptions(moveTipo, gastos, extra);
     const def = getDefaultSubtipoForTipoGasto(moveTipo);
-    const seen = new Set<string>();
-    const rows: { value: string; label: string }[] = [];
-    const pushOpt = (o: { value: string; isHistorico?: boolean }) => {
-      const v = o.value.trim();
-      if (!v || seen.has(v)) return;
-      seen.add(v);
-      rows.push({
-        value: v,
-        label: formatSubtipoOptionLabel(moveTipo, {
-          value: v,
-          label: getSubtipoFinancieroLabel(v, moveTipo),
-          isHistorico: o.isHistorico,
-        }, o.isHistorico),
+    if (def?.trim() && !rows.some((r) => r.value === def)) {
+      rows.unshift({
+        value: def,
+        label: formatSubtipoOptionLabel(moveTipo, { value: def, label: '', isHistorico: false }),
       });
-    };
-    if (def?.trim()) pushOpt({ value: def, isHistorico: false });
-    for (const o of merged) pushOpt(o);
+    }
     return rows.sort((a, b) => a.label.localeCompare(b.label, 'es'));
   }, [gastos, moveTipo, moveTarget]);
 

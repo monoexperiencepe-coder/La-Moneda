@@ -14,10 +14,10 @@ import {
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import {
   getDefaultSubtipoForTipoGasto,
-  getValidSubtiposForTipoGastoFinanza,
   normalizeSubtipoForTipoGasto,
   tipoGastoRequiereVehiculo,
 } from '../../utils/gastoMoveCategoriaDefaults';
+import { buildSubtipoSelectOptions } from '../../constants/gastosSubtipos';
 import type { ApplyGastoLocalOpts } from '../../utils/gastoLocalMutations';
 import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
@@ -78,20 +78,11 @@ function subtipoOptionsForTipo(
   gastos: Gasto[],
   seedSubtipo?: string,
 ): { value: string; label: string }[] {
-  const base = new Set<string>(getValidSubtiposForTipoGastoFinanza(tipo));
-  const def = getDefaultSubtipoForTipoGasto(tipo);
-  if (def) base.add(def);
-  if (seedSubtipo?.trim()) base.add(normalizeSubtipoForTipoGasto(tipo, seedSubtipo));
-  for (const g of gastos) {
-    if ((g.tipo_gasto ?? '').trim() === tipo) {
-      const s = g.subtipo_gasto?.trim();
-      if (s) base.add(normalizeSubtipoForTipoGasto(tipo, s));
-    }
-  }
-  return [...base]
-    .filter((s) => s.length > 0)
-    .sort((a, b) => a.localeCompare(b, 'es'))
-    .map((s) => ({ value: s, label: subtipoLabel(tipo, s) }));
+  const extra: string[] = [];
+  if (seedSubtipo?.trim()) extra.push(seedSubtipo);
+  return buildSubtipoSelectOptions(tipo, gastos, extra).sort((a, b) =>
+    a.label.localeCompare(b.label, 'es'),
+  );
 }
 
 const PendienteRevisionConciliacionPanel: React.FC<Props> = ({

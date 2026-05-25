@@ -52,30 +52,38 @@ export const FACT_DEFAULT_BY_INVERSION_CANON: Record<InversionSubtipoCanon, { ti
 
 // ─── Aliases / normalización ──────────────────────────────────────────────────
 
-/** Mapeo de valores legacy o de texto libre → canónico. */
+/** Mapeo de valores legacy o de texto libre → canónico (claves sin acentos, minúsculas). */
 const LEGACY_TO_CANON: Record<string, InversionSubtipoCanon> = {
-  // Vehicular
-  vehiculo:              'inversion_vehicular',
-  'vehículo':            'inversion_vehicular',
-  compra_activo_vehiculo:'inversion_vehicular',
-  inversion_vehicular:   'inversion_vehicular',
-  // Terreno
-  terreno:               'inversion_terreno',
-  lote:                  'inversion_terreno',
-  inversion_terreno:     'inversion_terreno',
-  // Inmueble
-  inmueble:              'inversion_inmueble',
-  departamento:          'inversion_inmueble',
-  local:                 'inversion_inmueble',
-  oficina:               'inversion_inmueble',
-  inversion_inmueble:    'inversion_inmueble',
-  // General
-  maquinaria:            'inversion_general',
-  equipo:                'inversion_general',
-  inversion_general:     'inversion_general',
-  // Otros activos
-  otros_activos:         'otros_activos',
+  vehiculo: 'inversion_vehicular',
+  compra_activo_vehiculo: 'inversion_vehicular',
+  inversion_vehicular: 'inversion_vehicular',
+  adquisicion_vehiculo: 'inversion_vehicular',
+  terreno: 'inversion_terreno',
+  lote: 'inversion_terreno',
+  inversion_terreno: 'inversion_terreno',
+  inmueble: 'inversion_inmueble',
+  departamento: 'inversion_inmueble',
+  local: 'inversion_inmueble',
+  oficina: 'inversion_inmueble',
+  inversion_inmueble: 'inversion_inmueble',
+  maquinaria: 'inversion_general',
+  equipo: 'inversion_general',
+  inversion_general: 'inversion_general',
+  otros_activos: 'otros_activos',
+  inversion_compra: 'inversion_vehicular',
+  laptops: 'otros_activos',
+  computadoras: 'otros_activos',
+  equipos_de_computo: 'otros_activos',
 };
+
+function invNormKey(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_');
+}
 
 /**
  * Normaliza cualquier valor raw a canónico.
@@ -85,11 +93,18 @@ const LEGACY_TO_CANON: Record<string, InversionSubtipoCanon> = {
  * - Si no reconoce, devuelve null (el llamador decide si usar un fallback).
  */
 export function normalizeInversionSubtipo(raw: string): InversionSubtipoCanon | null {
-  const trimmed = raw.trim().toLowerCase();
-  if (!trimmed || trimmed === 'inversion_compra') return 'inversion_vehicular';
-  const mapped = LEGACY_TO_CANON[trimmed];
+  const trimmed = raw.trim();
+  if (!trimmed) return 'inversion_vehicular';
+  const nk = invNormKey(trimmed);
+  if (nk === 'inversion_compra') return 'inversion_vehicular';
+  const mapped = LEGACY_TO_CANON[nk];
   if (mapped) return mapped;
   return null;
+}
+
+/** Clave de deduplicación para selects/filtros de inversión. */
+export function getInversionSubtipoDedupeKey(raw: string): string {
+  return normalizeInversionSubtipo(raw) ?? invNormKey(raw);
 }
 
 /** Devuelve el label UI para un subtipo canónico (o texto limpio para valores históricos). */
