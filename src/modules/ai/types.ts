@@ -21,7 +21,7 @@ export type AiSuggestedAction = {
   label: string;
   description: string;
   /** Solo informativo; la fase 1 no ejecuta acciones. */
-  actionType: 'navigate' | 'review' | 'classify_suggestion';
+  actionType: 'navigate' | 'review' | 'classify_suggestion' | 'apply_filters';
   payload?: Record<string, unknown>;
 };
 

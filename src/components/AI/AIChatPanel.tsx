@@ -1,11 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, Send, Sparkles, Zap } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Navigation,
+  RefreshCw,
+  Send,
+  Sparkles,
+  XCircle,
+  Zap,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { sendAiAssistantMessage } from '../../services/ai/aiAssistantService';
 import { getAiQuickActionsForUser } from '../../modules/ai/quickActions';
 import { permissionUserFromAuth } from '../../utils/permissions';
 import { resolveActionRoute } from './AIResponseRenderer';
+import {
+  buildNavigateUrl,
+  resolveCopilotActionFromSuggested,
+} from '../../modules/copilot/copilotActions';
+import { addCopilotNavHistory } from '../../modules/copilot/copilotSettings';
+import { triggerCopilotHighlight } from '../../modules/copilot/copilotHighlight';
 import type { AiChatMessage, AiSuggestedAction } from '../../modules/ai/types';
 import AIMessageCard from './AIMessageCard';
 import AIDebugPanel from './AIDebugPanel';
@@ -23,6 +38,11 @@ function newUserMessage(content: string): AiChatMessage {
 
 function formatMsgTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Strip "Abriendo " prefix and trailing "…" to get a short history label
+function toHistoryLabel(statusLabel: string): string {
+  return statusLabel.replace(/^Abriendo\s+/i, '').replace(/…$/, '').trim();
 }
 
 // ─── Loading phase detection ──────────────────────────────────────────────────
@@ -85,7 +105,6 @@ function extractContextChips(messages: AiChatMessage[]): ContextChip[] {
   const summary = (lastAi.structured.summary ?? '').toLowerCase();
   const data = lastAi.structured.data as Record<string, unknown> | null;
 
-  // Month context
   const foundMonth = MONTH_NAMES.find((mo) => summary.includes(mo));
   if (foundMonth) {
     const label = foundMonth.charAt(0).toUpperCase() + foundMonth.slice(1);
@@ -94,13 +113,11 @@ function extractContextChips(messages: AiChatMessage[]): ContextChip[] {
     chips.push({ id: 'month', label: '📅 Mes actual', prompt: 'Y del mes actual' });
   }
 
-  // Category context
   if (summary.includes('combustible'))
     chips.push({ id: 'combustible', label: '⛽ Combustible', prompt: 'Solo combustible' });
   else if (summary.includes('mantenimiento'))
     chips.push({ id: 'mant', label: '🔧 Mantenimiento', prompt: 'Solo mantenimiento' });
 
-  // Pending context
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     const d = data as Record<string, unknown>;
     const pendCount =
@@ -122,12 +139,10 @@ function extractContextChips(messages: AiChatMessage[]): ContextChip[] {
 
 const SkeletonCard: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
   <div className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-    {/* Header row */}
     <div className="mb-3 flex items-center gap-2">
       <div className="h-4 w-4 rounded-full bg-indigo-100" />
       <div className="h-2.5 w-14 rounded-full bg-slate-100" />
     </div>
-    {/* Text lines */}
     <div className="space-y-2 mb-4">
       <div className="h-2.5 w-11/12 rounded-full bg-slate-100" />
       <div className="h-2.5 w-4/5 rounded-full bg-slate-100" />
@@ -135,7 +150,6 @@ const SkeletonCard: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
         <div className="h-2.5 w-3/5 rounded-full bg-slate-100" />
       )}
     </div>
-    {/* Metric card placeholders for financial queries */}
     {(phase === 'summarizing' || phase === 'querying_expenses' || phase === 'querying_income') && (
       <div className="grid grid-cols-2 gap-2">
         {[0, 1, 2, 3].map((i) => (
@@ -163,15 +177,122 @@ const TypingState: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
   </div>
 );
 
-// ─── Message wrapper with fade-in ─────────────────────────────────────────────
+// ─── Message fade-in ──────────────────────────────────────────────────────────
 
 const FadeIn: React.FC<{ children: React.ReactNode; isNew?: boolean }> = ({ children, isNew }) => (
   <div style={{ animation: isNew ? 'ai-fadein 0.3s ease-out' : undefined }}>{children}</div>
 );
 
+// ─── Nav status banner ────────────────────────────────────────────────────────
+
+type NavStatus = { type: 'loading' | 'success' | 'error'; text: string };
+
+const NAV_STATUS_STYLES: Record<NavStatus['type'], string> = {
+  loading: 'border-indigo-100 bg-indigo-50 text-indigo-700',
+  success: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+  error:   'border-amber-100  bg-amber-50  text-amber-700',
+};
+
+const NavStatusBanner: React.FC<{ status: NavStatus }> = ({ status }) => (
+  <div
+    className={`shrink-0 border-b px-3 py-2 text-xs font-medium sm:px-4 flex items-center gap-2 ${NAV_STATUS_STYLES[status.type]}`}
+    style={{ animation: 'ai-fadein 0.2s ease-out' }}
+  >
+    {status.type === 'success' && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+    {status.type === 'error'   && <XCircle       className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+    {status.type === 'loading' && (
+      <span className="flex shrink-0 gap-0.5" aria-hidden>
+        {[0, 80, 160].map((d) => (
+          <span key={d} className="block h-1.5 w-1.5 rounded-full bg-indigo-400"
+            style={{ animation: `ai-pulse 1.2s ease-in-out ${d}ms infinite` }} />
+        ))}
+      </span>
+    )}
+    <span className="truncate">{status.text}</span>
+  </div>
+);
+
+// ─── Countdown auto-nav banner ────────────────────────────────────────────────
+
+const COUNTDOWN_TOTAL = 3;
+// SVG circle with r=13 → circumference ≈ 81.7
+const CIRC = 2 * Math.PI * 13;
+
+interface CountdownState {
+  action: AiSuggestedAction;
+  label: string;
+  secs: number;
+}
+
+const CountdownBanner: React.FC<{
+  countdown: CountdownState;
+  onCancel: () => void;
+}> = ({ countdown, onCancel }) => (
+  <div
+    className="shrink-0 border-b border-indigo-100 bg-indigo-50 px-3 py-2.5 sm:px-4"
+    style={{ animation: 'ai-fadein 0.2s ease-out' }}
+  >
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {/* Countdown ring */}
+        <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+          <svg className="absolute inset-0 h-9 w-9 -rotate-90" viewBox="0 0 32 32" aria-hidden>
+            <circle cx="16" cy="16" r="13" fill="none" stroke="#e0e7ff" strokeWidth="2.5" />
+            <circle
+              cx="16" cy="16" r="13"
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray={CIRC}
+              strokeDashoffset={CIRC * (1 - countdown.secs / COUNTDOWN_TOTAL)}
+              style={{ transition: 'stroke-dashoffset 0.92s linear' }}
+            />
+          </svg>
+          <span className="relative text-xs font-bold text-indigo-700">{countdown.secs}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-indigo-900">
+            <Navigation className="mr-1 inline h-3 w-3" aria-hidden />
+            Abriendo {countdown.label}
+          </p>
+          <p className="text-[10px] text-indigo-500">Auto-navegación activada</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="shrink-0 rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+      >
+        Cancelar
+      </button>
+    </div>
+    {/* Progress bar */}
+    <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-indigo-100">
+      <div
+        className="h-full rounded-full bg-indigo-400"
+        style={{
+          width: `${(countdown.secs / COUNTDOWN_TOTAL) * 100}%`,
+          transition: 'width 0.92s linear',
+        }}
+      />
+    </div>
+  </div>
+);
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const AIChatPanel: React.FC = () => {
+type AIChatPanelProps = {
+  variant?: 'page' | 'companion';
+  autoNavigate?: boolean;
+  className?: string;
+};
+
+const AIChatPanel: React.FC<AIChatPanelProps> = ({
+  variant = 'page',
+  autoNavigate = false,
+  className = '',
+}) => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
@@ -181,6 +302,8 @@ const AIChatPanel: React.FC = () => {
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
   const [configErrorShown, setConfigErrorShown] = useState(false);
   const [newestMsgId, setNewestMsgId] = useState<string | null>(null);
+  const [navStatus, setNavStatus] = useState<NavStatus | null>(null);
+  const [countdownAction, setCountdownAction] = useState<CountdownState | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -192,12 +315,10 @@ const AIChatPanel: React.FC = () => {
   const showDebug = import.meta.env.DEV || user.role === 'admin';
   const contextChips = useMemo(() => extractContextChips(messages), [messages]);
 
-  // Auto-focus on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-scroll on new messages or loading change
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -206,26 +327,91 @@ const AIChatPanel: React.FC = () => {
     });
   }, [messages, loading]);
 
-  // Handle action button clicks → navigate with deep-link
-  const handleAction = useCallback(
+  // Countdown tick — decrements every second; at 0 navigates
+  useEffect(() => {
+    if (!countdownAction) return;
+    if (countdownAction.secs <= 0) {
+      const action = countdownAction.action;
+      setCountdownAction(null);
+      runCopilotNavigation(action);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCountdownAction((prev) => (prev ? { ...prev, secs: prev.secs - 1 } : null));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdownAction]);
+
+  const runCopilotNavigation = useCallback(
     (action: AiSuggestedAction) => {
-      const resolved = resolveActionRoute(action);
-      if (resolved) {
-        if (resolved.params && Object.keys(resolved.params).length > 0) {
-          const qs = new URLSearchParams(resolved.params).toString();
-          navigate(`${resolved.path}?${qs}`);
-        } else {
-          navigate(resolved.path);
+      // Try copilot registry first
+      const copilot = resolveCopilotActionFromSuggested(permissionUser, action);
+      if (copilot) {
+        if (!copilot.ok) {
+          setNavStatus({ type: 'error', text: copilot.error });
+          window.setTimeout(() => setNavStatus(null), 4000);
+          return false;
         }
-        return;
+        const url = buildNavigateUrl(copilot);
+        setNavStatus({ type: 'loading', text: copilot.statusLabel });
+        navigate(url);
+        window.setTimeout(() => {
+          const histLabel = toHistoryLabel(copilot.statusLabel);
+          addCopilotNavHistory({ label: histLabel, path: url });
+          setNavStatus({ type: 'success', text: `${histLabel} abierto` });
+          triggerCopilotHighlight();
+          window.setTimeout(() => setNavStatus(null), 2000);
+        }, 400);
+        return true;
       }
-      // review without known route → send as follow-up
+
+      // Fallback: generic route resolver
+      const resolved = resolveActionRoute(action, permissionUser);
+      if (resolved) {
+        const qs =
+          resolved.params && Object.keys(resolved.params).length > 0
+            ? `?${new URLSearchParams(resolved.params).toString()}`
+            : '';
+        const url = `${resolved.path}${qs}`;
+        setNavStatus({ type: 'loading', text: 'Abriendo vista…' });
+        navigate(url);
+        window.setTimeout(() => {
+          addCopilotNavHistory({ label: action.label ?? resolved.path, path: url });
+          setNavStatus({ type: 'success', text: 'Vista abierta' });
+          triggerCopilotHighlight();
+          window.setTimeout(() => setNavStatus(null), 2000);
+        }, 400);
+        return true;
+      }
+
       if (action.actionType === 'review' && action.label) {
         void sendMessage(action.label);
+        return true;
       }
+      return false;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate],
+    [navigate, permissionUser],
+  );
+
+  const handleAction = useCallback(
+    (action: AiSuggestedAction) => {
+      runCopilotNavigation(action);
+    },
+    [runCopilotNavigation],
+  );
+
+  const tryAutoNavigate = useCallback(
+    (assistant: AiChatMessage) => {
+      if (!autoNavigate) return;
+      const navAction = assistant.structured?.suggestedActions?.find(
+        (a) => a.actionType === 'navigate' || a.actionType === 'apply_filters',
+      );
+      if (!navAction) return;
+      setCountdownAction({ action: navAction, label: navAction.label ?? 'vista', secs: COUNTDOWN_TOTAL });
+    },
+    [autoNavigate],
   );
 
   const sendMessage = useCallback(
@@ -253,6 +439,7 @@ const AIChatPanel: React.FC = () => {
         });
         setNewestMsgId(assistant.id);
         setMessages((prev) => [...prev, assistant]);
+        tryAutoNavigate(assistant);
         if (error) {
           setLastFailedPrompt(retryable ? trimmed : null);
           if (error.includes('no configurado')) setConfigErrorShown(true);
@@ -280,7 +467,7 @@ const AIChatPanel: React.FC = () => {
         setLoading(false);
       }
     },
-    [loading, messages, profile, user],
+    [loading, messages, profile, user, tryAutoNavigate],
   );
 
   const onSubmit = (e: React.FormEvent) => {
@@ -292,7 +479,6 @@ const AIChatPanel: React.FC = () => {
 
   return (
     <>
-      {/* Global keyframes */}
       <style>{`
         @keyframes ai-pulse {
           0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.5; }
@@ -304,7 +490,23 @@ const AIChatPanel: React.FC = () => {
         }
       `}</style>
 
-      <div className="flex max-h-[calc(100dvh-180px)] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm">
+      <div
+        className={`flex flex-col overflow-hidden bg-white ${
+          variant === 'companion'
+            ? 'h-full min-h-0'
+            : 'max-h-[calc(100dvh-180px)] min-h-[520px] rounded-2xl border border-slate-200/60 shadow-sm'
+        } ${className}`}
+      >
+        {/* Countdown auto-nav banner (shown above navStatus) */}
+        {countdownAction && (
+          <CountdownBanner
+            countdown={countdownAction}
+            onCancel={() => setCountdownAction(null)}
+          />
+        )}
+
+        {/* Nav status banner */}
+        {navStatus && !countdownAction && <NavStatusBanner status={navStatus} />}
 
         {/* Config error banner */}
         {configErrorShown && (

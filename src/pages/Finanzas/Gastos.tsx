@@ -247,6 +247,26 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     setSearchParams(next, { replace: true });
   }, [isInversionesPage, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (isInversionesPage) return;
+    const tipo = searchParams.get('tipo_gasto');
+    if (tipo) {
+      const idx = parrillaTabs.findIndex((t) => t.tipo_gasto === tipo);
+      if (idx >= 0) setTabIndex(idx);
+    }
+    const y = searchParams.get('year');
+    if (y && /^\d{4}$/.test(y)) setHistoryYear(y);
+    const st = searchParams.get('subtipo_gasto') ?? searchParams.get('subtipo');
+    if (st) setFilterSubtipoGasto(st);
+    const q = searchParams.get('search');
+    if (q) setHistorialSearchInput(q);
+    if (tipo || y || st || q) {
+      requestAnimationFrame(() =>
+        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  }, [searchParams, isInversionesPage, parrillaTabs]);
+
   const openRegistrarModal = () => {
     setPrefillVehicleId(null);
     setGastoFormKey((k) => k + 1);
@@ -1808,7 +1828,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
-            <h2 className="text-base font-semibold tracking-tight text-slate-900">Historial · {tab.label}</h2>
+            <h2 id="copilot-scroll-target" className="text-base font-semibold tracking-tight text-slate-900">Historial · {tab.label}</h2>
             {historialSourceTotal > 0 || historialFullLoaded ? (
               <p className="mt-0.5 text-[11px] text-slate-500">
                 {historialScope === 'full' && historialFullLoaded

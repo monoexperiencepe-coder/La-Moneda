@@ -13,6 +13,11 @@ import {
 } from 'lucide-react';
 import type { AiStructuredResponse, AiSuggestedAction } from '../../modules/ai/types';
 import {
+  resolveCopilotActionFromSuggested,
+} from '../../modules/copilot/copilotActions';
+import { useAuth } from '../../context/AuthContext';
+import { permissionUserFromAuth, type PermissionUser } from '../../utils/permissions';
+import {
   extractMetricCards,
   extractSimpleTable,
   sanitizeAiAssistantText,
@@ -30,7 +35,18 @@ export interface ResolvedAction {
  * Resuelve una acción sugerida a una ruta con query params opcionales.
  * Soporta `payload.route` explícita y `payload.params` como filtros.
  */
-export function resolveActionRoute(action: AiSuggestedAction): ResolvedAction | null {
+export function resolveActionRoute(
+  action: AiSuggestedAction,
+  user?: PermissionUser | null,
+): ResolvedAction | null {
+  if (user) {
+    const copilot = resolveCopilotActionFromSuggested(user, action);
+    if (copilot?.ok) {
+      return { path: copilot.path, params: copilot.params };
+    }
+    if (copilot && !copilot.ok && copilot.denied) return null;
+  }
+
   const payload = action.payload as
     | { route?: string; params?: Record<string, string>; tipo_gasto?: string; estado?: string }
     | undefined;
@@ -207,8 +223,11 @@ const ActionButton: React.FC<{ action: AiSuggestedAction; onAction?: ActionHandl
   action,
   onAction,
 }) => {
-  const resolved = resolveActionRoute(action);
-  const isNavigate = action.actionType === 'navigate' && resolved != null;
+  const { user, profile } = useAuth();
+  const permissionUser = permissionUserFromAuth(user, profile?.email ?? null);
+  const resolved = resolveActionRoute(action, permissionUser);
+  const isNavigate =
+    (action.actionType === 'navigate' || action.actionType === 'apply_filters') && resolved != null;
   const isReview = action.actionType === 'review';
   const clickable = isNavigate || isReview;
 

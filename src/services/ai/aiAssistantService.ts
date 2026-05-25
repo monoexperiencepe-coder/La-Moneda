@@ -17,6 +17,7 @@ import {
   type PermissionUser,
 } from '../../utils/permissions';
 import { insertAiAssistantAuditLog } from './aiAuditService';
+import { enrichCopilotSuggestedActions, mergeCopilotActions } from '../../modules/copilot/enrichCopilotActions';
 
 type OpenAiMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -42,7 +43,7 @@ function newMessageId(): string {
   return `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const VALID_ACTION_TYPES = new Set(['navigate', 'review', 'classify_suggestion']);
+const VALID_ACTION_TYPES = new Set(['navigate', 'review', 'classify_suggestion', 'apply_filters']);
 
 function parseStructured(raw: string | null | undefined): AiStructuredResponse | null {
   if (!raw?.trim()) return null;
@@ -57,7 +58,7 @@ function parseStructured(raw: string | null | undefined): AiStructuredResponse |
       .map((a) => ({
         label: a.label,
         description: a.description,
-        actionType: a.actionType as 'navigate' | 'review' | 'classify_suggestion',
+        actionType: a.actionType as 'navigate' | 'review' | 'classify_suggestion' | 'apply_filters',
         payload: a.payload,
       })),
     confidence: parsed.confidence,
@@ -348,6 +349,16 @@ export async function sendAiAssistantMessage(opts: {
       ];
     }
   }
+
+  const copilotExtras = enrichCopilotSuggestedActions({
+    user: permissionUser,
+    message: opts.message,
+    toolsUsed,
+  });
+  finalStructured.suggestedActions = mergeCopilotActions(
+    finalStructured.suggestedActions,
+    copilotExtras,
+  );
 
   return {
     assistant: {

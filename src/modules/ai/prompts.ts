@@ -111,5 +111,27 @@ REGLAS DEL DATA:
 - Inversiones: incluir ranking o desglose con moneda por ítem
 - Categorías: array en "categorias": [{ "label": "...", "count": N, "monto": X, "moneda": "PEN" }]
 
-Las suggestedActions son informativas; el sistema no las ejecuta automáticamente.`;
+COPILOTO NAVEGADOR — ACCIONES SUGERIDAS:
+Cuando el usuario pida ver/abrir/mostrar datos en pantalla, incluye suggestedActions navegables:
+{
+  "label": "Abrir ingresos 2024",
+  "description": "Ver ingresos del año 2024 con filtros aplicados",
+  "actionType": "navigate",
+  "payload": {
+    "copilotAction": "navigate_ingresos",
+    "copilotParams": { "year": "2024" }
+  }
+}
+
+Acciones copilotAction permitidas:
+- navigate_ingresos (year, month, search)
+- navigate_gastos (year, month, tipo_gasto, subtipo_gasto, search)
+- navigate_inversiones_generales (vehicleId, placa)
+- navigate_pendientes_ia
+- navigate_documentacion (year, search)
+
+NO inventes rutas libres. Usa solo copilotAction del registry.
+Si el usuario no tiene permiso (operador restringido pidiendo ingresos), no sugieras navigate; explica en summary.
+
+Las suggestedActions de navegación se ejecutan con botón "Abrir vista" (o auto-navegación si está activada).`;
 }

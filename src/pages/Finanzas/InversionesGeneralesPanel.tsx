@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
@@ -82,6 +83,9 @@ const tdText = `${tdBase} text-left`;
 const tdUsd = `${tdBase} text-right max-w-[4.75rem]`;
 
 const InversionesGeneralesPanel: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const filterPlaca = (searchParams.get('placa') ?? '').trim().toUpperCase();
+  const filterVehicleId = (searchParams.get('vehicleId') ?? '').trim();
   const { profile, user } = useAuth();
   const canLoadInversiones = useMemo(
     () => canUseInversiones(permissionUserFromAuth(user, profile?.email ?? null)),
@@ -142,12 +146,31 @@ const InversionesGeneralesPanel: React.FC = () => {
   }, []);
 
   const displayRows = useMemo(() => {
-    if (!sort.key) return rows;
-    const arr = [...rows];
+    let base = rows;
+    if (filterPlaca) {
+      base = base.filter((r) => (r.placa ?? '').toUpperCase() === filterPlaca);
+    }
+    if (filterVehicleId) {
+      base = base.filter(
+        (r) =>
+          String(r.vehiculoNumero ?? '') === filterVehicleId
+          || r.vehiculoReferencia.toLowerCase().includes(filterVehicleId.toLowerCase()),
+      );
+    }
+    if (!sort.key) return base;
+    const arr = [...base];
     const mul: 1 | -1 = sort.dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => compareInversionesRow(a, b, sort.key!, mul));
     return arr;
-  }, [rows, sort]);
+  }, [rows, sort, filterPlaca, filterVehicleId]);
+
+  useEffect(() => {
+    if (filterPlaca || filterVehicleId) {
+      requestAnimationFrame(() =>
+        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  }, [filterPlaca, filterVehicleId]);
 
   const sortThBtn =
     'inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-violet-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 rounded px-0.5 -mx-0.5';
@@ -190,7 +213,7 @@ const InversionesGeneralesPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="copilot-scroll-target" className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-[1020px] w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wide">

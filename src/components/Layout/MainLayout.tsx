@@ -2,6 +2,7 @@ import React from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import FloatingRegistrosMenu from '../FAB/FloatingRegistrosMenu';
+import FloatingAIAssistant from '../AI/FloatingAIAssistant';
 import { DataBootstrapOverlay, PageTransition } from '../Loading';
 
 interface MainLayoutProps {
@@ -21,6 +22,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <Footer />
 
       <FloatingRegistrosMenu />
+      <FloatingAIAssistant />
     </div>
   );
 };

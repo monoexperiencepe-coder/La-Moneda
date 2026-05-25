@@ -46,6 +46,23 @@ const Ingresos: React.FC = () => {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const y = searchParams.get('year');
+    const m = searchParams.get('month');
+    if (y && /^\d{4}$/.test(y)) {
+      setHistoryYear(y);
+      setChartYear(y);
+    }
+    if (m && /^(0?[1-9]|1[0-2])$/.test(m)) {
+      setHistoryMonth(String(m).padStart(2, '0'));
+    }
+    if (y || m) {
+      requestAnimationFrame(() =>
+        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  }, [searchParams]);
+
   const openRegistrarModal = () => {
     setPrefillVehicleId(null);
     setFormInstanceKey((k) => k + 1);
@@ -778,7 +795,7 @@ const Ingresos: React.FC = () => {
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">Historial de ingresos</h2>
+            <h2 id="copilot-scroll-target" className="text-lg font-semibold tracking-tight text-slate-900">Historial de ingresos</h2>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
               Los filtros de año y mes solo aplican a la tabla inferior. El gráfico y el ranking usan «Año del gráfico
               y ranking» y «Mes (gráfico y ranking)».
