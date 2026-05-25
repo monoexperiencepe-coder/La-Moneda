@@ -1,7 +1,7 @@
 import type { ControlFecha, Ingreso, Vehicle, KilometrajeRegistro } from '../data/types';
 import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import { formatDate, todayStr } from './formatting';
-import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
+import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT, kmMantenimientoAlertDetail } from './kmMantenimientoControl';
 
 /** Ventana para alertar vencimientos (control_fechas), alineado a Control Global. */
 export const DIAS_ALERTA_VENCIMIENTO = 30;
@@ -130,7 +130,7 @@ export function buildOperativeAlerts(
       id: `km-mant-${r.vehicleId}`,
       severity: 'alta',
       title: `${vehicleLabel(v)}`,
-      detail: `Variación +${(r.variacion ?? 0).toLocaleString('es-PE')} km desde último mantenimiento (≥${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km)`,
+      detail: kmMantenimientoAlertDetail(r),
       href: '/operaciones/mantenimiento',
     });
   }

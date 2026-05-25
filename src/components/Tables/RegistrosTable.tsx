@@ -95,6 +95,8 @@ interface RegistrosTableProps {
   recentlyReclassifiedAt?: ReadonlyMap<string, number>;
   /** No reordenar filas ya ordenadas por Supabase. */
   preserveServerOrder?: boolean;
+  /** Vista «historial completo» (todas las filas visibles; búsqueda local). */
+  fullHistoryView?: boolean;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -265,6 +267,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   serverHistorialSearch,
   recentlyReclassifiedAt,
   preserveServerOrder = false,
+  fullHistoryView = false,
 }) => {
   const { role, isFinancialOperador, profile } = useAuth();
   const { toast, showUndoToast } = useRegistrosContext();
@@ -282,6 +285,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showFullHistory, setShowFullHistory] = useState(false);
+
+  useEffect(() => {
+    if (fullHistoryView) setShowFullHistory(true);
+  }, [fullHistoryView]);
   const [deletePending, setDeletePending] = useState<
     null | { kind: 'ingreso'; row: Ingreso } | { kind: 'gasto'; id: string }
   >(null);
@@ -752,11 +759,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               showFullHistory
                 ? 'border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200'
                 : 'border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-            } ${serverMode ? 'hidden' : ''}`}
+            } ${serverMode || fullHistoryView ? 'hidden' : ''}`}
           >
             {showFullHistory ? 'Volver a paginado' : 'Ver historial completo'}
           </button>
-          <div className={`w-full sm:w-40 ${serverMode ? 'hidden' : ''}`}>
+          <div className={`w-full sm:w-40 ${serverMode || fullHistoryView ? 'hidden' : ''}`}>
             <Select
               options={PAGE_SIZE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
               value={pageSize}

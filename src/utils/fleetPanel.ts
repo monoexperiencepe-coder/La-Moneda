@@ -2,7 +2,7 @@ import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog'
 import type { Vehicle, Ingreso, ControlFecha, KilometrajeRegistro, Conductor, Pendiente } from '../data/types';
 import { cleanMojibakeText } from './cleanMojibakeText';
 import { todayStr } from './formatting';
-import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT } from './kmMantenimientoControl';
+import { buildKmControlRows, kmMantenimientoAlertDetail } from './kmMantenimientoControl';
 
 /** Días hasta/since fecha ISO (negativo = ya pasó). */
 export function diffDaysFromToday(dateStr: string): number {
@@ -88,6 +88,9 @@ export function buildFleetPanelRows(
   conductores: Conductor[],
 ): FleetPanelRow[] {
   const active = vehicles.filter((v) => v.activo);
+  const kmByVehicle = new Map(
+    (kilometrajes?.length ? buildKmControlRows(kilometrajes) : []).map((r) => [r.vehicleId, r]),
+  );
 
   return active
     .map((v) => {
@@ -109,10 +112,13 @@ export function buildFleetPanelRows(
       const ultimoIngreso = ingresosV[0] ?? null;
       const diasSinIngreso = ultimoIngreso ? Math.abs(diffDaysFromToday(ultimoIngreso.fecha)) : null;
 
+      const kmRow = kmByVehicle.get(v.id);
+      const kmAlert = kmRow?.alertaVariacion === true;
+
       const estado: EstadoFlota =
         vencidos.length > 0
           ? 'CRITICO'
-          : proximos.length > 0 || (diasSinIngreso != null && diasSinIngreso > DIAS_ALERTA_SIN_INGRESO)
+          : proximos.length > 0 || kmAlert || (diasSinIngreso != null && diasSinIngreso > DIAS_ALERTA_SIN_INGRESO)
             ? 'ALERTA'
             : 'OK';
 
@@ -123,6 +129,8 @@ export function buildFleetPanelRows(
       } else if (proximos.length > 0) {
         const c = proximos[0];
         alertaPrincipal = `${fmtTipo(c.tipo)} · en ${diffDaysFromToday(c.fechaVencimiento)} días`;
+      } else if (kmAlert && kmRow) {
+        alertaPrincipal = kmMantenimientoAlertDetail(kmRow);
       } else if (diasSinIngreso != null && diasSinIngreso > DIAS_ALERTA_SIN_INGRESO) {
         alertaPrincipal = `Sin ingreso hace ${diasSinIngreso} días`;
       } else if (fechasV.length === 0) {
@@ -244,13 +252,13 @@ export function computeTodayReview(
   const kmAlertRows = kmRows.filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
   const muestraKmMantVariacion: TodayReviewItem[] = kmAlertRows.slice(0, 5).map((r) => {
     const v = vehicles.find((x) => x.id === r.vehicleId && x.activo);
-    if (!v || r.variacion == null) return null;
+    if (!v || r.diffKm == null) return null;
     return {
       vehicleId: r.vehicleId,
       placa: v.placa,
       marca: v.marca,
       modelo: v.modelo,
-      detail: `+${r.variacion.toLocaleString('es-PE')} km desde último mantenimiento (alerta ≥${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km)`,
+      detail: kmMantenimientoAlertDetail(r),
     };
   }).filter((x): x is TodayReviewItem => x != null);
 

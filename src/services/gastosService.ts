@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import { gastoToInsert, mapGastoRow } from './supabaseMappers';
 import type { Gasto } from '../data/types';
-import { fetchAllSupabasePages } from './supabaseRangeFetch';
+import { fetchAllSupabasePages, fetchAllSupabasePagesDetailed } from './supabaseRangeFetch';
 import { devPerfAsync } from '../utils/devPerf';
 import { mapGastosFinancialSummaryRow, type GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
@@ -1155,8 +1155,127 @@ export async function fetchGastosHistorialPage(
   );
 }
 
-/** Alias: historial paginado completo por categoría (server-side, sin bootstrap global). */
+/** Alias: historial paginado por categoría (server-side, sin bootstrap global). */
 export { fetchGastosHistorialPage as fetchGastosByTipoFull };
+
+export type GastosByTipoFullAllFilters = {
+  tipo_gasto: string;
+  orderMode?: GastosHistorialOrderMode;
+};
+
+/**
+ * Historial completo de una categoría: pagina internamente (1000 filas/página) hasta agotar.
+ * Sin filtro año/mes/búsqueda — eso se aplica en cliente tras cargar todo.
+ */
+export async function fetchGastosByTipoFullAll(
+  filters: GastosByTipoFullAllFilters,
+  tenantEmpresaId?: string | null,
+  options?: { signal?: AbortSignal },
+): Promise<{ rows: Gasto[]; error: string | null }> {
+  const logPrefix = '[historialFull:gastos]';
+  const pageSize = 1000;
+
+  return devPerfAsync(
+    'fetchGastosByTipoFullAll',
+    async () => {
+      const empresaId = resolveTenantId(tenantEmpresaId);
+      if (!empresaId) return { rows: [], error: 'Sin empresa_id' };
+
+      if (options?.signal?.aborted) {
+        return { rows: [], error: 'Cancelado' };
+      }
+
+      const variants = sqlTipoGastoVariants(filters.tipo_gasto);
+      const orderMode = filters.orderMode ?? 'actividad';
+
+      if (import.meta.env.DEV) {
+        console.info(`${logPrefix} start`, {
+          tipo_gasto: filters.tipo_gasto,
+          pageSize,
+          orderMode,
+        });
+      }
+
+      try {
+        const { rows: rawPages, error: pageError } = await fetchAllSupabasePagesDetailed<Record<string, unknown>>(
+          async (from, to) => {
+            if (options?.signal?.aborted) {
+              return { data: [], error: { message: 'Cancelado' } };
+            }
+
+            let q = supabase
+              .from('gastos')
+              .select('*')
+              .eq('empresa_id', empresaId)
+              .in('tipo_gasto', variants);
+
+            if (orderMode === 'actividad') {
+              q = q
+                .order('revisado_at', { ascending: false, nullsFirst: false })
+                .order('fecha', { ascending: false })
+                .order('id', { ascending: false });
+            } else {
+              q = q.order('fecha', { ascending: false }).order('id', { ascending: false });
+            }
+
+            const { data, error } = await q.range(from, to);
+            return { data: (data ?? []) as Record<string, unknown>[] | null, error };
+          },
+          {
+            label: `fetchGastosByTipoFullAll:${filters.tipo_gasto}`,
+            devLogPrefix: logPrefix,
+            signal: options?.signal,
+          },
+        );
+
+        if (options?.signal?.aborted) {
+          if (import.meta.env.DEV) {
+            console.info(`${logPrefix} finally`, { tipo_gasto: filters.tipo_gasto, reason: 'aborted' });
+          }
+          return { rows: [], error: 'Cancelado' };
+        }
+
+        const rows = mapAndValidateGastosRows(rawPages);
+        const error = pageError ?? null;
+
+        if (import.meta.env.DEV) {
+          if (error) {
+            console.error(`${logPrefix} error`, {
+              tipo_gasto: filters.tipo_gasto,
+              pageSize,
+              rowsFetched: rows.length,
+              error,
+            });
+          } else {
+            console.info(`${logPrefix} done`, {
+              tipo_gasto: filters.tipo_gasto,
+              pageSize,
+              totalRows: rows.length,
+            });
+          }
+        }
+
+        return { rows, error };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (import.meta.env.DEV) {
+          console.error(`${logPrefix} error`, {
+            tipo_gasto: filters.tipo_gasto,
+            pageSize,
+            rowsFetched: 0,
+            error: message,
+          });
+        }
+        return { rows: [], error: message };
+      } finally {
+        if (import.meta.env.DEV) {
+          console.info(`${logPrefix} finally`, { tipo_gasto: filters.tipo_gasto });
+        }
+      }
+    },
+    (r) => ({ tipo: filters.tipo_gasto, rows: r.rows.length, error: r.error }),
+  );
+}
 
 export async function insertGasto(
   row: Omit<Gasto, 'id' | 'createdAt'>,

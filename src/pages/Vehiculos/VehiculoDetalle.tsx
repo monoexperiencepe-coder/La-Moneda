@@ -4,7 +4,9 @@ import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { conductorAsignadoLabel, formatConductorDisplayLabel, ultimoKmPorVehiculo } from '../../utils/fleetPanel';
+import { conductorAsignadoLabel, formatConductorDisplayLabel } from '../../utils/fleetPanel';
+import { formatKmFechaLine, getKmDesdeUltimoMantenimiento } from '../../utils/kmMantenimientoControl';
+import KmMantenimientoResumen from '../../components/operaciones/KmMantenimientoResumen';
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
 import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
@@ -126,7 +128,10 @@ const VehiculoDetalle: React.FC = () => {
   const docForVehicle = vehicle ? pivot.get(vehicle.id) : undefined;
   const docWorst = docRowWorstTone(docForVehicle, DOC_MODULE_COLUMNS);
 
-  const ultimoKm = vehicle ? ultimoKmPorVehiculo(kilometrajes, vehicle.id) : null;
+  const kmResumen = useMemo(
+    () => getKmDesdeUltimoMantenimiento(vid, kilometrajes),
+    [vid, kilometrajes],
+  );
   const conductorActual = vehicle ? conductorAsignadoLabel(conductores, vehicle.id) : '—';
 
   const pendientesVehiculo = useMemo(
@@ -266,10 +271,15 @@ const VehiculoDetalle: React.FC = () => {
                 <p className="text-[10px] text-violet-700 mt-1">Ingresos − gastos operativos + rebajes</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <p className="text-[11px] font-medium text-gray-600">Último km registrado</p>
-                <p className="text-lg font-bold text-gray-900 tabular-nums">{ultimoKm != null ? ultimoKm.toLocaleString('es-PE') : '—'}</p>
+                <p className="text-[11px] font-medium text-gray-600">Último registro</p>
+                <p className="text-lg font-bold text-gray-900 tabular-nums">
+                  {kmResumen.ultimoRegistroKm != null || kmResumen.ultimoRegistroFecha
+                    ? formatKmFechaLine(kmResumen.ultimoRegistroKm, kmResumen.ultimoRegistroFecha)
+                    : 'Sin kilometraje actual registrado'}
+                </p>
               </div>
             </div>
+            <KmMantenimientoResumen data={kmResumen} compact />
             <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3 space-y-2">
               <p className="text-[11px] font-semibold text-sky-950 uppercase tracking-wide">
                 Clasificación financiera (tipo_gasto) — histórico unidad

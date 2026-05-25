@@ -7,11 +7,15 @@ import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import type { KilometrajeRegistro, Vehicle } from '../../data/types';
 import {
   buildKmControlRows,
+  formatKmFechaLine,
+  getKmDesdeUltimoMantenimiento,
   KM_ALERTA_VARIACION_DESDE_MANT,
+  kmMantenimientoStatusLabel,
   tipoMantenimientoDesdeRegistro,
   tipoMantenimientoEtiqueta,
   variacionSuperaUmbralAlerta,
 } from '../../utils/kmMantenimientoControl';
+import KmMantenimientoResumen from './KmMantenimientoResumen';
 import {
   buildKilometrajePayload,
   TIPO_MANTENIMIENTO_OPTIONS,
@@ -92,6 +96,11 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     () => buildKmControlRows(kilometrajes, restrictVehicleId ?? null),
     [kilometrajes, restrictVehicleId],
   );
+
+  const kmResumenUnidad = useMemo(() => {
+    if (restrictVehicleId == null) return null;
+    return getKmDesdeUltimoMantenimiento(restrictVehicleId, kilometrajes);
+  }, [kilometrajes, restrictVehicleId]);
 
   const ultimos = useMemo(() => {
     const base =
@@ -255,20 +264,22 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
         </div>
       </Card>
 
+      {kmResumenUnidad ? <KmMantenimientoResumen data={kmResumenUnidad} /> : null}
+
       <Card
         title="Control KMS (referencia rápida)"
         subtitle={`Variación = km actual − km del último mantenimiento (Simple o Completo). Alerta si ≥ ${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km.`}
       >
         <div className={KM_CONTROL_TABLE_WRAP}>
-          <table className="w-full text-sm min-w-[640px] border-separate border-spacing-0">
+          <table className="w-full text-sm min-w-[720px] border-separate border-spacing-0">
             <thead className={KM_TABLE_HEAD}>
               <tr className="text-xs text-gray-500 uppercase">
                 <th className={`text-left ${KM_TABLE_TH}`}>Unidad</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Km mant.</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Km actual</th>
+                <th className={`text-left ${KM_TABLE_TH}`}>Último mant.</th>
+                <th className={`text-left ${KM_TABLE_TH}`}>Último registro</th>
                 <th className={`text-right ${KM_TABLE_TH}`}>Variación</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Δ días</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Último mant.</th>
+                <th className={`text-right ${KM_TABLE_TH}`}>Estado</th>
+                <th className={`text-right ${KM_TABLE_TH}`}>Tipo mant.</th>
               </tr>
             </thead>
             <tbody>
@@ -280,24 +291,38 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                 </tr>
               ) : (
                 controlKm.map((r) => {
-                  const alerta = variacionSuperaUmbralAlerta(r.variacion);
+                  const alerta = variacionSuperaUmbralAlerta(r.diffKm);
                   return (
                     <tr key={r.vehicleId} className={`border-b border-gray-50 ${alerta ? 'bg-red-50/50' : ''}`}>
-                      <td className="py-2">{getVehicleLabel(r.vehicleId)}</td>
-                      <td className="py-2 text-right tabular-nums">{r.kmMant ?? '—'}</td>
-                      <td className="py-2 text-right tabular-nums">{r.kmUlt ?? '—'}</td>
+                      <td className="py-2 align-top">{getVehicleLabel(r.vehicleId)}</td>
+                      <td className="py-2 align-top text-xs tabular-nums">
+                        {r.ultimoMantenimientoKm != null || r.ultimoMantenimientoFecha
+                          ? formatKmFechaLine(r.ultimoMantenimientoKm, r.ultimoMantenimientoFecha)
+                          : 'Sin mantenimiento registrado'}
+                      </td>
+                      <td className="py-2 align-top text-xs tabular-nums">
+                        {r.ultimoRegistroKm != null || r.ultimoRegistroFecha
+                          ? formatKmFechaLine(r.ultimoRegistroKm, r.ultimoRegistroFecha)
+                          : 'Sin kilometraje actual registrado'}
+                      </td>
                       <td
-                        className={`py-2 text-right tabular-nums font-semibold ${
+                        className={`py-2 text-right tabular-nums font-semibold align-top ${
                           alerta ? 'text-red-700' : 'text-gray-900'
                         }`}
                       >
-                        {r.variacion ?? '—'}
+                        {r.diffKm != null ? `${r.diffKm.toLocaleString('es-PE')} km` : '—'}
                         {alerta ? (
-                          <span className="ml-1 text-[10px] font-bold uppercase text-red-600">¡Alerta!</span>
+                          <span className="ml-1 block text-[10px] font-bold uppercase text-red-600">¡Alerta!</span>
                         ) : null}
                       </td>
-                      <td className="py-2 text-right">{r.dias ?? '—'}</td>
-                      <td className="py-2 text-right">
+                      <td
+                        className={`py-2 text-right text-xs font-semibold align-top ${
+                          alerta ? 'text-red-800' : r.status === 'ok' ? 'text-emerald-800' : 'text-amber-900'
+                        }`}
+                      >
+                        {r.warningMessage ?? kmMantenimientoStatusLabel(r.status)}
+                      </td>
+                      <td className="py-2 text-right align-top">
                         <TipoMantBadge tipo={r.tipoMant} />
                       </td>
                     </tr>

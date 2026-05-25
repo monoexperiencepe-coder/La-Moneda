@@ -18,6 +18,7 @@ import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { REVISION_USER_LABEL } from '../../config/app';
 import {
   DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
+  fetchGastosByTipoFullAll,
   fetchGastosHistorialPage,
   updateGastoCategoriaManual,
 } from '../../services/gastosService';
@@ -303,6 +304,15 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const [historialLoading, setHistorialLoading] = useState(false);
   const [historialRefreshTick, setHistorialRefreshTick] = useState(0);
   const [historialScope, setHistorialScope] = useState<'recent' | 'full'>('recent');
+  const [historialFullRowsByTipo, setHistorialFullRowsByTipo] = useState<Record<string, Gasto[]>>({});
+  const [historialFullLoadedByTipo, setHistorialFullLoadedByTipo] = useState<Record<string, boolean>>({});
+  const [historialFullLoadingByTipo, setHistorialFullLoadingByTipo] = useState<Record<string, boolean>>({});
+  const [historialFullErrorByTipo, setHistorialFullErrorByTipo] = useState<Record<string, string | null>>({});
+  const historialFullAbortRef = useRef<AbortController | null>(null);
+  const historialFullLoadedRef = useRef<Record<string, boolean>>({});
+  const historialFullLoadingRef = useRef<Record<string, boolean>>({});
+  const historialFullRequestIdRef = useRef(0);
+  const [historialFullRetryTick, setHistorialFullRetryTick] = useState(0);
   const [historialSearchInput, setHistorialSearchInput] = useState('');
   const [historialSearchDebounced, setHistorialSearchDebounced] = useState('');
   const [historialPinnedAt, setHistorialPinnedAt] = useState<Map<string, number>>(() => new Map());
@@ -320,10 +330,21 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     setHistorialSearchDebounced('');
     setHistorialPinnedAt(new Map());
     setHistorialPinnedRows(new Map());
+    historialFullAbortRef.current?.abort();
+    historialFullAbortRef.current = null;
+    historialFullRequestIdRef.current += 1;
+    historialFullLoadingRef.current = {};
+    setHistorialFullLoadingByTipo({});
   }, [tab?.tipo_gasto]);
 
   const historialServerSearch =
-    historialScope === 'full' || historialSearchDebounced.length >= 2;
+    historialScope === 'recent' && historialSearchDebounced.length >= 2;
+
+  const activeTipoGasto = tab?.tipo_gasto ?? '';
+  const historialFullRows = activeTipoGasto ? historialFullRowsByTipo[activeTipoGasto] ?? [] : [];
+  const historialFullLoaded = Boolean(activeTipoGasto && historialFullLoadedByTipo[activeTipoGasto]);
+  const historialFullLoading = Boolean(activeTipoGasto && historialFullLoadingByTipo[activeTipoGasto]);
+  const historialFullError = activeTipoGasto ? historialFullErrorByTipo[activeTipoGasto] ?? null : null;
 
   const pinGastoHistorial = useCallback((gasto: Gasto) => {
     const id = String(gasto.id);
@@ -336,6 +357,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   }, [tab?.tipo_gasto, historyYear, historyMonth, filterSubtipoGasto, historialScope, historialSearchDebounced]);
 
   useEffect(() => {
+    if (historialScope === 'full') return;
     if (!tab || gastosDataPending || !tenantEmpresaId) {
       setHistorialRows([]);
       setHistorialTotal(0);
@@ -384,6 +406,81 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     historialSearchDebounced,
     historialServerSearch,
   ]);
+
+  useEffect(() => {
+    historialFullLoadedRef.current = historialFullLoadedByTipo;
+  }, [historialFullLoadedByTipo]);
+
+  useEffect(() => {
+    historialFullLoadingRef.current = historialFullLoadingByTipo;
+  }, [historialFullLoadingByTipo]);
+
+  useEffect(() => {
+    if (historialScope !== 'full' || !tab || gastosDataPending || !tenantEmpresaId) return;
+    const tipo = tab.tipo_gasto;
+    if (historialFullLoadedRef.current[tipo] || historialFullLoadingRef.current[tipo]) return;
+
+    const requestId = ++historialFullRequestIdRef.current;
+    historialFullAbortRef.current?.abort();
+    const ac = new AbortController();
+    historialFullAbortRef.current = ac;
+
+    historialFullLoadingRef.current[tipo] = true;
+    setHistorialFullLoadingByTipo((prev) => ({ ...prev, [tipo]: true }));
+    setHistorialFullErrorByTipo((prev) => ({ ...prev, [tipo]: null }));
+
+    if (import.meta.env.DEV) {
+      console.info('[historialFull:gastos] start', { tipo_gasto: tipo, requestId });
+    }
+
+    void fetchGastosByTipoFullAll(
+      { tipo_gasto: tipo, orderMode: 'actividad' },
+      tenantEmpresaId,
+      { signal: ac.signal },
+    )
+      .then(({ rows, error }) => {
+        if (requestId !== historialFullRequestIdRef.current) return;
+        setHistorialFullRowsByTipo((prev) => ({ ...prev, [tipo]: rows }));
+        if (error && error !== 'Cancelado') {
+          setHistorialFullErrorByTipo((prev) => ({ ...prev, [tipo]: error }));
+          historialFullLoadedRef.current[tipo] = false;
+          setHistorialFullLoadedByTipo((prev) => ({ ...prev, [tipo]: false }));
+          return;
+        }
+        if (ac.signal.aborted || error === 'Cancelado') return;
+        historialFullLoadedRef.current[tipo] = true;
+        setHistorialFullLoadedByTipo((prev) => ({ ...prev, [tipo]: true }));
+      })
+      .catch((err: unknown) => {
+        if (requestId !== historialFullRequestIdRef.current) return;
+        const message = err instanceof Error ? err.message : String(err);
+        if (import.meta.env.DEV) {
+          console.error('[historialFull:gastos] error', { tipo_gasto: tipo, error: message, requestId });
+        }
+        setHistorialFullErrorByTipo((prev) => ({ ...prev, [tipo]: message }));
+        historialFullLoadedRef.current[tipo] = false;
+        setHistorialFullLoadedByTipo((prev) => ({ ...prev, [tipo]: false }));
+      })
+      .finally(() => {
+        if (requestId !== historialFullRequestIdRef.current) return;
+        historialFullLoadingRef.current[tipo] = false;
+        setHistorialFullLoadingByTipo((prev) => ({ ...prev, [tipo]: false }));
+        if (import.meta.env.DEV) {
+          console.info('[historialFull:gastos] finally', { tipo_gasto: tipo, requestId });
+        }
+      });
+
+    return () => {
+      ac.abort();
+    };
+  }, [historialScope, tab, gastosDataPending, tenantEmpresaId, historialFullRetryTick]);
+
+  const historialSourceRows = historialScope === 'full' ? historialFullRows : historialRows;
+  const historialSourceTotal =
+    historialScope === 'full'
+      ? historialFullRows.length
+      : historialTotal;
+  const historialIsLoading = historialScope === 'full' ? historialFullLoading : historialLoading;
 
   const handleGastoDetalleSaved = useCallback(
     (g: Gasto) => {
@@ -618,9 +715,27 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     return `${mesNombre ?? 'Mes'} ${chartYear}`;
   }, [subtipoPeriod, chartYear, chartYearNum, subtipoAggMonth]);
 
+  const historialAvailableYears = useMemo(() => {
+    if (historialScope === 'full') {
+      if (historialFullLoaded && historialFullRows.length > 0) {
+        const ys = new Set<number>();
+        for (const g of historialFullRows) {
+          const y = Number(g.fecha.slice(0, 4));
+          if (Number.isFinite(y) && y >= 1900 && y <= 2100) ys.add(y);
+        }
+        return [...ys].sort((a, b) => b - a);
+      }
+      if (historialFullLoading) return availableYears;
+    }
+    return availableYears;
+  }, [historialScope, historialFullRows, historialFullLoaded, historialFullLoading, availableYears]);
+
   const historyYearOptions = useMemo(
-    () => [{ value: 'ALL', label: 'Todos los años' }, ...yearOptions],
-    [yearOptions],
+    () => [
+      { value: 'ALL', label: 'Todos los años' },
+      ...historialAvailableYears.map((y) => ({ value: String(y), label: String(y) })),
+    ],
+    [historialAvailableYears],
   );
 
   const historyMonthOptions = useMemo(
@@ -651,10 +766,17 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     }
   }, [tab?.tipo_gasto, filterSubtipoGasto]);
 
+  const gastosForSubtipoOptions = useMemo(() => {
+    if (historialScope === 'full' && historialFullLoaded && historialFullRows.length > 0) {
+      return historialFullRows;
+    }
+    return gastosTab;
+  }, [historialScope, historialFullLoaded, historialFullRows, gastosTab]);
+
   const subtipoGastoOptions = useMemo(() => {
     const tipo = tab?.tipo_gasto;
     if (!tipo) return [{ value: '', label: 'Todos subtipo' }];
-    const historicos = collectHistoricosSubtiposForTipoGasto(gastosTab, tipo);
+    const historicos = collectHistoricosSubtiposForTipoGasto(gastosForSubtipoOptions, tipo);
     const merged = mergeSubtiposHistoricosConOficiales(tipo, historicos);
     const seen = new Set<string>();
     const out: { value: string; label: string }[] = [{ value: '', label: 'Todos subtipo' }];
@@ -680,7 +802,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       });
     }
     return out;
-  }, [gastosTab, tab?.tipo_gasto]);
+  }, [gastosForSubtipoOptions, tab?.tipo_gasto]);
 
   const gastoVisibleEnHistorial = useCallback(
     (g: Gasto) => {
@@ -710,7 +832,16 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       }
       return next;
     });
-  }, []);
+    if (activeTipoGasto) {
+      setHistorialFullRowsByTipo((prev) => {
+        const rows = prev[activeTipoGasto];
+        if (!rows?.length) return prev;
+        const nextRows = rows.filter((g) => String(g.id) !== sid);
+        if (nextRows.length === rows.length) return prev;
+        return { ...prev, [activeTipoGasto]: nextRows };
+      });
+    }
+  }, [activeTipoGasto]);
 
   const syncHistorialRowLocal = useCallback(
     (gasto: Gasto) => {
@@ -730,15 +861,57 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         setHistorialTotal((t) => t + 1);
         return [gasto, ...prev];
       });
+      if (activeTipoGasto && historialFullLoadedByTipo[activeTipoGasto]) {
+        setHistorialFullRowsByTipo((prev) => {
+          const rows = prev[activeTipoGasto] ?? [];
+          const idx = rows.findIndex((g) => String(g.id) === id);
+          if (idx >= 0) {
+            const next = [...rows];
+            next[idx] = gasto;
+            return { ...prev, [activeTipoGasto]: next };
+          }
+          return { ...prev, [activeTipoGasto]: [gasto, ...rows] };
+        });
+      }
     },
-    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal, pinGastoHistorial],
+    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal, pinGastoHistorial, activeTipoGasto, historialFullLoadedByTipo],
   );
 
   const loadHistorialCompleto = useCallback(() => {
+    if (!tab) return;
+    setHistorialFullErrorByTipo((prev) => ({ ...prev, [tab.tipo_gasto]: null }));
     setHistorialScope('full');
     setHistorialPage(0);
+    setHistoryYear('ALL');
+    setHistoryMonth('ALL');
+  }, [tab]);
+
+  const retryHistorialFull = useCallback(() => {
+    if (!tab) return;
+    const tipo = tab.tipo_gasto;
+    historialFullLoadedRef.current[tipo] = false;
+    historialFullLoadingRef.current[tipo] = false;
+    setHistorialFullLoadedByTipo((prev) => ({ ...prev, [tipo]: false }));
+    setHistorialFullLoadingByTipo((prev) => ({ ...prev, [tipo]: false }));
+    setHistorialFullErrorByTipo((prev) => ({ ...prev, [tipo]: null }));
+    historialFullAbortRef.current?.abort();
+    historialFullAbortRef.current = null;
+    historialFullRequestIdRef.current += 1;
+    setHistorialFullRetryTick((n) => n + 1);
+  }, [tab]);
+
+  const volverHistorialVistaRapida = useCallback(() => {
+    historialFullAbortRef.current?.abort();
+    historialFullAbortRef.current = null;
+    historialFullRequestIdRef.current += 1;
+    if (activeTipoGasto) {
+      historialFullLoadingRef.current[activeTipoGasto] = false;
+      setHistorialFullLoadingByTipo((prev) => ({ ...prev, [activeTipoGasto]: false }));
+    }
+    setHistorialScope('recent');
+    setHistorialPage(0);
     bumpHistorial();
-  }, [bumpHistorial]);
+  }, [bumpHistorial, activeTipoGasto]);
 
   useEffect(() => {
     return subscribeGastoHistorialSync((event) => {
@@ -769,8 +942,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       const at = historialPinnedAt.get(id);
       if (at != null) pinsAt.set(id, at);
     }
-    return mergeHistorialRowsWithPins(historialRows, pinsForTab, pinsAt);
-  }, [historialRows, historialPinnedRows, historialPinnedAt, tab, gastoVisibleEnHistorial]);
+    return mergeHistorialRowsWithPins(historialSourceRows, pinsForTab, pinsAt);
+  }, [historialSourceRows, historialPinnedRows, historialPinnedAt, tab, gastoVisibleEnHistorial]);
 
   const historialRowsDisplayed = useMemo(() => {
     if (filterSubtipoGasto !== SUBTIPO_FILTRO_PRESTAMO_FUSION) return historialRowsMerged;
@@ -1636,23 +1809,64 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Movimientos</p>
             <h2 className="text-base font-semibold tracking-tight text-slate-900">Historial · {tab.label}</h2>
-            {historialTotal > 0 ? (
+            {historialSourceTotal > 0 || historialFullLoaded ? (
               <p className="mt-0.5 text-[11px] text-slate-500">
-                {historialTotal} registro{historialTotal === 1 ? '' : 's'} en esta categoría
-                {historialScope === 'full' ? ' · historial completo' : ' · carga paginada'}
+                {historialScope === 'full' && historialFullLoaded
+                  ? `${historialFullRows.length} registro${historialFullRows.length === 1 ? '' : 's'} cargados de esta categoría · viendo historial completo`
+                  : `${historialSourceTotal} registro${historialSourceTotal === 1 ? '' : 's'} en esta categoría · carga paginada`}
               </p>
+            ) : null}
+            {historialFullError ? (
+              <p className="mt-0.5 text-[11px] text-amber-800">{historialFullError}</p>
+            ) : historialScope === 'full' && historialFullLoading ? (
+              <p className="mt-0.5 text-[11px] text-slate-500">Cargando años históricos…</p>
             ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-end [&_.label]:mb-0.5 [&_.label]:text-[10px] [&_.label]:font-semibold [&_.label]:text-slate-600">
-            <Button
-              type="button"
-              variant={historialScope === 'full' ? 'primary' : 'secondary'}
-              className="!text-xs !py-2 !px-3 shrink-0"
-              onClick={loadHistorialCompleto}
-              disabled={historialLoading || historialScope === 'full'}
-            >
-              {historialScope === 'full' ? 'Historial completo activo' : 'Ver historial completo'}
-            </Button>
+            {historialScope === 'full' ? (
+              <>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="!text-xs !py-2 !px-3 shrink-0"
+                  disabled
+                >
+                  {historialFullLoading
+                    ? 'Cargando historial completo…'
+                    : historialFullLoaded
+                      ? 'Viendo historial completo'
+                      : 'Preparando historial completo…'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs !py-2 !px-3 shrink-0"
+                  onClick={volverHistorialVistaRapida}
+                >
+                  Vista rápida
+                </Button>
+                {historialFullError && !historialFullLoading ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs !py-2 !px-3 shrink-0"
+                    onClick={retryHistorialFull}
+                  >
+                    Reintentar
+                  </Button>
+                ) : null}
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs !py-2 !px-3 shrink-0"
+                onClick={loadHistorialCompleto}
+                disabled={historialIsLoading || !tab}
+              >
+                Ver historial completo
+              </Button>
+            )}
             <div className="w-full min-w-0 sm:w-[7.5rem]">
               <Select
                 label="Historial — año"
@@ -1679,15 +1893,32 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             </div>
           </div>
         </div>
-        {historialLoading ? (
+        {historialFullError && historialScope === 'full' && !historialFullLoading ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-8 text-center">
+            <p className="text-sm font-semibold text-amber-950">No se pudo cargar el historial completo</p>
+            <p className="mt-1 text-xs text-amber-900">{historialFullError}</p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <Button type="button" variant="primary" className="!text-xs !py-2 !px-3" onClick={retryHistorialFull}>
+                Reintentar
+              </Button>
+              <Button type="button" variant="secondary" className="!text-xs !py-2 !px-3" onClick={volverHistorialVistaRapida}>
+                Volver a vista rápida
+              </Button>
+            </div>
+          </div>
+        ) : historialIsLoading ? (
           <div className="relative min-h-[240px] rounded-xl border border-slate-200 bg-white">
             <LoadingOverlay
               active
-              message="Cargando historial…"
-              submessage="Consultando registros en Supabase"
+              message={historialScope === 'full' ? 'Cargando historial completo…' : 'Cargando historial…'}
+              submessage={
+                historialScope === 'full'
+                  ? 'Descargando todos los registros de esta categoría'
+                  : 'Consultando registros en Supabase'
+              }
             />
           </div>
-        ) : historialTotal === 0 ? (
+        ) : historialSourceTotal === 0 && !(historialScope === 'full' && historialFullLoading) ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-10 text-center text-xs text-slate-600">
             {gastosHistorialEmptyHint}
           </div>
@@ -1706,23 +1937,28 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             onGastoDetalleSaved={canEditFinances ? handleGastoDetalleSaved : undefined}
             preserveServerOrder
             recentlyReclassifiedAt={historialPinnedAt}
+            fullHistoryView={historialScope === 'full' && historialFullLoaded}
             serverHistorialSearch={{
               query: historialSearchInput,
               onQueryChange: (q) => {
                 setHistorialSearchInput(q);
-                setHistorialPage(0);
+                if (historialScope === 'recent') setHistorialPage(0);
               },
               serverSide: historialServerSearch,
               scopeRecent: historialScope === 'recent',
-              totalInCategory: historialTotal,
+              totalInCategory: historialSourceTotal,
             }}
-            serverPagination={{
-              total: historialTotal,
-              page: historialPage,
-              pageSize: DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
-              onPageChange: setHistorialPage,
-              loading: historialLoading,
-            }}
+            {...(historialScope === 'recent'
+              ? {
+                  serverPagination: {
+                    total: historialTotal,
+                    page: historialPage,
+                    pageSize: DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
+                    onPageChange: setHistorialPage,
+                    loading: historialLoading,
+                  },
+                }
+              : {})}
           />
         )}
       </div>

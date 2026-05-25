@@ -1,5 +1,5 @@
 import type { KilometrajeRegistro } from '../data/types';
-import { todayStr } from './formatting';
+import { formatDate, todayStr } from './formatting';
 import { vehicleIdSortRank } from './sortByVehicle';
 
 function diffDaysFromToday(dateStr: string): number {
@@ -13,17 +13,35 @@ export const KM_ALERTA_VARIACION_DESDE_MANT = 5000;
 
 export type TipoMantenimientoKm = 'Simple' | 'Completo';
 
-export interface KmControlRow {
+export type KmMantenimientoStatus = 'ok' | 'alerta' | 'sin_mantenimiento' | 'sin_registro_actual';
+
+export interface KmDesdeUltimoMantenimientoResult {
   vehicleId: number;
-  kmMant: number | null;
-  kmUlt: number | null;
-  fMant: string | null;
-  fUlt: string | null;
-  variacion: number | null;
-  dias: number | null;
-  /** Tipo del último mantenimiento registrado; null si solo hay lecturas semanales. */
+  ultimoMantenimientoKm: number | null;
+  ultimoMantenimientoFecha: string | null;
+  ultimoRegistroKm: number | null;
+  ultimoRegistroFecha: string | null;
+  diffKm: number | null;
+  status: KmMantenimientoStatus;
+  warningMessage: string | null;
+  /** Tipo del último mantenimiento registrado. */
   tipoMant: TipoMantenimientoKm | null;
   alertaVariacion: boolean;
+}
+
+export interface KmControlRow extends KmDesdeUltimoMantenimientoResult {
+  /** @deprecated usar ultimoMantenimientoKm */
+  kmMant: number | null;
+  /** @deprecated usar ultimoRegistroKm */
+  kmUlt: number | null;
+  /** @deprecated usar ultimoMantenimientoFecha */
+  fMant: string | null;
+  /** @deprecated usar ultimoRegistroFecha */
+  fUlt: string | null;
+  /** @deprecated usar diffKm */
+  variacion: number | null;
+  /** Días entre fechas mantenimiento y último registro (referencia). */
+  dias: number | null;
 }
 
 function sortRowsChrono(rows: KilometrajeRegistro[]): KilometrajeRegistro[] {
@@ -68,11 +86,162 @@ export function variacionSuperaUmbralAlerta(variacion: number | null): boolean {
   return variacion != null && Number.isFinite(variacion) && variacion >= KM_ALERTA_VARIACION_DESDE_MANT;
 }
 
+function logKmMantenimientoDev(result: KmDesdeUltimoMantenimientoResult): void {
+  if (!import.meta.env.DEV) return;
+  console.info('[km:mantenimiento]', {
+    vehicle_id: result.vehicleId,
+    ultimoMantenimientoKm: result.ultimoMantenimientoKm,
+    ultimoMantenimientoFecha: result.ultimoMantenimientoFecha,
+    ultimoRegistroKm: result.ultimoRegistroKm,
+    ultimoRegistroFecha: result.ultimoRegistroFecha,
+    diffKm: result.diffKm,
+    status: result.status,
+  });
+}
+
+function findUltimoMantenimiento(sorted: KilometrajeRegistro[]): {
+  km: number | null;
+  fecha: string | null;
+  tipo: TipoMantenimientoKm | null;
+} {
+  for (const r of sorted) {
+    if (!esRegistroMantenimiento(r)) continue;
+    return {
+      km: r.kmMantenimiento ?? r.kilometraje ?? null,
+      fecha: r.fecha.slice(0, 10),
+      tipo: tipoMantenimientoDesdeRegistro(r),
+    };
+  }
+  return { km: null, fecha: null, tipo: null };
+}
+
 /**
- * Control KMS por vehículo:
- * - km actual = última lectura de odómetro (por fecha)
- * - km mant. = último registro de mantenimiento (simple/completo), no el máximo histórico
- * - variación = km actual − km del último mantenimiento
+ * Última lectura actual:
+ * - Si hay mantenimiento y el último registro semanal es en/fecha posterior → ese.
+ * - Si no hay semanal posterior → el kilometraje más reciente disponible (cualquier fila).
+ */
+function findUltimoRegistroActual(
+  sorted: KilometrajeRegistro[],
+  mantFecha: string | null,
+): { km: number | null; fecha: string | null } {
+  let latestWeekly: KilometrajeRegistro | null = null;
+  for (const r of sorted) {
+    if (esRegistroMantenimiento(r)) continue;
+    if (r.kilometraje == null || !Number.isFinite(r.kilometraje)) continue;
+    latestWeekly = r;
+    break;
+  }
+
+  if (mantFecha && latestWeekly) {
+    const weeklyDate = latestWeekly.fecha.slice(0, 10);
+    if (weeklyDate >= mantFecha) {
+      return { km: latestWeekly.kilometraje, fecha: weeklyDate };
+    }
+  }
+
+  for (const r of sorted) {
+    if (r.kilometraje == null || !Number.isFinite(r.kilometraje)) continue;
+    return { km: r.kilometraje, fecha: r.fecha.slice(0, 10) };
+  }
+
+  if (!mantFecha && latestWeekly) {
+    return { km: latestWeekly.kilometraje, fecha: latestWeekly.fecha.slice(0, 10) };
+  }
+
+  return { km: null, fecha: null };
+}
+
+function resolveStatus(
+  mantKm: number | null,
+  regKm: number | null,
+  diffKm: number | null,
+): Pick<KmDesdeUltimoMantenimientoResult, 'status' | 'warningMessage' | 'alertaVariacion'> {
+  if (mantKm == null) {
+    return {
+      status: 'sin_mantenimiento',
+      warningMessage: 'Sin mantenimiento registrado',
+      alertaVariacion: false,
+    };
+  }
+  if (regKm == null) {
+    return {
+      status: 'sin_registro_actual',
+      warningMessage: 'Sin kilometraje actual registrado',
+      alertaVariacion: false,
+    };
+  }
+  if (variacionSuperaUmbralAlerta(diffKm)) {
+    return {
+      status: 'alerta',
+      warningMessage: 'Rojo / requiere mantenimiento',
+      alertaVariacion: true,
+    };
+  }
+  return { status: 'ok', warningMessage: null, alertaVariacion: false };
+}
+
+/** Calcula km/fechas/variación desde registros de un vehículo. */
+export function computeKmDesdeUltimoMantenimiento(
+  vehicleId: number,
+  rows: KilometrajeRegistro[],
+): KmDesdeUltimoMantenimientoResult {
+  const sorted = sortRowsChrono(rows);
+  const mant = findUltimoMantenimiento(sorted);
+  const reg = findUltimoRegistroActual(sorted, mant.fecha);
+  const diffKm =
+    reg.km != null && mant.km != null && Number.isFinite(reg.km) && Number.isFinite(mant.km)
+      ? reg.km - mant.km
+      : null;
+  const { status, warningMessage, alertaVariacion } = resolveStatus(mant.km, reg.km, diffKm);
+
+  const result: KmDesdeUltimoMantenimientoResult = {
+    vehicleId,
+    ultimoMantenimientoKm: mant.km,
+    ultimoMantenimientoFecha: mant.fecha,
+    ultimoRegistroKm: reg.km,
+    ultimoRegistroFecha: reg.fecha,
+    diffKm,
+    status,
+    warningMessage,
+    tipoMant: mant.tipo,
+    alertaVariacion,
+  };
+
+  logKmMantenimientoDev(result);
+  return result;
+}
+
+/** API principal: km desde último mantenimiento para un vehículo. */
+export function getKmDesdeUltimoMantenimiento(
+  vehicleId: number,
+  kilometrajes: KilometrajeRegistro[],
+): KmDesdeUltimoMantenimientoResult {
+  const rows = kilometrajes.filter((r) => Number(r.vehicleId) === Number(vehicleId));
+  return computeKmDesdeUltimoMantenimiento(vehicleId, rows);
+}
+
+function toKmControlRow(result: KmDesdeUltimoMantenimientoResult): KmControlRow {
+  const dias =
+    result.ultimoMantenimientoFecha && result.ultimoRegistroFecha
+      ? Math.abs(
+          diffDaysFromToday(result.ultimoMantenimientoFecha) -
+            diffDaysFromToday(result.ultimoRegistroFecha),
+        )
+      : null;
+
+  return {
+    ...result,
+    kmMant: result.ultimoMantenimientoKm,
+    kmUlt: result.ultimoRegistroKm,
+    fMant: result.ultimoMantenimientoFecha,
+    fUlt: result.ultimoRegistroFecha,
+    variacion: result.diffKm,
+    dias,
+  };
+}
+
+/**
+ * Control KMS por vehículo (tabla / alertas).
  */
 export function buildKmControlRows(
   kilometrajes: KilometrajeRegistro[],
@@ -90,45 +259,38 @@ export function buildKmControlRows(
   );
   entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
 
-  return entries.map(([vehicleId, rows]) => {
-    const sorted = sortRowsChrono(rows);
+  return entries.map(([vehicleId, rows]) => toKmControlRow(computeKmDesdeUltimoMantenimiento(vehicleId, rows)));
+}
 
-    let kmMant: number | null = null;
-    let fMant: string | null = null;
-    let tipoMant: TipoMantenimientoKm | null = null;
+/** Línea compacta «100,000 km · 12/04/2026». */
+export function formatKmFechaLine(km: number | null, fecha: string | null): string {
+  if (km == null && !fecha) return '—';
+  const kmPart = km != null ? `${km.toLocaleString('es-PE')} km` : '—';
+  const fechaPart = fecha ? formatDate(fecha) : '—';
+  if (km == null) return fechaPart;
+  if (!fecha) return kmPart;
+  return `${kmPart} · ${fechaPart}`;
+}
 
-    for (const r of sorted) {
-      if (!esRegistroMantenimiento(r)) continue;
-      kmMant = r.kmMantenimiento ?? r.kilometraje ?? null;
-      fMant = r.fecha;
-      tipoMant = tipoMantenimientoDesdeRegistro(r);
-      break;
-    }
+export function kmMantenimientoStatusLabel(status: KmMantenimientoStatus): string {
+  switch (status) {
+    case 'alerta':
+      return 'Rojo / requiere mantenimiento';
+    case 'sin_mantenimiento':
+      return 'Sin mantenimiento registrado';
+    case 'sin_registro_actual':
+      return 'Sin kilometraje actual registrado';
+    default:
+      return 'Al día';
+  }
+}
 
-    let kmUlt: number | null = null;
-    let fUlt: string | null = null;
-    for (const r of sorted) {
-      if (r.kilometraje != null && Number.isFinite(r.kilometraje)) {
-        kmUlt = r.kilometraje;
-        fUlt = r.fecha;
-        break;
-      }
-    }
-
-    const variacion = kmUlt != null && kmMant != null ? kmUlt - kmMant : null;
-    const dias = fMant && fUlt ? Math.abs(diffDaysFromToday(fMant) - diffDaysFromToday(fUlt)) : null;
-    const alertaVariacion = variacionSuperaUmbralAlerta(variacion);
-
-    return {
-      vehicleId,
-      kmMant,
-      kmUlt,
-      fMant,
-      fUlt,
-      variacion,
-      dias,
-      tipoMant,
-      alertaVariacion,
-    };
-  });
+/** Detalle para alertas operativas (incluye fechas). */
+export function kmMantenimientoAlertDetail(r: KmDesdeUltimoMantenimientoResult): string {
+  if (r.status === 'sin_mantenimiento') return r.warningMessage ?? 'Sin mantenimiento registrado';
+  if (r.status === 'sin_registro_actual') return r.warningMessage ?? 'Sin kilometraje actual registrado';
+  const diff = r.diffKm != null ? `+${r.diffKm.toLocaleString('es-PE')} km` : '—';
+  const mant = formatKmFechaLine(r.ultimoMantenimientoKm, r.ultimoMantenimientoFecha);
+  const act = formatKmFechaLine(r.ultimoRegistroKm, r.ultimoRegistroFecha);
+  return `Variación ${diff} desde mant. (${mant}) · último registro ${act} (≥${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km)`;
 }

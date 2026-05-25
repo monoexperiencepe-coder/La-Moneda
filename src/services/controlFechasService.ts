@@ -3,6 +3,7 @@ import { EMPRESA_ID } from '../config/app';
 import { controlFechaToInsert, mapControlFechaRow } from './supabaseMappers';
 import type { ControlFecha } from '../data/types';
 import { devPerfAsync } from '../utils/devPerf';
+import { fetchAllSupabasePagesDetailed } from './supabaseRangeFetch';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -87,6 +88,88 @@ export async function fetchControlFechasHistoryPage(
 
 export function getDefaultControlFechasHistoryPageSize(): number {
   return DEFAULT_HISTORY_PAGE_SIZE;
+}
+
+/**
+ * Historial documentario completo: pagina internamente (1000 filas/página) hasta agotar.
+ * Bajo demanda — sin filtros; filtros y búsqueda en cliente tras cargar.
+ */
+export async function fetchDocumentacionFullAll(
+  tenantEmpresaId?: string | null,
+  options?: { signal?: AbortSignal },
+): Promise<{ rows: ControlFecha[]; error: string | null }> {
+  const logPrefix = '[historialFull:documentacion]';
+  const pageSize = 1000;
+
+  return devPerfAsync(
+    'fetchDocumentacionFullAll',
+    async () => {
+      const empresaId = resolveTenantId(tenantEmpresaId);
+      if (!empresaId) return { rows: [], error: 'Sin empresa_id' };
+
+      if (options?.signal?.aborted) {
+        return { rows: [], error: 'Cancelado' };
+      }
+
+      if (import.meta.env.DEV) {
+        console.info(`${logPrefix} start`, { pageSize, empresaId });
+      }
+
+      try {
+        const { rows: rawPages, error: pageError } = await fetchAllSupabasePagesDetailed<Record<string, unknown>>(
+          async (from, to) => {
+            if (options?.signal?.aborted) {
+              return { data: [], error: { message: 'Cancelado' } };
+            }
+
+            const { data, error } = await supabase
+              .from('control_fechas')
+              .select('*')
+              .eq('empresa_id', empresaId)
+              .order('vehicle_id', { ascending: true, nullsFirst: false })
+              .order('fecha_vencimiento', { ascending: false })
+              .order('id', { ascending: false })
+              .range(from, to);
+
+            return { data: (data ?? []) as Record<string, unknown>[] | null, error };
+          },
+          {
+            label: 'fetchDocumentacionFullAll',
+            devLogPrefix: logPrefix,
+            signal: options?.signal,
+          },
+        );
+
+        if (options?.signal?.aborted) {
+          return { rows: [], error: 'Cancelado' };
+        }
+
+        const rows = (rawPages ?? []).map((r) => mapControlFechaRow(r));
+        const error = pageError ?? null;
+
+        if (import.meta.env.DEV) {
+          if (error) {
+            console.error(`${logPrefix} error`, { pageSize, rowsFetched: rows.length, error });
+          } else {
+            console.info(`${logPrefix} done`, { pageSize, totalRows: rows.length });
+          }
+        }
+
+        return { rows, error };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (import.meta.env.DEV) {
+          console.error(`${logPrefix} error`, { pageSize, rowsFetched: 0, error: message });
+        }
+        return { rows: [], error: message };
+      } finally {
+        if (import.meta.env.DEV) {
+          console.info(`${logPrefix} finally`);
+        }
+      }
+    },
+    (r) => ({ rows: r.rows.length, error: r.error }),
+  );
 }
 
 export async function insertControlFecha(

@@ -342,7 +342,7 @@ const Documentacion: React.FC = () => {
       </div>
 
       <div id="registro-vencimiento-supabase" className="scroll-mt-24">
-        <ControlFechaRegistroPanel />
+        <ControlFechaRegistroPanel historialSearchMode="documentacion" />
       </div>
     </div>
   );
