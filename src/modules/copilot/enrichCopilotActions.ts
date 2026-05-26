@@ -24,7 +24,7 @@ function extractMonth(text: string): string | null {
     'diciembre',
   ];
   const lower = text.toLowerCase();
-  const idx = months.findIndex((mo) => lower.includes(mo));
+  const idx = months.findIndex((mo) => new RegExp(`\\b${mo}\\b`, 'i').test(lower));
   if (idx >= 0) return String(idx + 1).padStart(2, '0');
   const mm = lower.match(/\b(0?[1-9]|1[0-2])\b/);
   return mm?.[1] ? String(mm[1]).padStart(2, '0') : null;
@@ -100,8 +100,8 @@ export function enrichCopilotSuggestedActions(opts: {
     if (probe.ok) {
       actions.push(
         makeNavigateAction(
-          year ? `Abrir ingresos ${year}` : 'Abrir ingresos',
-          year ? `Ver ingresos del año ${year} con filtros aplicados.` : 'Ver listado de ingresos.',
+          year ? `Ver ingresos del ${year}` : 'Ver ingresos',
+          year ? `Resumen de ingresos del ${year}` : 'Ver listado de ingresos.',
           'navigate_ingresos',
           params,
         ),
@@ -127,8 +127,8 @@ export function enrichCopilotSuggestedActions(opts: {
     if (probe.ok) {
       actions.push(
         makeNavigateAction(
-          year ? `Abrir gastos ${year}` : 'Abrir gastos',
-          'Ver gastos con filtros aplicados en pantalla.',
+          year ? `Ver gastos del ${year}` : 'Ver gastos',
+          'Ver gastos con filtros aplicados.',
           'navigate_gastos',
           params,
         ),
@@ -142,8 +142,8 @@ export function enrichCopilotSuggestedActions(opts: {
     if (probe.ok) {
       actions.push(
         makeNavigateAction(
-          'Abrir inversiones',
-          'Ver inversiones generales por vehículo.',
+          'Ver inversiones',
+          'Ver inversiones en activos por vehículo.',
           'navigate_inversiones_generales',
           params,
         ),

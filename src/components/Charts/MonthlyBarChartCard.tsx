@@ -75,7 +75,7 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
         )}
       </div>
       <div className="h-[260px] sm:h-[280px]">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
           <BarChart data={chartData} margin={{ top: 28, right: 8, left: 4, bottom: 4 }} barCategoryGap="18%">
             <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
             <XAxis

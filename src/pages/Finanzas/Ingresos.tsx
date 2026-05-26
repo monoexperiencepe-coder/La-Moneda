@@ -16,6 +16,9 @@ import {
 } from '../../utils/ingresoAlcance';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
+import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
+import type { CopilotFocusSpec } from '../../modules/copilot/copilotFocusTarget';
+import type { NarrativeStep } from '../../modules/copilot/navigationNarrative';
 
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
@@ -49,17 +52,20 @@ const Ingresos: React.FC = () => {
   useEffect(() => {
     const y = searchParams.get('year');
     const m = searchParams.get('month');
+    const hm = searchParams.get('highlightMonth');
     if (y && /^\d{4}$/.test(y)) {
       setHistoryYear(y);
       setChartYear(y);
     }
     if (m && /^(0?[1-9]|1[0-2])$/.test(m)) {
-      setHistoryMonth(String(m).padStart(2, '0'));
+      const mm = String(m).padStart(2, '0');
+      setHistoryMonth(mm);
+      setChartMonth(mm);
     }
-    if (y || m) {
-      requestAnimationFrame(() =>
-        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-      );
+    if (hm && /^(0?[1-9]|1[0-2])$/.test(hm)) {
+      const mm = String(hm).padStart(2, '0');
+      setChartMonth(mm);
+      if (y && /^\d{4}$/.test(y)) setChartYear(y);
     }
   }, [searchParams]);
 
@@ -99,6 +105,36 @@ const Ingresos: React.FC = () => {
   const [historyMonth, setHistoryMonth] = useState<string>('ALL');
   const [animatedTotal, setAnimatedTotal] = useState(0);
   const prevTotalRef = useRef(0);
+
+  const applyNarrativeFilters = useCallback((step: NarrativeStep) => {
+    if (step.applyYear != null) {
+      const y = String(step.applyYear);
+      setChartYear(y);
+      setHistoryYear(y);
+    }
+    if (step.applyMonth != null) {
+      const mm = String(step.applyMonth).padStart(2, '0');
+      setChartMonth(mm);
+      setHistoryMonth(mm);
+    }
+  }, []);
+
+  useCopilotNarrativeNavigation({
+    resolveTarget: (step) => {
+      if (step.target === 'copilot-income-summary' || step.target === '#copilot-income-summary') {
+        return document.getElementById('copilot-income-summary');
+      }
+      return document.getElementById(step.target.replace(/^#/, ''));
+    },
+    resolveTargetFromSpec: (spec: CopilotFocusSpec) => {
+      if (spec.scrollTarget === 'income-summary' || spec.highlightMonth) {
+        return document.getElementById('copilot-income-summary');
+      }
+      return document.getElementById('copilot-scroll-target');
+    },
+    onApplyFilters: applyNarrativeFilters,
+    deps: [chartYear, chartMonth, ingresos.length],
+  });
 
   useEffect(() => {
     if (availableYears.length === 0) {
@@ -479,7 +515,7 @@ const Ingresos: React.FC = () => {
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_28px_56px_-28px_rgba(15,23,42,0.18)]">
+      <div id="copilot-income-summary" className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_28px_56px_-28px_rgba(15,23,42,0.18)]">
         <div
           className="h-1 w-full bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-800"
           aria-hidden

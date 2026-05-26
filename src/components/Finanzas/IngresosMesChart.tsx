@@ -20,8 +20,9 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
   const gradId = `ingresoBar-${gid}`;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart
+    <div className="h-full w-full min-h-[1px] min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
+        <BarChart
         data={chartData}
         margin={{
           top: 6,
@@ -78,6 +79,7 @@ const IngresosMesChart: React.FC<IngresosMesChartProps> = ({
         />
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 };
 

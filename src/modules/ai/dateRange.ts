@@ -8,6 +8,8 @@ export type AiDateRange = {
   label: string;
 };
 
+const YEAR_PARAM_KEYS = ['anio', 'year', 'año'] as const;
+
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -25,19 +27,77 @@ function startOfWeek(d: Date): Date {
   return copy;
 }
 
+export function parseYearValue(v: unknown): number | null {
+  if (v == null || v === '') return null;
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n) || n < 2000 || n > 2100) return null;
+  return n;
+}
+
+/** Extrae año de args de tool (anio, year, año o periodo="2025"). */
+export function extractYearFromToolArgs(args: Record<string, unknown>): number | null {
+  for (const key of YEAR_PARAM_KEYS) {
+    const y = parseYearValue(args[key]);
+    if (y != null) return y;
+  }
+  if (typeof args.periodo === 'string') {
+    const p = args.periodo.trim();
+    if (/^\d{4}$/.test(p)) return parseYearValue(p);
+  }
+  return null;
+}
+
+/**
+ * Normaliza parámetros de periodo antes de resolver el rango.
+ * Si el usuario pidió un año explícito, fuerza calendario completo YYYY
+ * e ignora periodo activo, presets y fechas parciales del modelo.
+ */
+export function normalizePeriodParams(
+  args: Record<string, unknown>,
+  explicitYearFromMessage?: number | null,
+): Record<string, unknown> {
+  const out = { ...args };
+  const yearFromArgs = extractYearFromToolArgs(out);
+  const forcedYear = explicitYearFromMessage ?? yearFromArgs;
+
+  if (forcedYear != null) {
+    out.anio = forcedYear;
+    delete out.year;
+    delete out.año;
+    delete out.periodo;
+    delete out.desde;
+    delete out.hasta;
+    return out;
+  }
+
+  const mapped =
+    parseYearValue(out.anio) ?? parseYearValue(out.year) ?? parseYearValue(out.año);
+  if (mapped != null) {
+    out.anio = mapped;
+    delete out.year;
+    delete out.año;
+    if (typeof out.periodo === 'string' && /^\d{4}$/.test(out.periodo.trim())) {
+      delete out.periodo;
+    }
+  }
+
+  return out;
+}
+
 export function resolveAiDateRange(args: {
   periodo?: string | null;
   desde?: string | null;
   hasta?: string | null;
-  /** Año concreto (ej: 2024). Tiene prioridad si se proporciona y difiere del año actual. */
   anio?: number | string | null;
+  year?: number | string | null;
+  año?: number | string | null;
 }): AiDateRange {
+  const normalized = normalizePeriodParams(args as Record<string, unknown>);
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // If a specific year is provided, use its full range
-  const targetYear = args.anio != null ? Math.trunc(Number(args.anio)) : null;
-  if (targetYear != null && Number.isFinite(targetYear) && targetYear >= 2000 && targetYear <= currentYear + 1) {
+  const targetYear = parseYearValue(normalized.anio);
+  if (targetYear != null && targetYear >= 2000 && targetYear <= currentYear + 1) {
     const isCurrentYear = targetYear === currentYear;
     return {
       desde: `${targetYear}-01-01`,
@@ -46,13 +106,13 @@ export function resolveAiDateRange(args: {
     };
   }
 
-  const preset = (args.periodo ?? 'month').trim().toLowerCase() as AiPeriodPreset;
+  const preset = (normalized.periodo ?? 'month').toString().trim().toLowerCase() as AiPeriodPreset;
 
-  if (preset === 'custom' && args.desde && args.hasta) {
+  if (preset === 'custom' && normalized.desde && normalized.hasta) {
     return {
-      desde: args.desde.slice(0, 10),
-      hasta: args.hasta.slice(0, 10),
-      label: `${args.desde.slice(0, 10)} → ${args.hasta.slice(0, 10)}`,
+      desde: String(normalized.desde).slice(0, 10),
+      hasta: String(normalized.hasta).slice(0, 10),
+      label: `${String(normalized.desde).slice(0, 10)} → ${String(normalized.hasta).slice(0, 10)}`,
     };
   }
 
@@ -72,6 +132,25 @@ export function resolveAiDateRange(args: {
 
   const desde = `${currentYear}-${pad(now.getMonth() + 1)}-01`;
   return { desde, hasta, label: 'Este mes' };
+}
+
+export function resolveToolDateRange(
+  rawArgs: Record<string, unknown>,
+  opts?: { explicitYearFromMessage?: number | null },
+): AiDateRange {
+  const requested =
+    opts?.explicitYearFromMessage ?? extractYearFromToolArgs(rawArgs) ?? null;
+  const normalized = normalizePeriodParams(rawArgs, opts?.explicitYearFromMessage);
+  const resolved = parseYearValue(normalized.anio);
+  const range = resolveAiDateRange(normalized);
+
+  if (import.meta.env.DEV) {
+    console.log('[tool:year-requested]', `requested=${requested ?? 'none'}`);
+    console.log('[tool:year-resolved]', `resolved=${resolved ?? 'none'}`);
+    console.log('[tool:date-range]', `range=${range.desde} → ${range.hasta}`);
+  }
+
+  return range;
 }
 
 export function filterByDateRange<T extends { fecha: string }>(

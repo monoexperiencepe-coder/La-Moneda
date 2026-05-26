@@ -113,6 +113,7 @@ const FloatingRegistrosMenu: React.FC = () => {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={open ? 'Cerrar menú de registros' : 'Abrir menú de registros'}
+        data-fab="registros-principal"
         className={`
           fixed bottom-6 right-4 z-[40] flex h-14 w-14 items-center justify-center rounded-full
           text-white shadow-lg shadow-slate-900/25 transition-all duration-200

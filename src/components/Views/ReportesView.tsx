@@ -103,7 +103,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuento
       {/* Monthly performance chart */}
       <Card title="Rendimiento Mensual" subtitle="Ingresos, gastos y margen por mes">
         <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
             <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
@@ -125,7 +125,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({ ingresos, gastos, descuento
       {/* Gastos por categoría */}
       <Card title="Gastos por Categoría" subtitle="Total acumulado por tipo de gasto">
         <div className="h-52">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
             <BarChart data={gastosPorCategoria} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}

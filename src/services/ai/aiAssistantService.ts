@@ -2,7 +2,10 @@ import { supabase } from '../../lib/supabase';
 import { buildAiSystemPrompt } from '../../modules/ai/prompts';
 import { canExecuteAiTool } from '../../modules/ai/permissions';
 import { executeAiTool, type AiToolContext } from '../../modules/ai/tools/runner';
-import { parseAiAssistantText } from '../../utils/aiResponseParser';
+import {
+  parseAiAssistantText,
+  formatExecutiveText,
+} from '../../utils/aiResponseParser';
 import type {
   AiAssistantApiResponse,
   AiAssistantDebugInfo,
@@ -18,6 +21,25 @@ import {
 } from '../../utils/permissions';
 import { insertAiAssistantAuditLog } from './aiAuditService';
 import { enrichCopilotSuggestedActions, mergeCopilotActions } from '../../modules/copilot/enrichCopilotActions';
+import { enrichSuggestedActionsWithFocus } from '../../modules/copilot/enrichCopilotFocus';
+import { humanizeSuggestedActions } from '../../modules/copilot/humanizeSuggestedActions';
+import { prepareToolPayloadForLlm } from '../../modules/ai/prepareToolPayloadForLlm';
+import {
+  buildAiCacheKey,
+  getCachedAiResponse,
+  invalidateAiCache,
+  setCachedAiResponse,
+} from '../../modules/ai/aiQueryCache';
+import {
+  loadingLabelForMessage,
+  loadingLabelForTool,
+  optimizeToolPlanBatch,
+  shouldSkipToolAfterResumen,
+} from '../../modules/ai/optimizeToolPlan';
+import {
+  extractExplicitYearFromMessage,
+  injectExplicitYearIfMissing,
+} from '../../utils/extractExplicitYear';
 
 type OpenAiMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -50,9 +72,10 @@ function parseStructured(raw: string | null | undefined): AiStructuredResponse |
   const parsed = parseAiAssistantText(raw);
   if (!parsed.summary && !parsed.data && !parsed.warnings.length) return null;
   return {
-    summary: parsed.summary || raw.trim(),
+    summary: formatExecutiveText(parsed.summary || raw.trim()),
+    insights: parsed.insights?.map((i) => formatExecutiveText(i)),
     data: parsed.data,
-    warnings: parsed.warnings,
+    warnings: parsed.warnings?.map((w) => formatExecutiveText(w)),
     suggestedActions: parsed.suggestedActions
       .filter((a) => VALID_ACTION_TYPES.has(a.actionType))
       .map((a) => ({
@@ -128,12 +151,15 @@ export async function sendAiAssistantMessage(opts: {
   user: PermissionUser;
   email?: string | null;
   empresaId: string;
-}): Promise<{ assistant: AiChatMessage; error?: string; retryable?: boolean }> {
+  skipCache?: boolean;
+  onStatus?: (label: string) => void;
+}): Promise<{ assistant: AiChatMessage; error?: string; retryable?: boolean; fromCache?: boolean }> {
   const started = performance.now();
   const toolsUsed: AiToolName[] = [];
   const deniedTools: AiToolName[] = [];
   const toolErrors: AiAssistantDebugInfo['toolErrors'] = [];
   const toolDurationsMs: Partial<Record<AiToolName, number>> = {};
+  const completedToolResults: Array<{ name: AiToolName; data: unknown }> = [];
   let lastProvider: string | null = null;
   let lastModel: string | null = null;
   let lastTokens: AiAssistantDebugInfo['tokens'] = null;
@@ -142,6 +168,36 @@ export async function sendAiAssistantMessage(opts: {
   const permissionUser = permissionUserFromAuth(opts.user, opts.email ?? null);
   const isOperador = isFinancialOperadorRestricted(permissionUser);
   const ctx = buildContext(permissionUser, opts.empresaId);
+  const explicitYear = extractExplicitYearFromMessage(opts.message);
+
+  const cacheKey = buildAiCacheKey({
+    message: opts.message,
+    empresaId: opts.empresaId,
+    userRole: opts.user.role,
+    explicitYear,
+  });
+
+  if (!opts.skipCache) {
+    const cached = getCachedAiResponse(cacheKey);
+    if (cached) {
+      opts.onStatus?.('Resultado reciente…');
+      return {
+        assistant: {
+          ...cached.assistant,
+          id: newMessageId(),
+          createdAt: new Date().toISOString(),
+        },
+        fromCache: true,
+      };
+    }
+    if (import.meta.env.DEV) {
+      console.log('[ai:cache-miss]', cacheKey);
+    }
+  } else {
+    invalidateAiCache(cacheKey);
+  }
+
+  opts.onStatus?.(loadingLabelForMessage(opts.message));
 
   const systemPrompt = buildAiSystemPrompt({
     userName: opts.user.name,
@@ -190,14 +246,16 @@ export async function sendAiAssistantMessage(opts: {
     }
 
     if (res.status === 'needs_tools' && res.toolCalls?.length) {
+      const plannedCalls = optimizeToolPlanBatch(res.toolCalls);
+
       if (import.meta.env.DEV) {
         console.log(
           '[ai-tool-routing]',
           JSON.stringify({
             round,
             intent_detected: opts.message.slice(0, 120),
-            tools_selected: res.toolCalls.map((tc) => tc.name),
-            reason: res.toolCalls.map((tc) => ({ tool: tc.name, args: tc.arguments })),
+            tools_selected: plannedCalls.map((tc) => tc.name),
+            reason: plannedCalls.map((tc) => ({ tool: tc.name, args: tc.arguments })),
           }),
         );
       }
@@ -205,7 +263,7 @@ export async function sendAiAssistantMessage(opts: {
       const assistantMsg: OpenAiMessage = {
         role: 'assistant',
         content: res.assistantText ?? null,
-        tool_calls: res.toolCalls.map((tc) => ({
+        tool_calls: plannedCalls.map((tc) => ({
           id: tc.id,
           type: 'function' as const,
           function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
@@ -213,13 +271,33 @@ export async function sendAiAssistantMessage(opts: {
       };
       messages.push(assistantMsg);
 
-      for (const call of res.toolCalls) {
+      for (const call of plannedCalls) {
+        if (shouldSkipToolAfterResumen(call, completedToolResults)) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            name: call.name,
+            content: JSON.stringify({
+              ok: true,
+              skipped: true,
+              nota: 'Datos ya incluidos en getResumenFinancieroPeriodo.',
+            }),
+          });
+          continue;
+        }
+
         if (!canExecuteAiTool(permissionUser, call.name) && !deniedTools.includes(call.name)) {
           deniedTools.push(call.name);
         }
 
+        const resolvedArgs = injectExplicitYearIfMissing(call.name, call.arguments, explicitYear);
+        opts.onStatus?.(loadingLabelForTool(call.name, resolvedArgs));
+
         const t0 = performance.now();
-        const result = await executeAiTool(call.name, call.arguments, ctx);
+        if (import.meta.env.DEV && resolvedArgs !== call.arguments) {
+          console.log('[copilot:year-inject]', call.name, { original: call.arguments, injected: resolvedArgs });
+        }
+        const result = await executeAiTool(call.name, resolvedArgs, ctx);
         toolDurationsMs[call.name] = (toolDurationsMs[call.name] ?? 0) + (performance.now() - t0);
 
         if (!result.ok) {
@@ -244,6 +322,9 @@ export async function sendAiAssistantMessage(opts: {
         }
 
         if (!toolsUsed.includes(call.name)) toolsUsed.push(call.name);
+        if (result.data != null) {
+          completedToolResults.push({ name: call.name, data: result.data });
+        }
         if (call.name === 'getPendientesConSugerencia' && result.data && typeof result.data === 'object') {
           pendientesSugerenciasData = result.data as Record<string, unknown>;
         }
@@ -252,7 +333,7 @@ export async function sendAiAssistantMessage(opts: {
           role: 'tool',
           tool_call_id: call.id,
           name: call.name,
-          content: JSON.stringify(result.data),
+          content: JSON.stringify(prepareToolPayloadForLlm(call.name, result.data)),
         });
       }
       continue;
@@ -283,6 +364,10 @@ export async function sendAiAssistantMessage(opts: {
     blockedByPermissions: deniedTools.length > 0,
     timestamp: new Date().toISOString(),
   };
+
+  if (import.meta.env.DEV) {
+    console.log('[ai:latency]', { ms: Math.round(durationMs), tools: toolsUsed });
+  }
 
   const auditStatus = lastError
     ? configError
@@ -360,16 +445,49 @@ export async function sendAiAssistantMessage(opts: {
     copilotExtras,
   );
 
+  finalStructured.suggestedActions = enrichSuggestedActionsWithFocus({
+    message: opts.message,
+    structured: finalStructured,
+  });
+
+  // Post-process: if user mentioned an explicit year, inject it into any
+  // suggestedAction payload that has a year mismatch or is missing the year.
+  if (explicitYear != null && finalStructured.suggestedActions?.length) {
+    finalStructured.suggestedActions = finalStructured.suggestedActions.map((action) => {
+      if (action.actionType !== 'navigate' && action.actionType !== 'apply_filters') return action;
+      const p = (action.payload ?? {}) as Record<string, unknown>;
+      const cp = (p.copilotParams ?? p.filters ?? p.params ?? {}) as Record<string, unknown>;
+      // Only inject if not already set to the correct year
+      if (cp.year != null && String(cp.year) === String(explicitYear)) return action;
+      if (cp.year != null) return action; // already has a year (from model) — respect it
+      return {
+        ...action,
+        payload: {
+          ...p,
+          copilotParams: { ...cp, year: explicitYear },
+        },
+      };
+    });
+  }
+
+  finalStructured.suggestedActions = humanizeSuggestedActions(finalStructured.suggestedActions);
+
+  const assistantMessage: AiChatMessage = {
+    id: newMessageId(),
+    role: 'assistant',
+    content: finalStructured.summary,
+    structured: finalStructured,
+    createdAt: new Date().toISOString(),
+    toolsUsed,
+    debug,
+  };
+
+  if (!lastError) {
+    setCachedAiResponse(cacheKey, assistantMessage, toolsUsed);
+  }
+
   return {
-    assistant: {
-      id: newMessageId(),
-      role: 'assistant',
-      content: finalStructured.summary,
-      structured: finalStructured,
-      createdAt: new Date().toISOString(),
-      toolsUsed,
-      debug,
-    },
+    assistant: assistantMessage,
   };
 }
 

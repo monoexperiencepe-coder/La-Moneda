@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Trash2,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -19,11 +20,51 @@ import {
   buildNavigateUrl,
   resolveCopilotActionFromSuggested,
 } from '../../modules/copilot/copilotActions';
+import {
+  buildNarrativeFromSuggestedAction,
+  cancelNarrativeNavigation,
+  clearPendingNarrative,
+  queueNarrativeNavigation,
+} from '../../modules/copilot/navigationNarrative';
 import { addCopilotNavHistory } from '../../modules/copilot/copilotSettings';
-import { triggerCopilotHighlight } from '../../modules/copilot/copilotHighlight';
+import {
+  clearCopilotMessages,
+  loadCopilotMessages,
+  saveCopilotMessages,
+} from '../../modules/copilot/copilotMessages';
 import type { AiChatMessage, AiSuggestedAction } from '../../modules/ai/types';
 import AIMessageCard from './AIMessageCard';
 import AIDebugPanel from './AIDebugPanel';
+
+// ─── Safe navigation ──────────────────────────────────────────────────────────
+
+/**
+ * Routes the copilot is allowed to navigate to (must match App.tsx registrations).
+ * Any path outside this list is rejected before navigate() is called.
+ */
+const REGISTERED_ROUTE_PREFIXES = [
+  '/finanzas/ingresos',
+  '/finanzas/gastos',
+  '/finanzas/inversiones',
+  '/finanzas/ia-clasificacion',
+  '/finanzas/resumen',
+  '/finanzas/utilidad-operativa',
+  '/finanzas/financiamiento',
+  '/finanzas/gastos-caja',
+  '/finanzas/caja-negocio',
+  '/finanzas/descuentos',
+  '/operaciones/docs',
+  '/operaciones',
+  '/vehiculos',
+  '/asistente',
+  '/reportes',
+  '/metas',
+] as const;
+
+function isRouteRegistered(path: string): boolean {
+  const clean = path.split('?')[0].trim();
+  return REGISTERED_ROUTE_PREFIXES.some((p) => clean === p || clean.startsWith(p + '/') || clean.startsWith(p + '?'));
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -105,7 +146,7 @@ function extractContextChips(messages: AiChatMessage[]): ContextChip[] {
   const summary = (lastAi.structured.summary ?? '').toLowerCase();
   const data = lastAi.structured.data as Record<string, unknown> | null;
 
-  const foundMonth = MONTH_NAMES.find((mo) => summary.includes(mo));
+  const foundMonth = MONTH_NAMES.find((mo) => new RegExp(`\\b${mo}\\b`, 'i').test(summary));
   if (foundMonth) {
     const label = foundMonth.charAt(0).toUpperCase() + foundMonth.slice(1);
     chips.push({ id: 'month', label: `📅 ${label}`, prompt: `Y en ${label}` });
@@ -162,7 +203,7 @@ const SkeletonCard: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
-const TypingState: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
+const TypingState: React.FC<{ phase: LoadingPhase; label?: string }> = ({ phase, label }) => (
   <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
     <div className="flex items-center gap-1" aria-label="Procesando">
       {[0, 150, 300].map((delay) => (
@@ -173,7 +214,7 @@ const TypingState: React.FC<{ phase: LoadingPhase }> = ({ phase }) => (
         />
       ))}
     </div>
-    <span className="text-xs font-medium text-slate-500">{PHASE_LABELS[phase]}</span>
+    <span className="text-xs font-medium text-slate-500">{label ?? PHASE_LABELS[phase]}</span>
   </div>
 );
 
@@ -286,19 +327,30 @@ type AIChatPanelProps = {
   variant?: 'page' | 'companion';
   autoNavigate?: boolean;
   className?: string;
+  /** Se invoca tras navegar por una acción sugerida (p. ej. minimizar panel flotante). */
+  onNavigate?: () => void;
 };
 
 const AIChatPanel: React.FC<AIChatPanelProps> = ({
   variant = 'page',
   autoNavigate = false,
   className = '',
+  onNavigate,
 }) => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const userId = user?.id ?? profile?.id ?? 'anon';
+  const empresaId = profile?.empresa_id ?? '';
+
+  const [messages, setMessages] = useState<AiChatMessage[]>(() =>
+    variant === 'companion' && empresaId ? loadCopilotMessages(empresaId, userId) : [],
+  );
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('analyzing');
+  const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
+  const [lastFromCache, setLastFromCache] = useState(false);
+  const [lastQueryForRefresh, setLastQueryForRefresh] = useState<string | null>(null);
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
   const [configErrorShown, setConfigErrorShown] = useState(false);
   const [newestMsgId, setNewestMsgId] = useState<string | null>(null);
@@ -318,6 +370,20 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (variant !== 'companion' || !empresaId || !userId) return;
+    saveCopilotMessages(empresaId, userId, messages);
+  }, [messages, variant, empresaId, userId]);
+
+  useEffect(() => {
+    if (variant !== 'companion' || !empresaId || !userId) return;
+    if (messages.length === 0) {
+      const restored = loadCopilotMessages(empresaId, userId);
+      if (restored.length > 0) setMessages(restored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId, userId, variant]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -345,25 +411,67 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
   const runCopilotNavigation = useCallback(
     (action: AiSuggestedAction) => {
+      const safeNavigate = (url: string, label: string): boolean => {
+        if (import.meta.env.DEV) {
+          console.log('[copilot:navigate:start]', { url, label, action });
+        }
+        if (!isRouteRegistered(url)) {
+          const msg = `Ruta no registrada: ${url.split('?')[0]}`;
+          if (import.meta.env.DEV) {
+            console.warn('[copilot:navigate:error]', msg, { url });
+          }
+          setNavStatus({ type: 'error', text: 'Ruta no disponible. Usa la navegación del menú.' });
+          window.setTimeout(() => setNavStatus(null), 4000);
+          return false;
+        }
+        try {
+          navigate(url);
+          onNavigate?.();
+          if (import.meta.env.DEV) {
+            console.log('[copilot:navigate:resolved]', { url, label });
+          }
+          window.setTimeout(() => {
+            addCopilotNavHistory({ label: toHistoryLabel(label), path: url });
+            setNavStatus({ type: 'success', text: `${toHistoryLabel(label)} abierto` });
+            window.setTimeout(() => setNavStatus(null), 2500);
+          }, 350);
+          return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Error de navegación';
+          if (import.meta.env.DEV) {
+            console.error('[copilot:navigate:error]', msg, { url, err });
+          }
+          setNavStatus({ type: 'error', text: `Error al navegar: ${msg}` });
+          window.setTimeout(() => setNavStatus(null), 4000);
+          return false;
+        }
+      };
+
       // Try copilot registry first
       const copilot = resolveCopilotActionFromSuggested(permissionUser, action);
       if (copilot) {
         if (!copilot.ok) {
+          if (import.meta.env.DEV) {
+            console.warn('[copilot:navigate:error]', copilot.error, { action });
+          }
           setNavStatus({ type: 'error', text: copilot.error });
           window.setTimeout(() => setNavStatus(null), 4000);
           return false;
         }
         const url = buildNavigateUrl(copilot);
+        const narrativeSteps = buildNarrativeFromSuggestedAction(action);
+        cancelNarrativeNavigation();
+        if (narrativeSteps?.length) {
+          queueNarrativeNavigation({
+            path: url.split('?')[0],
+            steps: narrativeSteps,
+            showOverlay: true,
+          });
+        } else {
+          clearPendingNarrative();
+        }
         setNavStatus({ type: 'loading', text: copilot.statusLabel });
-        navigate(url);
-        window.setTimeout(() => {
-          const histLabel = toHistoryLabel(copilot.statusLabel);
-          addCopilotNavHistory({ label: histLabel, path: url });
-          setNavStatus({ type: 'success', text: `${histLabel} abierto` });
-          triggerCopilotHighlight();
-          window.setTimeout(() => setNavStatus(null), 2000);
-        }, 400);
-        return true;
+        return safeNavigate(url, copilot.statusLabel);
       }
 
       // Fallback: generic route resolver
@@ -375,24 +483,21 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
             : '';
         const url = `${resolved.path}${qs}`;
         setNavStatus({ type: 'loading', text: 'Abriendo vista…' });
-        navigate(url);
-        window.setTimeout(() => {
-          addCopilotNavHistory({ label: action.label ?? resolved.path, path: url });
-          setNavStatus({ type: 'success', text: 'Vista abierta' });
-          triggerCopilotHighlight();
-          window.setTimeout(() => setNavStatus(null), 2000);
-        }, 400);
-        return true;
+        return safeNavigate(url, action.label ?? resolved.path);
       }
 
       if (action.actionType === 'review' && action.label) {
         void sendMessage(action.label);
         return true;
       }
+
+      if (import.meta.env.DEV) {
+        console.warn('[copilot:navigate:error]', 'No se pudo resolver ruta', { action });
+      }
       return false;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate, permissionUser],
+    [navigate, permissionUser, onNavigate],
   );
 
   const handleAction = useCallback(
@@ -415,28 +520,37 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, opts?: { skipCache?: boolean }) => {
       const trimmed = text.trim();
       if (!trimmed || loading || !profile?.empresa_id) return;
 
+      cancelNarrativeNavigation();
+      clearPendingNarrative();
+
       const phase = detectPhase(trimmed);
       setLoadingPhase(phase);
+      setLoadingLabel(null);
+      setLastFromCache(false);
 
       const userMsg = newUserMessage(trimmed);
       setMessages((prev) => [...prev, userMsg]);
       setInput('');
       setLoading(true);
       setLastFailedPrompt(null);
+      setLastQueryForRefresh(trimmed);
       requestAnimationFrame(() => inputRef.current?.focus());
 
       try {
-        const { assistant, error, retryable } = await sendAiAssistantMessage({
+        const { assistant, error, retryable, fromCache } = await sendAiAssistantMessage({
           message: trimmed,
           history: messages,
           user,
           email: profile.email,
           empresaId: profile.empresa_id,
+          skipCache: opts?.skipCache,
+          onStatus: setLoadingLabel,
         });
+        setLastFromCache(Boolean(fromCache));
         setNewestMsgId(assistant.id);
         setMessages((prev) => [...prev, assistant]);
         tryAutoNavigate(assistant);
@@ -465,10 +579,60 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
         ]);
       } finally {
         setLoading(false);
+        setLoadingLabel(null);
       }
     },
     [loading, messages, profile, user, tryAutoNavigate],
   );
+
+  const handleClearConversation = useCallback(() => {
+    if (!empresaId || !userId) return;
+    clearCopilotMessages(empresaId, userId);
+    setMessages([]);
+    setLastFromCache(false);
+    setLastQueryForRefresh(null);
+    setLastFailedPrompt(null);
+  }, [empresaId, userId]);
+
+  const handleRefreshLast = useCallback(() => {
+    if (!lastQueryForRefresh || loading) return;
+    let trimmedHistory: AiChatMessage[] = [];
+    setMessages((prev) => {
+      const copy = [...prev];
+      while (copy.length > 0 && copy[copy.length - 1].role === 'assistant') copy.pop();
+      while (copy.length > 0 && copy[copy.length - 1].role === 'user') copy.pop();
+      trimmedHistory = copy;
+      return copy;
+    });
+    void (async () => {
+      const trimmed = lastQueryForRefresh.trim();
+      if (!trimmed || !profile?.empresa_id) return;
+      setLoadingPhase(detectPhase(trimmed));
+      setLoadingLabel(null);
+      setLastFromCache(false);
+      const userMsg = newUserMessage(trimmed);
+      setMessages((prev) => [...prev, userMsg]);
+      setLoading(true);
+      try {
+        const { assistant, error, retryable, fromCache } = await sendAiAssistantMessage({
+          message: trimmed,
+          history: trimmedHistory,
+          user,
+          email: profile.email,
+          empresaId: profile.empresa_id,
+          skipCache: true,
+          onStatus: setLoadingLabel,
+        });
+        setLastFromCache(Boolean(fromCache));
+        setNewestMsgId(assistant.id);
+        setMessages((prev) => [...prev, assistant]);
+        if (error) setLastFailedPrompt(retryable ? trimmed : null);
+      } finally {
+        setLoading(false);
+        setLoadingLabel(null);
+      }
+    })();
+  }, [lastQueryForRefresh, loading, profile, user]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -507,6 +671,20 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
         {/* Nav status banner */}
         {navStatus && !countdownAction && <NavStatusBanner status={navStatus} />}
+
+        {lastFromCache && !loading && (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-indigo-100 bg-indigo-50/80 px-3 py-2 text-xs text-indigo-800 sm:px-4">
+            <span>Resultado reciente (cache)</span>
+            <button
+              type="button"
+              onClick={handleRefreshLast}
+              className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100"
+            >
+              <RefreshCw className="h-3 w-3" aria-hidden />
+              Actualizar
+            </button>
+          </div>
+        )}
 
         {/* Config error banner */}
         {configErrorShown && (
@@ -602,7 +780,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
           {/* Loading: skeleton + typing state */}
           {loading && (
             <div className="space-y-2" style={{ animation: 'ai-fadein 0.2s ease-out' }}>
-              <TypingState phase={loadingPhase} />
+              <TypingState phase={loadingPhase} label={loadingLabel ?? undefined} />
               <SkeletonCard phase={loadingPhase} />
             </div>
           )}
@@ -627,6 +805,19 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
           onSubmit={onSubmit}
           className="shrink-0 border-t border-slate-100 bg-white px-3 py-3 sm:px-4"
         >
+          {hasMessages && variant === 'companion' && (
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={handleClearConversation}
+                disabled={loading}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+                Limpiar conversación
+              </button>
+            </div>
+          )}
           {/* Context chips */}
           {contextChips.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">

@@ -31,8 +31,9 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: 'getResumenFinancieroPeriodo',
       description:
-        'Resumen financiero del periodo: ingresos, gastos operativos, categorías principales, pendientes y utilidad. ' +
-        'Solo roles financieros. Para año 2024 o anteriores, usa anio=2024.',
+        'Resumen ejecutivo del periodo con capas separadas: ingresos (PEN/USD), OPEX operativo, CAPEX (inversion_compra), ' +
+        'utilidad OPERATIVA (sin CAPEX), insights automáticos y meses destacados. ' +
+        'Usar para rentabilidad, mejor/peor mes operativo, anomalías. Para año 2024 usa anio=2024.',
       parameters: periodParams,
     },
   },
@@ -52,9 +53,9 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: 'getGastosPeriodo',
       description:
-        'Gastos operativos del periodo (combustible, mantenimiento, sueldos, etc). ' +
-        'Para año 2024 usa anio=2024. Para una categoría específica usa tipo_gasto. ' +
-        'NO usar para inversión de compra vehicular (usa getRankingInversionVehiculos).',
+        'Gastos del periodo con total_opex_pen y total_capex_pen separados. ' +
+        'Interpreta total_opex_pen como costo operativo recurrente; CAPEX en total_capex_pen (inversion_compra). ' +
+        'Para año 2024 usa anio=2024. tipo_gasto=inversion_compra solo para consultas CAPEX.',
       parameters: {
         ...periodParams,
         properties: {
@@ -70,7 +71,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: 'getGastosPorCategoria',
       description:
-        'Totales de gastos agrupados por tipo_gasto/categoría operativa en el periodo. ' +
+        'Totales por categoría: categorias_operativas_opex (sin CAPEX) y categorias_capex (inversion_compra) por separado. ' +
         'Para año 2024 usa anio=2024.',
       parameters: periodParams,
     },

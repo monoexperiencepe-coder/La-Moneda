@@ -21,8 +21,9 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
   const gradId = `gastoBar-${gid}`;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart
+    <div className="h-full w-full min-h-[1px] min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
+        <BarChart
         data={chartData}
         margin={{ top: 4, right: 6, left: -14, bottom: bucket === 'day' ? 14 : 0 }}
       >
@@ -73,6 +74,7 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
         />
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 };
 

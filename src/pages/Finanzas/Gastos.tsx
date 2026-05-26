@@ -15,6 +15,7 @@ import type { Gasto } from '../../data/types';
 import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
+import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
 import { REVISION_USER_LABEL } from '../../config/app';
 import {
   DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
@@ -261,10 +262,12 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     const st = searchParams.get('subtipo_gasto') ?? searchParams.get('subtipo');
     if (st) setFilterSubtipoGasto(st);
     const q = searchParams.get('search');
+    const hv = searchParams.get('highlightVehicle');
     if (q) setHistorialSearchInput(q);
-    if (tipo || y || st || q) {
+    if (hv) setHistorialSearchInput(hv);
+    if (tipo || y || st || q || hv) {
       requestAnimationFrame(() =>
-        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        document.getElementById('copilot-gastos-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
       );
     }
   }, [searchParams, isInversionesPage, parrillaTabs]);
@@ -973,6 +976,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto),
     );
   }, [historialRowsMerged, filterSubtipoGasto, tab?.tipo_gasto]);
+
+  useCopilotNarrativeNavigation({
+    resolveTarget: (step) =>
+      document.getElementById(step.target.replace(/^#/, '')) ??
+      document.getElementById('copilot-gastos-table') ??
+      document.getElementById('copilot-scroll-target'),
+    deps: [historialSearchInput, historialRowsDisplayed.length],
+  });
 
   const handleRegistrarGasto = useCallback(
     async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
@@ -1946,6 +1957,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             No hay gastos con el subtipo seleccionado en esta página. Pruebe «Todos subtipo».
           </div>
         ) : (
+          <div id="copilot-gastos-table">
           <RegistrosTable
             mode="gastos"
             gastos={historialRowsDisplayed}
@@ -1979,6 +1991,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                 }
               : {})}
           />
+          </div>
         )}
       </div>
         </>

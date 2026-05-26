@@ -40,9 +40,12 @@ export function isAiToolResultEmpty(tool: AiToolName, data: unknown): boolean {
   const d = data as Record<string, unknown>;
 
   if (tool === 'getResumenFinancieroPeriodo') {
-    const gastosCount = (d.gastos as { count?: number } | undefined)?.count ?? 0;
+    const opexCount =
+      (d.gastos_operativos_opex as { count?: number } | undefined)?.count ??
+      (d.gastos as { count?: number } | undefined)?.count ??
+      0;
     const ingresosCount = (d.ingresos as { count?: number } | undefined)?.count ?? 0;
-    return gastosCount === 0 && ingresosCount === 0;
+    return opexCount === 0 && ingresosCount === 0;
   }
 
   if (tool === 'suggestCategoriaGasto') {
@@ -53,7 +56,9 @@ export function isAiToolResultEmpty(tool: AiToolName, data: unknown): boolean {
   if (c != null) return c === 0;
 
   if (tool === 'getGastosPorCategoria') {
-    const cats = d.categorias as Array<{ count?: number; monto?: number }> | undefined;
+    const cats =
+      (d.categorias_operativas_opex as Array<{ count?: number; monto?: number }> | undefined) ??
+      (d.categorias as Array<{ count?: number; monto?: number }> | undefined);
     return !cats?.length || cats.every((x) => (x.count ?? 0) === 0 && (x.monto ?? 0) === 0);
   }
 

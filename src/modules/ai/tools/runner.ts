@@ -9,7 +9,22 @@ import { filterGastosForUser, type PermissionUser } from '../../../utils/permiss
 import type { Gasto } from '../../../data/types';
 import { labelTipoGastoFinanciero } from '../../../utils/tipoGastoLabels';
 import { summaryCategoria } from '../../../utils/gastosFinancialSummary';
-import { filterByDateRange, resolveAiDateRange, sumMontos, sumMontosByCurrency, formatCurrencyByCode, type AiDateRange } from '../dateRange';
+import {
+  filterByDateRange,
+  resolveToolDateRange,
+  sumMontos,
+  sumMontosByCurrency,
+  formatCurrencyByCode,
+  type AiDateRange,
+} from '../dateRange';
+import {
+  aggregateOpexByTipo,
+  buildCapasFinancierasResumen,
+  buildMonthlyBuckets,
+  detectFinancialInsights,
+  narrativeHintsFromInsights,
+  splitGastosByCapa,
+} from '../financialAnalytics';
 import { aiToolDeniedMessage, canExecuteAiTool } from '../permissions';
 import type { AiToolName } from '../types';
 
@@ -148,66 +163,77 @@ function compactGasto(g: Gasto) {
 async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx: AiToolContext): Promise<unknown> {
   switch (name) {
     case 'getResumenFinancieroPeriodo': {
-      const range = resolveAiDateRange(args);
-      const [ingresosAll, gastos, summaryAll, pendientes] = await Promise.all([
+      const range = resolveToolDateRange(args);
+      const [ingresosAll, gastosAll, pendientes] = await Promise.all([
         fetchIngresos(ctx.empresaId),
-        fetchGastosInRange(ctx, range, { limit: 500 }),
-        fetchGastosFinancialSummary(ctx.empresaId),
+        fetchGastosInRange(ctx, range, { limit: 800 }),
         fetchGastosByTipo('pendiente_revision', ctx.empresaId),
       ]);
       const ingresos = filterByDateRange(ingresosAll, range);
+      const gastos = gastosAll;
       const pendientesVisibles = filterGastosForUser(ctx.user, pendientes);
-      const byCat = aggregateByTipo(gastos);
-
-      // Multi-currency totals for ingresos
       const ingresosByCurrency = sumMontosByCurrency(ingresos);
-      // Gastos are always PEN (no moneda field in Gasto)
-      const totalGastosPEN = sumMontos(gastos);
-
-      // Utilidad only meaningful within same currency
-      const totalIngresosPEN = ingresosByCurrency['PEN']?.total ?? 0;
-      const utilidadPEN = totalIngresosPEN - totalGastosPEN;
-
-      const pendienteSummary = summaryCategoria(summaryAll, 'pendiente_revision');
+      const capas = buildCapasFinancierasResumen(gastos, ingresos);
+      const monthly = buildMonthlyBuckets(gastos, ingresos);
+      const dupWarnings = detectAnomalies(gastos);
+      const insights = detectFinancialInsights({
+        gastos,
+        ingresos,
+        monthly,
+        duplicateWarnings: dupWarnings,
+      });
+      const categoriasOpex = aggregateOpexByTipo(gastos).slice(0, 8);
+      const { capex } = splitGastosByCapa(gastos);
 
       if (import.meta.env.DEV) {
         console.log('[currency-normalization]', JSON.stringify({
           tool: name,
-          currencies_detected: Object.keys(ingresosByCurrency),
-          ingresos_totals: Object.entries(ingresosByCurrency).map(([cur, v]) => ({
-            currency: cur,
-            total: v.total,
-            formatted: formatCurrencyByCode(v.total, cur),
-          })),
-          gastos_total_pen: totalGastosPEN,
+          capas: {
+            opex_pen: capas.gastos_operativos_opex.total_pen,
+            capex_pen: capas.inversiones_capex.total_pen,
+            utilidad_operativa_pen: capas.utilidad_operativa_pen.value,
+          },
           date_range: range,
         }));
       }
 
       return {
         periodo: range,
+        capas_financieras: capas,
         ingresos: {
           count: ingresos.length,
           totalsByCurrency: ingresosByCurrency,
-          nota_moneda: 'Ingresos separados por moneda. Ver totalsByCurrency.',
+          nota_moneda: 'Ingresos separados por moneda (PEN / USD). NO mezclar.',
         },
-        gastos: {
-          total: totalGastosPEN,
-          count: gastos.length,
+        gastos_operativos_opex: {
+          total_pen: capas.gastos_operativos_opex.total_pen,
+          count: capas.gastos_operativos_opex.count,
           moneda: 'PEN',
+          nota: 'Solo OPEX. EXCLUYE inversion_compra (CAPEX).',
         },
-        utilidad_pen: utilidadPEN,
-        nota_utilidad: 'Utilidad calculada solo sobre PEN. Si hay ingresos USD, consulta por separado.',
-        categoriasPrincipales: byCat.slice(0, 6),
+        inversiones_capex: {
+          total_pen: capas.inversiones_capex.total_pen,
+          count: capas.inversiones_capex.count,
+          moneda: 'PEN',
+          nota: 'CAPEX = compra activos / vehículos / terrenos. No es gasto operativo.',
+        },
+        utilidad_operativa_pen: capas.utilidad_operativa_pen.value,
+        flujo_neto_pen: capas.flujo_neto_pen.value,
+        nota_utilidad:
+          'Utilidad OPERATIVA = Ingresos PEN − OPEX PEN. NO restar CAPEX aquí. Mencionar CAPEX aparte si es relevante.',
+        categorias_opex_principales: categoriasOpex,
+        meses_destacados: monthly.slice(-6),
+        insights_automaticos: narrativeHintsFromInsights(insights),
         pendientesRevision: {
-          count: pendienteSummary.count,
-          monto: pendienteSummary.monto,
-          muestra: pendientesVisibles.slice(0, 5).map(compactGasto),
+          count: pendientesVisibles.length,
+          monto: sumMontos(pendientesVisibles),
         },
+        muestra_capex_reciente: capex.slice(0, 5).map(compactGasto),
+        warnings: dupWarnings,
       };
     }
     case 'getIngresosPeriodo': {
-      const range = resolveAiDateRange(args);
+      const range = resolveToolDateRange(args);
       const all = await fetchIngresos(ctx.empresaId);
       const ingresos = filterByDateRange(all, range);
 
@@ -256,33 +282,49 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       return result;
     }
     case 'getGastosPeriodo': {
-      const range = resolveAiDateRange(args);
+      const range = resolveToolDateRange(args);
       const tipoGasto = typeof args.tipo_gasto === 'string' ? args.tipo_gasto : undefined;
       const limit = clampLimit(args.limit, 100, 200);
       const gastos = await fetchGastosInRange(ctx, range, { tipoGasto, limit });
+      const { opex, capex } = splitGastosByCapa(gastos);
+      const scope =
+        tipoGasto === 'inversion_compra' ? 'capex' : tipoGasto ? 'filtro' : 'opex_default';
       const result = {
         periodo: range,
-        total: sumMontos(gastos),
+        alcance: scope,
+        total_opex_pen: sumMontos(opex),
+        total_capex_pen: sumMontos(capex),
         count: gastos.length,
-        filas: gastos.map(compactGasto),
+        nota:
+          'Por defecto interpreta total_opex_pen como gasto operativo. CAPEX (inversion_compra) va en total_capex_pen.',
+        filas_muestra: gastos.slice(0, 12).map(compactGasto),
         warnings: detectAnomalies(gastos),
       };
       logToolResult(name, result, { range, source_table: 'gastos' });
       return result;
     }
     case 'getGastosPorCategoria': {
-      const range = resolveAiDateRange(args);
+      const range = resolveToolDateRange(args);
       const gastos = await fetchGastosInRange(ctx, range, { limit: 500 });
-      return { periodo: range, categorias: aggregateByTipo(gastos) };
+      const opexCats = aggregateOpexByTipo(gastos);
+      const capexCats = aggregateByTipo(gastos.filter((g) => g.tipo_gasto === 'inversion_compra'));
+      return {
+        periodo: range,
+        categorias_operativas_opex: opexCats,
+        categorias_capex: capexCats,
+        nota: 'Usa categorias_operativas_opex para análisis de gasto recurrente. CAPEX aparte.',
+      };
     }
     case 'getVehiculosConMasGasto': {
-      const range = resolveAiDateRange(args);
+      const range = resolveToolDateRange(args);
       const limit = clampLimit(args.limit, 10, 20);
       const [gastos, vehiculos] = await Promise.all([
         fetchGastosInRange(ctx, range, { limit: 500 }),
         fetchVehiculos(ctx.empresaId),
       ]);
-      const operativos = gastos.filter((g) => g.tipo_gasto === 'operativo_vehiculo' && g.vehicleId != null);
+      const operativos = gastos.filter(
+        (g) => g.tipo_gasto === 'operativo_vehiculo' && g.vehicleId != null,
+      );
       const byVehicle = new Map<string, { monto: number; count: number }>();
       for (const g of operativos) {
         const vid = String(g.vehicleId);
@@ -299,7 +341,11 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
         }))
         .sort((a, b) => b.monto - a.monto)
         .slice(0, limit);
-      return { periodo: range, ranking };
+      return {
+        periodo: range,
+        ranking,
+        nota: 'Ranking solo gasto operativo por vehículo (excluye inversion_compra / CAPEX).',
+      };
     }
     case 'getPendientesRevision': {
       const limit = clampLimit(args.limit, 50, 100);
@@ -367,11 +413,15 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
         .limit(limit);
       if (error) throw new Error(error.message);
       const gastos = filterGastosForUser(ctx.user, mapGastos((data ?? []) as Record<string, unknown>[]));
+      const { opex, capex } = splitGastosByCapa(gastos);
       return {
         vehicle_id: vehicleId,
-        count: gastos.length,
-        total: sumMontos(gastos),
-        gastos: gastos.map(compactGasto),
+        total_opex_pen: sumMontos(opex),
+        total_capex_pen: sumMontos(capex),
+        count_opex: opex.length,
+        gastos_operativos_muestra: opex.slice(0, 15).map(compactGasto),
+        inversiones_capex_muestra: capex.slice(0, 5).map(compactGasto),
+        nota: 'OPEX = mantenimiento/combustible operativo. CAPEX (inversion_compra) no cuenta como gasto operativo del vehículo.',
       };
     }
     case 'suggestCategoriaGasto': {
@@ -580,7 +630,7 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
 
     case 'getInversionesNoVehiculares': {
       const subtipoFilter = typeof args.subtipo === 'string' ? args.subtipo.trim() : null;
-      const dateRange = resolveAiDateRange(args);
+      const dateRange = resolveToolDateRange(args);
 
       const all = await fetchGastosByTipo('inversion_compra', ctx.empresaId);
       const accessible = filterGastosForUser(ctx.user, all);

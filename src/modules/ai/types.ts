@@ -29,6 +29,8 @@ export type AiSuggestedAction = {
 
 export type AiStructuredResponse = {
   summary: string;
+  /** Hallazgos ejecutivos (bullets interpretativos). */
+  insights?: string[];
   data?: Record<string, unknown> | unknown[] | null;
   warnings?: string[];
   suggestedActions?: AiSuggestedAction[];

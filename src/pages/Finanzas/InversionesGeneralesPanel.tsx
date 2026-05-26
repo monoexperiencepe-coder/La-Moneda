@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
@@ -164,13 +165,22 @@ const InversionesGeneralesPanel: React.FC = () => {
     return arr;
   }, [rows, sort, filterPlaca, filterVehicleId]);
 
-  useEffect(() => {
-    if (filterPlaca || filterVehicleId) {
-      requestAnimationFrame(() =>
-        document.getElementById('copilot-scroll-target')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  useCopilotNarrativeNavigation({
+    resolveTarget: (step) => {
+      const hv = (searchParams.get('highlightVehicle') ?? filterPlaca ?? filterVehicleId ?? '').trim();
+      if (hv) {
+        const row = document.querySelector(
+          `[data-copilot-vehicle="${CSS.escape(hv.toUpperCase())}"], [data-copilot-vehicle-id="${CSS.escape(hv)}"]`,
+        ) as HTMLElement | null;
+        if (row) return row;
+      }
+      return (
+        document.getElementById(step.target.replace(/^#/, '')) ??
+        document.getElementById('copilot-inversiones-table')
       );
-    }
-  }, [filterPlaca, filterVehicleId]);
+    },
+    deps: [displayRows.length, filterPlaca, filterVehicleId, searchParams],
+  });
 
   const sortThBtn =
     'inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-violet-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 rounded px-0.5 -mx-0.5';
@@ -213,7 +223,7 @@ const InversionesGeneralesPanel: React.FC = () => {
             </div>
           </div>
 
-          <div id="copilot-scroll-target" className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="copilot-inversiones-table" className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-[1020px] w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wide">
@@ -261,7 +271,12 @@ const InversionesGeneralesPanel: React.FC = () => {
               </thead>
               <tbody>
                 {displayRows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
+                  <tr
+                    key={r.id}
+                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80"
+                    data-copilot-vehicle={r.placa?.toUpperCase() ?? undefined}
+                    data-copilot-vehicle-id={r.vehiculoNumero != null ? String(r.vehiculoNumero) : undefined}
+                  >
                     <td className={`${tdText} tabular-nums text-slate-600`}>{r.vehiculoNumero ?? '—'}</td>
                     <td className={`${tdText} font-medium text-slate-900`}>{r.vehiculoReferencia}</td>
                     <td className={`${tdText} text-slate-600 whitespace-nowrap`}>{r.placa ?? '—'}</td>

@@ -29,6 +29,15 @@ export type CopilotNavigateParams = {
   subtipo_inversion?: string;
   vehicleId?: number | string;
   placa?: string;
+  /** Mes a resaltar en destino (1–12). */
+  highlightMonth?: number | string;
+  /** Placa o id de vehículo a resaltar. */
+  highlightVehicle?: string;
+  highlightLabel?: string;
+  highlightType?: 'month' | 'vehicle' | 'category' | 'record' | 'card' | 'table-row';
+  scrollTarget?: string;
+  /** Secuencia narrativa (no va en URL; se encola en sessionStorage al navegar). */
+  narrativeSteps?: import('./navigationNarrative/types').NarrativeStep[];
 };
 
 export type CopilotNavigateResult =
@@ -73,6 +82,16 @@ function buildQueryParams(input: CopilotNavigateParams): Record<string, string> 
   if (input.vehicleId != null && String(input.vehicleId).trim()) {
     params.vehicleId = String(input.vehicleId).trim();
   }
+  if (input.highlightMonth != null) {
+    const hm = padMonth(input.highlightMonth);
+    if (hm) params.highlightMonth = hm;
+  }
+  if (input.highlightVehicle?.trim()) {
+    params.highlightVehicle = input.highlightVehicle.trim().toUpperCase();
+  }
+  if (input.highlightLabel?.trim()) params.highlightLabel = input.highlightLabel.trim().slice(0, 120);
+  if (input.highlightType) params.highlightType = input.highlightType;
+  if (input.scrollTarget?.trim()) params.scrollTarget = input.scrollTarget.trim();
   return params;
 }
 

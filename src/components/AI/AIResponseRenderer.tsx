@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ChevronRight,
   DollarSign,
+  Lightbulb,
 } from 'lucide-react';
 import type { AiStructuredResponse, AiSuggestedAction } from '../../modules/ai/types';
 import {
@@ -21,6 +22,7 @@ import {
   extractMetricCards,
   extractSimpleTable,
   sanitizeAiAssistantText,
+  formatExecutiveText,
   type AiMetricCard,
 } from '../../utils/aiResponseParser';
 
@@ -231,8 +233,6 @@ const ActionButton: React.FC<{ action: AiSuggestedAction; onAction?: ActionHandl
   const isReview = action.actionType === 'review';
   const clickable = isNavigate || isReview;
 
-  const hasParams = resolved != null && resolved.params && Object.keys(resolved.params).length > 0;
-
   return (
     <button
       type="button"
@@ -266,19 +266,9 @@ const ActionButton: React.FC<{ action: AiSuggestedAction; onAction?: ActionHandl
             <ChevronRight className="h-3 w-3 translate-x-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
           )}
         </span>
-        <span className="mt-0.5 block leading-snug text-slate-500">{action.description}</span>
-        {hasParams && resolved?.params && (
-          <span className="mt-1 flex flex-wrap gap-1">
-            {Object.entries(resolved.params).map(([k, v]) => (
-              <span
-                key={k}
-                className="inline-flex items-center rounded-md bg-indigo-100/60 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
-              >
-                {k}: {v}
-              </span>
-            ))}
-          </span>
-        )}
+        {action.description?.trim() ? (
+          <span className="mt-0.5 block leading-snug text-slate-500">{action.description}</span>
+        ) : null}
       </span>
     </button>
   );
@@ -292,8 +282,9 @@ type Props = {
 };
 
 const AIResponseRenderer: React.FC<Props> = ({ structured, onAction }) => {
-  const cleanSummary = sanitizeAiAssistantText(structured.summary ?? '');
-  const warnings = structured.warnings ?? [];
+  const cleanSummary = formatExecutiveText(structured.summary ?? '');
+  const insights = (structured.insights ?? []).map((i) => formatExecutiveText(i));
+  const warnings = (structured.warnings ?? []).map((w) => formatExecutiveText(w));
   const actions = structured.suggestedActions ?? [];
   const metricCards = extractMetricCards(
     structured.data as Record<string, unknown> | unknown[] | null,
@@ -305,6 +296,7 @@ const AIResponseRenderer: React.FC<Props> = ({ structured, onAction }) => {
 
   const hasContent =
     cleanSummary ||
+    insights.length > 0 ||
     metricCards.length > 0 ||
     table ||
     warnings.length > 0 ||
@@ -315,6 +307,23 @@ const AIResponseRenderer: React.FC<Props> = ({ structured, onAction }) => {
     <div className="space-y-4">
       {/* Summary */}
       {cleanSummary && <SummaryText text={cleanSummary} />}
+
+      {insights.length > 0 && (
+        <div className="space-y-2">
+          <SectionLabel>Insights</SectionLabel>
+          <ul className="space-y-2">
+            {insights.map((item, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-2.5 rounded-2xl border border-indigo-100/80 bg-indigo-50/40 px-3.5 py-2.5 text-xs text-slate-800"
+              >
+                <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" aria-hidden />
+                <span className="leading-relaxed">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Metrics */}
       {metricCards.length > 0 && (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Minimize2, Sparkles, X } from 'lucide-react';
+import { Maximize2, Minimize2, Shrink, Sparkles, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canUseAiAssistant } from '../../modules/ai/permissions';
 import { permissionUserFromAuth } from '../../utils/permissions';
@@ -13,52 +13,7 @@ import {
   type CopilotNavHistoryItem,
 } from '../../modules/copilot/copilotSettings';
 import AIChatPanel from './AIChatPanel';
-
-// ─── Context label builder ────────────────────────────────────────────────────
-
-const TIPO_LABELS: Record<string, string> = {
-  operativo_vehiculo: 'Operativo',
-  caja_negocio: 'Caja',
-  financiamiento: 'Financiamiento',
-  combustible: 'Combustible',
-  mantenimiento: 'Mantenimiento',
-  arreglo_linea_escape: 'Línea de escape',
-  autopartes: 'Autopartes',
-};
-
-function buildContextLabel(pathname: string, search: string): string | null {
-  const sp = new URLSearchParams(search);
-  const year = sp.get('year');
-  const month = sp.get('month');
-  const tipoGasto = sp.get('tipo_gasto');
-  const placa = sp.get('placa');
-  const vehicleId = sp.get('vehicleId');
-
-  const parts: string[] = [];
-
-  if (pathname.startsWith('/finanzas/ingresos')) parts.push('Ingresos');
-  else if (pathname.startsWith('/finanzas/gastos')) parts.push('Gastos');
-  else if (pathname.startsWith('/finanzas/inversiones/generales')) parts.push('Inv. Generales');
-  else if (pathname.startsWith('/finanzas/inversiones')) parts.push('Inversiones');
-  else if (pathname.startsWith('/finanzas/ia-clasificacion')) parts.push('Pendientes IA');
-  else if (pathname.startsWith('/finanzas')) parts.push('Finanzas');
-  else if (pathname.startsWith('/vehiculos/')) {
-    const seg = decodeURIComponent(pathname.split('/')[2] ?? '');
-    parts.push(`Vehículo ${seg}`);
-  } else if (pathname.startsWith('/vehiculos')) parts.push('Vehículos');
-  else if (pathname.startsWith('/operaciones/docs')) parts.push('Documentación');
-  else if (pathname.startsWith('/operaciones')) parts.push('Operaciones');
-  else if (pathname === '/') parts.push('Inicio');
-  else return null;
-
-  if (tipoGasto) parts.push(TIPO_LABELS[tipoGasto] ?? tipoGasto.replace(/_/g, ' '));
-  if (placa) parts.push(placa);
-  else if (vehicleId) parts.push(`#${vehicleId}`);
-  if (year) parts.push(year);
-  if (month) parts.push(`mes ${month}`);
-
-  return parts.join(' · ');
-}
+import { COPILOT_FAB_POSITION_CLASS, COPILOT_FAB_Z_CLASS } from '../../modules/copilot/copilotFabPlacement';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -71,6 +26,7 @@ const FloatingAIAssistant: React.FC = () => {
 
   const [open, setOpen] = useState(() => getCopilotPanelOpen());
   const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [autoNavigate, setAutoNavigate] = useState(() => getCopilotAutoNavigate());
   const [navHistory, setNavHistory] = useState<CopilotNavHistoryItem[]>(() => getCopilotNavHistory());
 
@@ -87,7 +43,6 @@ const FloatingAIAssistant: React.FC = () => {
 
   if (!canUse || hideOnFullPage) return null;
 
-  const contextLabel = buildContextLabel(location.pathname, location.search);
   const visibleHistory = navHistory.slice(0, 3);
 
   // ── Minimized / closed → FAB ──────────────────────────────────────────────
@@ -99,7 +54,7 @@ const FloatingAIAssistant: React.FC = () => {
           setOpen(true);
           setMinimized(false);
         }}
-        className="copilot-fab-pulse fixed bottom-20 right-4 z-[9000] flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 hover:shadow-xl sm:bottom-6 sm:right-6"
+        className={`copilot-fab-pulse fixed ${COPILOT_FAB_Z_CLASS} flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 hover:shadow-xl ${COPILOT_FAB_POSITION_CLASS}`}
         aria-label="Abrir Copiloto IA"
       >
         <Sparkles className="h-4 w-4" aria-hidden />
@@ -120,7 +75,16 @@ const FloatingAIAssistant: React.FC = () => {
       />
 
       <aside
-        className="copilot-panel-enter fixed z-[8999] flex flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl inset-x-0 bottom-0 max-h-[min(85vh,720px)] rounded-t-2xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-auto sm:h-[min(640px,calc(100vh-5.5rem))] sm:w-[min(400px,calc(100vw-2rem))] sm:rounded-2xl"
+        className={[
+          'copilot-panel-enter fixed z-[8999] flex flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl',
+          // Mobile: bottom sheet
+          'inset-x-0 bottom-0 rounded-t-2xl',
+          expanded ? 'max-h-[96vh]' : 'max-h-[min(88vh,780px)]',
+          // Desktop: floating panel — normal vs expanded
+          expanded
+            ? 'sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-4 sm:rounded-2xl sm:w-[min(720px,calc(100vw-2rem))] sm:h-[calc(100vh-2rem)]'
+            : 'sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-auto sm:rounded-2xl sm:h-[min(700px,calc(100vh-5rem))] sm:w-[min(560px,calc(100vw-2rem))]',
+        ].join(' ')}
         aria-label="Copiloto Navegador"
       >
         {/* Mobile drag handle */}
@@ -158,6 +122,16 @@ const FloatingAIAssistant: React.FC = () => {
             >
               Auto {autoNavigate ? 'ON' : 'OFF'}
             </button>
+            {/* Expand / Collapse — desktop only */}
+            <button
+              type="button"
+              onClick={() => setExpanded((p) => !p)}
+              className="hidden rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 sm:inline-flex sm:items-center"
+              aria-label={expanded ? 'Contraer copiloto' : 'Expandir copiloto'}
+              title={expanded ? 'Contraer' : 'Expandir'}
+            >
+              {expanded ? <Shrink className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
             <button
               type="button"
               onClick={() => setMinimized(true)}
@@ -176,16 +150,6 @@ const FloatingAIAssistant: React.FC = () => {
             </button>
           </div>
         </header>
-
-        {/* Context bar — current page + active filters */}
-        {contextLabel && (
-          <div className="shrink-0 border-b border-slate-100 bg-slate-50/70 px-3 py-1.5 sm:px-4">
-            <p className="flex items-center gap-1 truncate text-[11px] text-slate-500">
-              <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden />
-              <span className="truncate">{contextLabel}</span>
-            </p>
-          </div>
-        )}
 
         {/* Navigation history chips */}
         {visibleHistory.length > 0 && (
@@ -210,7 +174,15 @@ const FloatingAIAssistant: React.FC = () => {
 
         {/* Chat */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <AIChatPanel variant="companion" autoNavigate={autoNavigate} className="h-full min-h-0" />
+          <AIChatPanel
+            variant="companion"
+            autoNavigate={autoNavigate}
+            className="h-full min-h-0"
+            onNavigate={() => {
+              setMinimized(true);
+              setExpanded(false);
+            }}
+          />
         </div>
       </aside>
     </>

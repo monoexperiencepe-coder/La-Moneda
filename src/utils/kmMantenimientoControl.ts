@@ -87,7 +87,7 @@ export function variacionSuperaUmbralAlerta(variacion: number | null): boolean {
 }
 
 function logKmMantenimientoDev(result: KmDesdeUltimoMantenimientoResult): void {
-  if (!import.meta.env.DEV) return;
+  if (!import.meta.env.DEV || import.meta.env.VITE_KM_MANTENIMIENTO_LOG !== '1') return;
   console.info('[km:mantenimiento]', {
     vehicle_id: result.vehicleId,
     ultimoMantenimientoKm: result.ultimoMantenimientoKm,
