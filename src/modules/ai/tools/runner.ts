@@ -26,12 +26,18 @@ import {
   splitGastosByCapa,
 } from '../financialAnalytics';
 import { aiToolDeniedMessage, canExecuteAiTool } from '../permissions';
+import { enrichToolPayloadForLlm } from '../toolEmptyResults';
 import type { AiToolName } from '../types';
 
 import { sugerirClasificacionGastoCompleta, sugerirClasificacionGastoFromGasto } from '../../../utils/gastoClasificacionSugerencia';
 import { fetchClasificacionMemoriaActivas } from '../../../services/ai/clasificacionMemoriaService';
 import { cleanOperationalCommentForUi } from '../../../utils/cleanOperationalComment';
-import { enrichToolPayloadForLlm } from '../toolEmptyResults';
+import {
+  filterGastosMaintenanceScope,
+  gastoMatchesMaintenanceScope,
+  resolveMaintenanceToolArgs,
+} from '../maintenanceSubtipos';
+import { buildIngresosHistoricosPorMes } from '../ingresosHistoricos';
 import {
   getInversionSubtipoDedupeKey,
   getInversionSubtipoLabel,
@@ -83,7 +89,7 @@ function clampLimit(n: unknown, fallback: number, max: number): number {
 async function fetchGastosInRange(
   ctx: AiToolContext,
   range: AiDateRange,
-  opts?: { tipoGasto?: string; limit?: number },
+  opts?: { tipoGasto?: string; subtipoGasto?: string; limit?: number },
 ): Promise<Gasto[]> {
   let q = supabase
     .from('gastos')
@@ -95,6 +101,7 @@ async function fetchGastosInRange(
     .order('id', { ascending: false });
 
   if (opts?.tipoGasto) q = q.eq('tipo_gasto', opts.tipoGasto);
+  if (opts?.subtipoGasto) q = q.eq('subtipo_gasto', opts.subtipoGasto);
   if (opts?.limit) q = q.limit(opts.limit);
 
   const { data, error } = await q;
@@ -281,22 +288,48 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       logToolResult(name, result, { range, source_table: 'ingresos' });
       return result;
     }
+    case 'getIngresosHistoricosPorMes': {
+      const all = await fetchIngresos(ctx.empresaId);
+      const anioRaw = args.anio ?? args.year;
+      const anio = anioRaw != null && Number.isFinite(Number(anioRaw)) ? Number(anioRaw) : undefined;
+      const limit = clampLimit(args.limit, 12, 36);
+      const result = buildIngresosHistoricosPorMes(all, { anio, limit });
+      logToolResult(name, result, { source_table: 'ingresos' });
+      return {
+        ...result,
+        nota: 'Ranking por ingresos PEN por mes. Usar mejor_mes_historico para récord absoluto.',
+      };
+    }
     case 'getGastosPeriodo': {
       const range = resolveToolDateRange(args);
       const tipoGasto = typeof args.tipo_gasto === 'string' ? args.tipo_gasto : undefined;
+      const { soloMantenimiento, subtipoGasto } = resolveMaintenanceToolArgs(args);
       const limit = clampLimit(args.limit, 100, 200);
-      const gastos = await fetchGastosInRange(ctx, range, { tipoGasto, limit });
+      let gastos = await fetchGastosInRange(ctx, range, {
+        tipoGasto: tipoGasto ?? (soloMantenimiento ? 'operativo_vehiculo' : undefined),
+        subtipoGasto: soloMantenimiento ? undefined : subtipoGasto,
+        limit: soloMantenimiento ? 500 : limit,
+      });
+      if (soloMantenimiento) {
+        gastos = filterGastosMaintenanceScope(gastos).slice(0, limit);
+      }
       const { opex, capex } = splitGastosByCapa(gastos);
-      const scope =
-        tipoGasto === 'inversion_compra' ? 'capex' : tipoGasto ? 'filtro' : 'opex_default';
+      const scope = soloMantenimiento
+        ? 'mantenimiento_vehicular'
+        : tipoGasto === 'inversion_compra'
+          ? 'capex'
+          : tipoGasto
+            ? 'filtro'
+            : 'opex_default';
       const result = {
         periodo: range,
         alcance: scope,
         total_opex_pen: sumMontos(opex),
         total_capex_pen: sumMontos(capex),
         count: gastos.length,
-        nota:
-          'Por defecto interpreta total_opex_pen como gasto operativo. CAPEX (inversion_compra) va en total_capex_pen.',
+        nota: soloMantenimiento
+          ? 'Solo mantenimiento/reparación vehicular (motor, frenos, llantas, etc.). No incluye combustible ni CAPEX.'
+          : 'Por defecto interpreta total_opex_pen como gasto operativo. CAPEX (inversion_compra) va en total_capex_pen.',
         filas_muestra: gastos.slice(0, 12).map(compactGasto),
         warnings: detectAnomalies(gastos),
       };
@@ -318,13 +351,17 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
     case 'getVehiculosConMasGasto': {
       const range = resolveToolDateRange(args);
       const limit = clampLimit(args.limit, 10, 20);
+      const { soloMantenimiento } = resolveMaintenanceToolArgs(args);
       const [gastos, vehiculos] = await Promise.all([
-        fetchGastosInRange(ctx, range, { limit: 500 }),
+        fetchGastosInRange(ctx, range, { tipoGasto: 'operativo_vehiculo', limit: 500 }),
         fetchVehiculos(ctx.empresaId),
       ]);
-      const operativos = gastos.filter(
+      let operativos = gastos.filter(
         (g) => g.tipo_gasto === 'operativo_vehiculo' && g.vehicleId != null,
       );
+      if (soloMantenimiento) {
+        operativos = operativos.filter(gastoMatchesMaintenanceScope);
+      }
       const byVehicle = new Map<string, { monto: number; count: number }>();
       for (const g of operativos) {
         const vid = String(g.vehicleId);
@@ -344,7 +381,10 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       return {
         periodo: range,
         ranking,
-        nota: 'Ranking solo gasto operativo por vehículo (excluye inversion_compra / CAPEX).',
+        alcance: soloMantenimiento ? 'mantenimiento_vehicular' : 'gasto_operativo_total',
+        nota: soloMantenimiento
+          ? 'Ranking por mantenimiento/reparación vehicular (excluye combustible y CAPEX).'
+          : 'Ranking solo gasto operativo por vehículo (excluye inversion_compra / CAPEX).',
       };
     }
     case 'getPendientesRevision': {

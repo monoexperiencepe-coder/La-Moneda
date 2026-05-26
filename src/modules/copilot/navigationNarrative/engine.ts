@@ -1,11 +1,16 @@
 import type { NarrativeSequence, NarrativeRunOptions, NarrativeStep } from './types';
 import { cinematicScrollToElement } from './scroll';
-import { cancelAIFocusMode, deactivateAIFocusMode } from './aiFocusMode';
+import { cancelAIFocusMode, deactivateAIFocusMode, finalizeNarrativeFocusLayers } from './aiFocusMode';
 import { applyNarrativeHighlight, waitMs } from './highlight';
 import { fadeOutCopilotCallout, removeCopilotCallout, showCopilotCallout } from './callout';
 import { removeNarrativeOverlay, showNarrativeOverlay } from './overlay';
 import { narrativeDurationMs, narrativePauseMs } from './preferences';
-import { aiFocusDevLog } from './devLog';
+import { aiFocusDevLog, narrativeDevLog } from './devLog';
+import {
+  buildIncomeMonthCalloutDescription,
+  resolveIncomeMonthFocusTarget,
+} from './resolveIncomeMonthTarget';
+import { isNarrativeNavigationGraceActive } from './storage';
 
 let activeAbort: AbortController | null = null;
 let running = false;
@@ -19,6 +24,7 @@ const INTERRUPT_IGNORE_SELECTORS = [
   '.ai-focus-dim',
   '.ai-focus-ring',
   '.ai-focus-spotlight',
+  '[data-copilot-suggested-action]',
 ].join(', ');
 
 const INCOME_FALLBACK_ID = 'copilot-income-summary';
@@ -27,19 +33,35 @@ export function isNarrativeRunning(): boolean {
   return running;
 }
 
-/** Cancela cualquier secuencia narrativa activa y limpia UI. */
-export function cancelNarrativeNavigation(): void {
+function stopActiveNarrativeRun(): void {
   activeAbort?.abort();
   activeAbort = null;
   running = false;
-  aiFocusDevLog('[ai-focus:cleanup]', { reason: 'cancel' });
   cancelAIFocusMode();
   removeCopilotCallout();
   removeNarrativeOverlay();
 }
 
+/** Cancela narrativa activa en pantalla (no borra sessionStorage pendiente). */
+export function cancelNarrativeNavigation(reason = 'user'): void {
+  narrativeDevLog('[copilot:narrative:cancel]', { reason, wasRunning: running });
+  aiFocusDevLog('[ai-focus:cleanup]', { reason: 'cancel' });
+  stopActiveNarrativeRun();
+}
+
 function tryResolveTarget(step: NarrativeStep, opts: NarrativeRunOptions): HTMLElement | null {
   const el = opts.resolveTarget(step);
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    const tooLarge = rect.width > 700 || rect.height > 400;
+    if (!tooLarge || step.applyMonth == null) return el;
+  }
+
+  if (step.applyMonth != null || step.target === 'income-month') {
+    const resolved = resolveIncomeMonthFocusTarget(step.applyMonth ?? '', step.applyYear);
+    if (resolved) return resolved.el;
+  }
+
   if (el) return el;
 
   const target = step.target.trim();
@@ -55,7 +77,12 @@ function tryResolveTarget(step: NarrativeStep, opts: NarrativeRunOptions): HTMLE
     target === INCOME_FALLBACK_ID
     || target === `#${INCOME_FALLBACK_ID}`
     || step.applyMonth != null
+    || step.target === 'income-month'
   ) {
+    if (step.applyMonth != null) {
+      const resolved = resolveIncomeMonthFocusTarget(step.applyMonth, step.applyYear);
+      if (resolved) return resolved.el;
+    }
     return document.getElementById(INCOME_FALLBACK_ID);
   }
 
@@ -114,7 +141,7 @@ async function runStep(
 
   opts.onApplyFilters?.(step);
   if (step.applyMonth != null || step.applyYear != null) {
-    await waitMs(320, signal);
+    await waitMs(step.applyMonth != null ? 480 : 320, signal);
   }
 
   const el = await resolveTargetWithRetry(step, opts, signal);
@@ -122,14 +149,26 @@ async function runStep(
 
   if (step.scroll !== false) {
     await cinematicScrollToElement(el, signal);
-    await waitMs(220, signal);
+    await waitMs(450, signal);
   }
 
   const kind = step.highlightType ?? 'neutral';
   const duration = narrativeDurationMs(step.duration ?? 4500);
 
-  applyNarrativeHighlight(el, kind, duration);
-  showCopilotCallout(el, step.label, step.description);
+  let calloutSubtitle = step.description;
+  if (step.applyMonth != null || step.target === 'income-month') {
+    const amountText =
+      el.getAttribute('data-copilot-amount')
+      ?? el.querySelector('[data-copilot-target="income-month-value"]')?.getAttribute('data-copilot-amount')
+      ?? resolveIncomeMonthFocusTarget(step.applyMonth ?? '', step.applyYear)?.amountText;
+    calloutSubtitle = buildIncomeMonthCalloutDescription(step.description, amountText);
+  }
+
+  const focused = await applyNarrativeHighlight(el, kind, duration, {
+    title: step.label,
+    subtitle: calloutSubtitle,
+  });
+  showCopilotCallout(focused, step.label, calloutSubtitle);
 
   await waitMs(duration, signal);
 
@@ -144,13 +183,19 @@ export async function runNarrativeSequence(
   sequence: NarrativeSequence,
   opts: NarrativeRunOptions,
 ): Promise<void> {
-  cancelNarrativeNavigation();
+  stopActiveNarrativeRun();
 
   if (!sequence.steps.length) return;
 
   activeAbort = new AbortController();
   const signal = activeAbort.signal;
   running = true;
+
+  narrativeDevLog('[copilot:narrative:run]', {
+    id: sequence.id,
+    path: sequence.path,
+    steps: sequence.steps.length,
+  });
 
   aiFocusDevLog('[ai-focus:start]', {
     path: sequence.path,
@@ -176,20 +221,22 @@ export async function runNarrativeSequence(
     hideOverlay();
     running = false;
     if (activeAbort?.signal === signal) activeAbort = null;
-    cancelAIFocusMode();
+    finalizeNarrativeFocusLayers();
     removeCopilotCallout();
   }
 }
 
-/** Escucha navegación manual para cancelar narrativa. */
+/** Escucha navegación manual para cancelar narrativa activa. */
 export function installNarrativeInterruptHandlers(): () => void {
-  const onPop = () => cancelNarrativeNavigation();
+  const onPop = () => cancelNarrativeNavigation('popstate');
   const onClick = (e: MouseEvent) => {
+    if (isNarrativeNavigationGraceActive()) return;
+
     const target = e.target as HTMLElement | null;
     if (!target) return;
     if (target.closest(INTERRUPT_IGNORE_SELECTORS)) return;
     if (target.closest('a[href], button, [role="button"]')) {
-      cancelNarrativeNavigation();
+      cancelNarrativeNavigation('click');
     }
   };
 

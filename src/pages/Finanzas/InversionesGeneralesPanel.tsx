@@ -179,7 +179,6 @@ const InversionesGeneralesPanel: React.FC = () => {
         document.getElementById('copilot-inversiones-table')
       );
     },
-    deps: [displayRows.length, filterPlaca, filterVehicleId, searchParams],
   });
 
   const sortThBtn =

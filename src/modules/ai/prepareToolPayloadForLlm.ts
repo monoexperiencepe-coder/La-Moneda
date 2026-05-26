@@ -36,6 +36,9 @@ function compactPayload(tool: AiToolName, data: Record<string, unknown>): Record
   if (Array.isArray(out.ranking)) {
     out.ranking = truncateList(out.ranking as unknown[], MAX_RANKING);
   }
+  if (Array.isArray(out.ranking_meses) && (out.ranking_meses as unknown[]).length > 12) {
+    out.ranking_meses = (out.ranking_meses as unknown[]).slice(0, 12);
+  }
   if (Array.isArray(out.categorias) && (out.categorias as unknown[]).length > 12) {
     out.categorias = (out.categorias as unknown[]).slice(0, 12);
   }

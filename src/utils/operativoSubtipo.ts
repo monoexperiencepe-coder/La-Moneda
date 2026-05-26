@@ -15,7 +15,7 @@ export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string 
   { value: 'sunarp', label: 'SUNARP' },
   { value: 'sunat', label: 'SUNAT' },
   { value: 'sutran', label: 'SUTRAN' },
-  { value: 'taxi', label: 'Taxi' },
+  { value: 'revision_tecnica_taxi', label: 'REVISIÓN TÉCNICA TAXI' },
   { value: 'mantenimiento', label: 'Mantenimiento' },
   { value: 'accesorios', label: 'Accesorios' },
   { value: 'arreglo_linea_escape', label: 'Arreglo línea de escape' },
@@ -49,7 +49,7 @@ const FACT_DEFAULT_BY_CANON: Record<string, { tipo: string; subTipo: string }> =
   sunarp: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNARP' },
   sunat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNAT' },
   sutran: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUTRAN' },
-  taxi: { tipo: 'DOCUMENTOS', subTipo: 'RT-TAXI' },
+  revision_tecnica_taxi: { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA TAXI' },
   mantenimiento: { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
   accesorios: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
   arreglo_linea_escape: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
@@ -84,7 +84,8 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('SOAT', 'documentos');
   add('AFOCAT', 'documentos');
   add('RT-PARTICULAR', 'multas_tramites');
-  add('RT-TAXI', 'taxi');
+  add('RT-TAXI', 'revision_tecnica_taxi');
+  add('RT TAXI', 'revision_tecnica_taxi');
   add('PERMISOS VARIOS', 'multas_tramites');
   add('VIGENCIA DE PODER', 'documentos');
   add('MANTENIMIENTO COMPLETO', 'mantenimiento');
@@ -108,7 +109,8 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('OTROS /ESPECIFICAR', 'otros_operativo');
   add('CIA DE SEGUROS', 'documentos');
   add('REVISIÓN TÉCNICA PARTICULAR', 'multas_tramites');
-  add('REVISIÓN TÉCNICA TAXI', 'taxi');
+  add('REVISIÓN TÉCNICA TAXI', 'revision_tecnica_taxi');
+  add('REVISION TECNICA TAXI', 'revision_tecnica_taxi');
   add('PAPELETAS /MULTAS', 'multas_tramites');
   add('AUTORIZACIÓN ATU', 'atu');
   add('PERMISO POLARIZADO', 'multas_tramites');
@@ -116,7 +118,7 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('SUNARP', 'sunarp');
   add('SUNAT', 'sunat');
   add('SUTRAN', 'sutran');
-  add('TAXI', 'taxi');
+  add('TAXI', 'revision_tecnica_taxi');
   add('VIATICOS', 'movilidad');
   add('DELIVERY', 'movilidad');
   return m;
@@ -138,11 +140,23 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
   const k = normKey(s0);
   if (CANON_SET.has(k)) return k;
 
+  const tram = normalizeTramitesMovilidadSubtipo(s0);
+  if (tram === 'taxi') return 'revision_tecnica_taxi';
+  if (tram) return tram;
+
+  const nkEarly = normKey(s0.replace(/_/g, ' '));
+  if (
+    nkEarly.includes('revision tecnica taxi')
+    || nkEarly.includes('rt taxi')
+    || nkEarly.includes('rtv taxi')
+    || nkEarly === 'taxi'
+    || nkEarly.includes('detaxi')
+  ) {
+    return 'revision_tecnica_taxi';
+  }
+
   const fromFact = NORM_FACT_SUBTIPO_TO_CANON[k];
   if (fromFact) return fromFact;
-
-  const tram = normalizeTramitesMovilidadSubtipo(s0);
-  if (tram) return tram;
 
   const nk = normKey(s0.replace(/_/g, ' '));
   if (nk.includes('bater')) return 'bateria';

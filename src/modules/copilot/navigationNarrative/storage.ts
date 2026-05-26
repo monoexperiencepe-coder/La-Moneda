@@ -1,9 +1,20 @@
 import type { NarrativeSequence, NarrativeStep } from './types';
-import type { NarrativeRunOptions } from './types';
+import { narrativeDevLog } from './devLog';
 
 const STORAGE_KEY = 'copilot-narrative-pending';
 
 type StoredNarrative = NarrativeSequence & { createdAt: number };
+
+/** Ignora clicks que cancelarían la narrativa recién encolada. */
+let navigationGraceUntil = 0;
+
+export function markNarrativeQueued(): void {
+  navigationGraceUntil = Date.now() + 3500;
+}
+
+export function isNarrativeNavigationGraceActive(): boolean {
+  return Date.now() < navigationGraceUntil;
+}
 
 function normalizePath(path: string): string {
   return path.split('?')[0].trim();
@@ -20,8 +31,15 @@ export function queueNarrativeNavigation(sequence: Omit<NarrativeSequence, 'id'>
   };
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    markNarrativeQueued();
+    narrativeDevLog('[copilot:narrative:stored]', {
+      id,
+      path: payload.path,
+      steps: sequence.steps.length,
+      targets: sequence.steps.map((s) => s.target),
+    });
   } catch {
-    /* quota / private mode */
+    narrativeDevLog('[copilot:narrative:stored]', { id, error: 'sessionStorage-failed' });
   }
   return id;
 }
@@ -55,9 +73,15 @@ export function consumeNarrativeForPath(pathname: string): NarrativeSequence | n
   } catch {
     /* ignore */
   }
+  narrativeDevLog('[copilot:narrative:consume]', {
+    path: pathname,
+    id: peek.id,
+    steps: peek.steps.length,
+  });
   return peek;
 }
 
+/** Solo borra la cola pendiente — no cancela narrativa activa en pantalla. */
 export function clearPendingNarrative(): void {
   try {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -66,7 +90,10 @@ export function clearPendingNarrative(): void {
   }
 }
 
-export function resolveStepTarget(step: NarrativeStep, resolver?: (s: NarrativeStep) => HTMLElement | null): HTMLElement | null {
+export function resolveStepTarget(
+  step: NarrativeStep,
+  resolver?: (s: NarrativeStep) => HTMLElement | null,
+): HTMLElement | null {
   if (resolver) {
     const resolved = resolver(step);
     if (resolved) return resolved;

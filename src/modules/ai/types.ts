@@ -3,6 +3,7 @@
 export type AiToolName =
   | 'getResumenFinancieroPeriodo'
   | 'getIngresosPeriodo'
+  | 'getIngresosHistoricosPorMes'
   | 'getGastosPeriodo'
   | 'getGastosPorCategoria'
   | 'getVehiculosConMasGasto'

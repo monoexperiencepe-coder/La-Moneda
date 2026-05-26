@@ -20,7 +20,7 @@ export {
   installNarrativeInterruptHandlers,
 } from './engine';
 
-export { buildNarrativeFromSuggestedAction, buildIngresosStep } from './buildFromAction';
+export { buildNarrativeFromSuggestedAction, buildNarrativeFromCopilotParams, buildIngresosStep } from './buildFromAction';
 
 export {
   activateAIFocusMode,

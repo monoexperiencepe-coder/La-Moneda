@@ -19,6 +19,8 @@ import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
 import type { CopilotFocusSpec } from '../../modules/copilot/copilotFocusTarget';
 import type { NarrativeStep } from '../../modules/copilot/navigationNarrative';
+import { resolveIncomeMonthFocusTarget } from '../../modules/copilot/navigationNarrative/resolveIncomeMonthTarget';
+import CopilotEvidenceSlot from '../../components/Copilot/CopilotEvidenceSlot';
 
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
@@ -114,26 +116,52 @@ const Ingresos: React.FC = () => {
     }
     if (step.applyMonth != null) {
       const mm = String(step.applyMonth).padStart(2, '0');
-      setChartMonth(mm);
-      setHistoryMonth(mm);
+      if (step.target === 'income-month') {
+        setChartMonth('ALL');
+        setHistoryMonth('ALL');
+      } else {
+        setChartMonth(mm);
+        setHistoryMonth(mm);
+      }
     }
   }, []);
 
   useCopilotNarrativeNavigation({
     resolveTarget: (step) => {
-      if (step.target === 'copilot-income-summary' || step.target === '#copilot-income-summary') {
+      if (step.target === 'ai-evidence-card') {
+        return document.querySelector('[data-copilot-target="ai-evidence-card"]') as HTMLElement | null;
+      }
+      const month = step.applyMonth ?? (step.target === 'income-month' ? step.applyMonth : null);
+      if (month != null) {
+        const year = step.applyYear ?? (chartYear !== 'ALL' ? chartYear : undefined);
+        const resolved = resolveIncomeMonthFocusTarget(month, year);
+        if (resolved) return resolved.el;
+      }
+
+      if (
+        step.target === 'copilot-income-summary'
+        || step.target === '#copilot-income-summary'
+        || step.target === 'income-month'
+      ) {
         return document.getElementById('copilot-income-summary');
       }
       return document.getElementById(step.target.replace(/^#/, ''));
     },
     resolveTargetFromSpec: (spec: CopilotFocusSpec) => {
+      if (spec.scrollTarget === 'ai-evidence-card') {
+        return document.querySelector('[data-copilot-target="ai-evidence-card"]') as HTMLElement | null;
+      }
+      if (spec.highlightMonth) {
+        const year = searchParams.get('year') ?? (chartYear !== 'ALL' ? chartYear : undefined);
+        const resolved = resolveIncomeMonthFocusTarget(spec.highlightMonth, year ?? undefined);
+        if (resolved) return resolved.el;
+      }
       if (spec.scrollTarget === 'income-summary' || spec.highlightMonth) {
         return document.getElementById('copilot-income-summary');
       }
       return document.getElementById('copilot-scroll-target');
     },
     onApplyFilters: applyNarrativeFilters,
-    deps: [chartYear, chartMonth, ingresos.length],
   });
 
   useEffect(() => {
@@ -300,11 +328,12 @@ const Ingresos: React.FC = () => {
 
   const chartYearInsights = useMemo(() => {
     if (chartYear === 'ALL' || !Number.isFinite(chartYearNum)) {
-      return { avgMonthly: 0, peakLabel: '—', peakTotal: 0 };
+      return { avgMonthly: 0, peakLabel: '—', peakTotal: 0, peakMonth: '' };
     }
     const avgMonthly = totalAnioGrafico / 12;
     let peakTotal = 0;
     let peakLabel = '—';
+    let peakMonth = '';
     for (const mes of MESES) {
       const mm = String(mes.value).padStart(2, '0');
       const monthTotal = ingresosChartBase
@@ -313,11 +342,29 @@ const Ingresos: React.FC = () => {
       if (monthTotal > peakTotal) {
         peakTotal = monthTotal;
         peakLabel = mes.label;
+        peakMonth = mm;
       }
     }
     if (peakTotal <= 0) peakLabel = '—';
-    return { avgMonthly, peakLabel, peakTotal };
+    return { avgMonthly, peakLabel, peakTotal, peakMonth };
   }, [chartYear, chartYearNum, totalAnioGrafico, ingresosChartBase]);
+
+  const monthlyFocusRows = useMemo(() => {
+    if (chartYear === 'ALL' || !Number.isFinite(chartYearNum)) return [];
+    const peakMonth = chartYearInsights.peakMonth;
+    return MESES.map((mes) => {
+      const mm = String(mes.value).padStart(2, '0');
+      const total = ingresosChartBase
+        .filter((i) => i.fecha.slice(5, 7) === mm)
+        .reduce((s, i) => s + ingresoMontoPEN(i), 0);
+      return {
+        month: mm,
+        label: mes.label,
+        total,
+        isPeak: mm === peakMonth && total > 0,
+      };
+    }).filter((row) => row.total > 0);
+  }, [chartYear, chartYearNum, ingresosChartBase, chartYearInsights.peakMonth]);
 
   const todayTotal = useMemo(
     () => ingresos.filter((i) => i.fecha === todayStr()).reduce((s, i) => s + ingresoMontoPEN(i), 0),
@@ -515,6 +562,8 @@ const Ingresos: React.FC = () => {
         </div>
       </div>
 
+      <CopilotEvidenceSlot />
+
       <div id="copilot-income-summary" className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_28px_56px_-28px_rgba(15,23,42,0.18)]">
         <div
           className="h-1 w-full bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-800"
@@ -600,6 +649,49 @@ const Ingresos: React.FC = () => {
                 </p>
               </div>
             </div>
+
+            {chartYear !== 'ALL' && monthlyFocusRows.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Ingresos por mes · {chartYear}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                  {monthlyFocusRows.map((row) => {
+                    const amountFormatted = formatCurrency(row.total);
+                    return (
+                      <div
+                        key={row.month}
+                        data-copilot-target="income-month"
+                        data-copilot-month={row.month}
+                        data-copilot-year={chartYear}
+                        data-copilot-amount={amountFormatted}
+                        className={`rounded-xl border p-2.5 sm:p-3 ${
+                          row.isPeak
+                            ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/90 to-white ring-1 ring-emerald-900/[0.06]'
+                            : 'border-slate-100 bg-white shadow-sm'
+                        }`}
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          {row.label}
+                        </p>
+                        <p
+                          data-copilot-target="income-month-value"
+                          data-copilot-month={row.month}
+                          data-copilot-year={chartYear}
+                          data-copilot-amount={amountFormatted}
+                          className="mt-0.5 text-sm font-bold tabular-nums text-emerald-900 sm:text-base"
+                        >
+                          {amountFormatted}
+                        </p>
+                        {row.isPeak ? (
+                          <p className="mt-1 text-[10px] font-medium text-emerald-700/90">Mayor ingreso</p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {ingresos.length > 0 ? (
               <>

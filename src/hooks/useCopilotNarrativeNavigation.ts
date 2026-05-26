@@ -4,6 +4,7 @@ import {
   cancelNarrativeNavigation,
   consumeNarrativeForPath,
   installNarrativeInterruptHandlers,
+  isNarrativeRunning,
   peekNarrativeForPath,
   runNarrativeSequence,
   type NarrativeRunOptions,
@@ -16,23 +17,31 @@ import {
   type CopilotFocusSpec,
 } from '../modules/copilot/copilotFocusTarget';
 import { buildIngresosStep } from '../modules/copilot/navigationNarrative/buildFromAction';
-import { aiFocusDevLog } from '../modules/copilot/navigationNarrative/devLog';
+import { narrativeDevLog } from '../modules/copilot/navigationNarrative/devLog';
 
 type Options = NarrativeRunOptions & {
   /** Resuelve target desde spec URL legacy (sin narrativeSteps). */
   resolveTargetFromSpec?: (spec: CopilotFocusSpec) => HTMLElement | null;
   delayMs?: number;
-  deps?: unknown[];
 };
 
-function specToNarrativeSteps(spec: CopilotFocusSpec): NarrativeStep[] | null {
-  if (spec.highlightMonth && (spec.scrollTarget === 'income-summary' || !spec.scrollTarget)) {
-    return [
-      buildIngresosStep(spec.highlightMonth, undefined, 'ingreso_bruto'),
-    ].map((s) => ({
-      ...s,
-      label: spec.highlightLabel ?? s.label,
-    }));
+function buildStepsFromUrl(spec: CopilotFocusSpec, searchParams: URLSearchParams): NarrativeStep[] | null {
+  const year = searchParams.get('year')?.trim() || undefined;
+  const month = spec.highlightMonth ?? searchParams.get('month')?.trim();
+
+  if (month && (spec.scrollTarget === 'income-summary' || !spec.scrollTarget)) {
+    const base = buildIngresosStep(month, year, 'ingreso_bruto');
+    return [{
+      ...base,
+      label: spec.highlightLabel?.startsWith('Aquí')
+        ? spec.highlightLabel
+        : spec.highlightLabel
+          ? `Aquí está ${spec.highlightLabel.split('·')[0]?.trim() ?? spec.highlightLabel}`
+          : base.label,
+      description: spec.highlightLabel && !spec.highlightLabel.startsWith('Aquí')
+        ? spec.highlightLabel
+        : base.description,
+    }];
   }
 
   if (spec.scrollTarget || spec.highlightVehicle) {
@@ -49,9 +58,10 @@ function specToNarrativeSteps(spec: CopilotFocusSpec): NarrativeStep[] | null {
       target,
       label: spec.highlightLabel ?? 'Dato destacado',
       highlightType: spec.highlightVehicle ? 'warning' : 'neutral',
-      duration: 4000,
+      duration: 4500,
       scroll: true,
-      applyMonth: spec.highlightMonth,
+      applyMonth: month,
+      applyYear: year,
     }];
   }
 
@@ -64,49 +74,68 @@ function specToNarrativeSteps(spec: CopilotFocusSpec): NarrativeStep[] | null {
 export function useCopilotNarrativeNavigation(opts: Options): void {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const appliedRef = useRef<string>('');
+  const lastRunIdRef = useRef<string | null>(null);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
 
   useEffect(() => installNarrativeInterruptHandlers(), []);
 
   useEffect(() => {
-    const pathname = location.pathname;
-    const signature = `${pathname}?${searchParams.toString()}`;
-    if (appliedRef.current === signature) return;
+    return () => {
+      if (isNarrativeRunning()) {
+        cancelNarrativeNavigation('unmount');
+      }
+    };
+  }, []);
 
+  useEffect(() => {
+    const pathname = location.pathname;
     const pending = peekNarrativeForPath(pathname);
     const spec = parseCopilotFocusFromSearchParams(searchParams);
-    const legacySteps = spec ? specToNarrativeSteps(spec) : null;
-    const steps = pending?.steps ?? legacySteps;
+    const urlSteps = spec ? buildStepsFromUrl(spec, searchParams) : null;
+    const steps = pending?.steps?.length ? pending.steps : urlSteps;
 
-    if (!steps?.length) return;
-
-    appliedRef.current = signature;
-
-    const timer = window.setTimeout(() => {
-      aiFocusDevLog('[ai-focus:start]', {
-        pathname,
-        pending: Boolean(pending),
-        legacy: Boolean(legacySteps),
-        steps: steps.length,
-      });
-
-      const sequence =
-        consumeNarrativeForPath(pathname) ??
-        (pending ?? {
-          id: `legacy-${Date.now()}`,
-          path: pathname,
-          steps: legacySteps ?? [],
-          showOverlay: true,
+    if (!steps?.length) {
+      if (import.meta.env.DEV && (spec || pending)) {
+        narrativeDevLog('[copilot:narrative:missing]', {
+          pathname,
+          hasPending: Boolean(pending),
+          hasSpec: Boolean(spec),
         });
+      }
+      return;
+    }
 
-      if (!sequence.steps.length) return;
+    const runId = pending?.id ?? `url-${pathname}-${searchParams.toString()}`;
+    if (lastRunIdRef.current === runId) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+
+      const consumed = consumeNarrativeForPath(pathname);
+      const sequence = consumed ?? {
+        id: runId,
+        path: pathname,
+        steps: urlSteps ?? steps,
+        showOverlay: true,
+      };
+
+      if (!sequence.steps.length) {
+        narrativeDevLog('[copilot:narrative:missing]', { pathname, runId });
+        return;
+      }
+
+      lastRunIdRef.current = runId;
+      const currentOpts = optsRef.current;
+      const currentSpec = parseCopilotFocusFromSearchParams(searchParams);
 
       void runNarrativeSequence(sequence, {
         resolveTarget: (step) => {
-          const fromResolver = opts.resolveTarget(step);
+          const fromResolver = currentOpts.resolveTarget(step);
           if (fromResolver) return fromResolver;
-          if (spec && opts.resolveTargetFromSpec) {
-            return opts.resolveTargetFromSpec(spec);
+          if (currentSpec && currentOpts.resolveTargetFromSpec) {
+            return currentOpts.resolveTargetFromSpec(currentSpec);
           }
           const t = step.target.trim();
           if (t.startsWith('#') || t.startsWith('.')) {
@@ -114,21 +143,21 @@ export function useCopilotNarrativeNavigation(opts: Options): void {
           }
           return document.getElementById(t);
         },
-        onApplyFilters: opts.onApplyFilters,
+        onApplyFilters: currentOpts.onApplyFilters,
         initialDelayMs: 0,
       }).finally(() => {
-        if (spec) {
+        if (currentSpec) {
           const next = stripCopilotFocusParams(searchParams);
           setSearchParams(next, { replace: true });
         }
       });
-    }, opts.delayMs ?? 680);
+    }, optsRef.current.delayMs ?? 680);
 
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, searchParams, setSearchParams, ...(opts.deps ?? [])]);
-
-  useEffect(() => () => cancelNarrativeNavigation(), []);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [location.pathname, searchParams, setSearchParams]);
 }
 
 export { copilotFocusQueryKeys };

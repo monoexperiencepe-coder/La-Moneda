@@ -16,6 +16,7 @@ import { formatCurrency, todayStr } from '../../utils/formatting';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
 import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
+import { gastoMatchesMaintenanceScope } from '../../modules/ai/maintenanceSubtipos';
 import { REVISION_USER_LABEL } from '../../config/app';
 import {
   DEFAULT_GASTOS_HISTORIAL_PAGE_SIZE,
@@ -263,9 +264,17 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     if (st) setFilterSubtipoGasto(st);
     const q = searchParams.get('search');
     const hv = searchParams.get('highlightVehicle');
+    const maintScope = searchParams.get('mantenimiento_scope') === '1';
+    if (maintScope) {
+      setMantenimientoScopeOnly(true);
+      const idx = parrillaTabs.findIndex((t) => t.tipo_gasto === 'operativo_vehiculo');
+      if (idx >= 0) setTabIndex(idx);
+    } else {
+      setMantenimientoScopeOnly(false);
+    }
     if (q) setHistorialSearchInput(q);
     if (hv) setHistorialSearchInput(hv);
-    if (tipo || y || st || q || hv) {
+    if (tipo || y || st || q || hv || maintScope) {
       requestAnimationFrame(() =>
         document.getElementById('copilot-gastos-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
       );
@@ -323,6 +332,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     String(new Date().getMonth() + 1).padStart(2, '0'),
   );
   const [filterSubtipoGasto, setFilterSubtipoGasto] = useState('');
+  const [mantenimientoScopeOnly, setMantenimientoScopeOnly] = useState(false);
   const [historialRows, setHistorialRows] = useState<Gasto[]>([]);
   const [historialTotal, setHistorialTotal] = useState(0);
   const [historialPage, setHistorialPage] = useState(0);
@@ -843,9 +853,12 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       ) {
         return false;
       }
+      if (mantenimientoScopeOnly && !gastoMatchesMaintenanceScope(g)) {
+        return false;
+      }
       return true;
     },
-    [tab, historyYear, historyMonth, filterSubtipoGasto, historialPinnedAt],
+    [tab, historyYear, historyMonth, filterSubtipoGasto, historialPinnedAt, mantenimientoScopeOnly],
   );
 
   const removeGastoFromHistorialLocal = useCallback((id: string) => {
@@ -982,7 +995,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       document.getElementById(step.target.replace(/^#/, '')) ??
       document.getElementById('copilot-gastos-table') ??
       document.getElementById('copilot-scroll-target'),
-    deps: [historialSearchInput, historialRowsDisplayed.length],
   });
 
   const handleRegistrarGasto = useCallback(

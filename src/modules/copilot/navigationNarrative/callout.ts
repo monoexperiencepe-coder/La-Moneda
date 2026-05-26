@@ -23,14 +23,19 @@ export function removeCopilotCallout(): void {
   document.querySelectorAll(`.${ARROW_CLASS}`).forEach((el) => el.remove());
 }
 
-/** Callout temporal “mira aquí” cerca del elemento resaltado. */
+/** Callout temporal “mira aquí” cerca del elemento resaltado (fixed layer). */
 export function showCopilotCallout(anchor: HTMLElement, title: string, subtitle?: string): void {
   removeCopilotCallout();
 
+  const isMobile = window.innerWidth < 640;
+
   const callout = document.createElement('div');
-  callout.className = CALLOUT_CLASS;
+  callout.className = `${CALLOUT_CLASS}${isMobile ? ' copilot-callout--mobile' : ' copilot-callout--desktop'}`;
   callout.setAttribute('role', 'status');
   callout.setAttribute('aria-live', 'polite');
+  callout.style.position = 'fixed';
+  callout.style.zIndex = '99995';
+  callout.style.pointerEvents = 'none';
 
   const icon = document.createElement('span');
   icon.className = 'copilot-callout-icon';
@@ -59,31 +64,59 @@ export function showCopilotCallout(anchor: HTMLElement, title: string, subtitle?
   const arrow = document.createElement('span');
   arrow.className = ARROW_CLASS;
   arrow.setAttribute('aria-hidden', 'true');
+  arrow.style.position = 'fixed';
+  arrow.style.zIndex = '99994';
   document.body.appendChild(arrow);
 
   const rect = anchor.getBoundingClientRect();
   const calloutRect = callout.getBoundingClientRect();
-  const top = Math.max(12, rect.top + window.scrollY - calloutRect.height - 18);
+  const gap = isMobile ? 10 : 12;
+  const viewportPad = isMobile ? 10 : 16;
+
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const placeBelow = spaceAbove < calloutRect.height + gap + 24 && spaceBelow > spaceAbove;
+
+  let top: number;
+  let arrowTop: number;
+
+  if (placeBelow) {
+    top = rect.bottom + gap;
+    arrowTop = rect.bottom + gap - 6;
+    arrow.classList.add(`${ARROW_CLASS}--down`);
+  } else {
+    top = rect.top - calloutRect.height - gap;
+    arrowTop = rect.top - gap + 2;
+    arrow.classList.add(`${ARROW_CLASS}--up`);
+  }
+
+  top = Math.max(viewportPad, top);
+
+  const centerX = rect.left + rect.width / 2;
   const left = Math.min(
-    window.innerWidth - calloutRect.width - 12,
-    Math.max(12, rect.left + window.scrollX + rect.width / 2 - calloutRect.width / 2),
+    window.innerWidth - calloutRect.width - viewportPad,
+    Math.max(viewportPad, centerX - calloutRect.width / 2),
   );
+
   callout.style.top = `${top}px`;
   callout.style.left = `${left}px`;
 
-  const arrowTop = rect.top + window.scrollY - 8;
-  const arrowLeft = rect.left + window.scrollX + rect.width / 2 - 8;
+  const arrowLeft = centerX - (isMobile ? 9 : 11);
   arrow.style.top = `${arrowTop}px`;
   arrow.style.left = `${arrowLeft}px`;
 
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
       callout.classList.add(CALLOUT_VISIBLE);
+      callout.style.opacity = '1';
       arrow.classList.add(`${ARROW_CLASS}--visible`);
+      arrow.style.opacity = '1';
     });
   } else {
     callout.classList.add(CALLOUT_VISIBLE);
+    callout.style.opacity = '1';
     arrow.classList.add(`${ARROW_CLASS}--visible`);
+    arrow.style.opacity = '1';
   }
 }
 

@@ -83,8 +83,18 @@ const OPERADOR_ACTIONS: AiQuickAction[] = [
   },
 ];
 
-export function getAiQuickActionsForUser(user: PermissionUser | null | undefined): AiQuickAction[] {
+/** Subconjunto compacto para el panel flotante del copiloto. */
+const COMPANION_ADMIN_IDS = ['resume-mes', 'pendientes', 'vehiculos-gasto', 'errores'] as const;
+const COMPANION_OPERADOR_IDS = ['pendientes-clasificar', 'globales', 'movimientos-op'] as const;
+
+export function getAiQuickActionsForUser(
+  user: PermissionUser | null | undefined,
+  opts?: { companion?: boolean },
+): AiQuickAction[] {
   if (!user) return [];
-  if (isFinancialOperadorRestricted(user)) return OPERADOR_ACTIONS;
-  return ADMIN_ACTIONS;
+  const actions = isFinancialOperadorRestricted(user) ? OPERADOR_ACTIONS : ADMIN_ACTIONS;
+  if (!opts?.companion) return actions;
+
+  const ids = isFinancialOperadorRestricted(user) ? COMPANION_OPERADOR_IDS : COMPANION_ADMIN_IDS;
+  return actions.filter((a) => (ids as readonly string[]).includes(a.id));
 }

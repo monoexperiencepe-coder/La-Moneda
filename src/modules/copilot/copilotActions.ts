@@ -34,6 +34,10 @@ export type CopilotNavigateParams = {
   /** Placa o id de vehículo a resaltar. */
   highlightVehicle?: string;
   highlightLabel?: string;
+  /** Motivo del foco mensual en ingresos (para labels de acciones). */
+  monthFocusReason?: 'ingreso_bruto' | 'eficiencia' | 'general';
+  /** Solo gastos de mantenimiento vehicular en destino. */
+  mantenimientoScope?: boolean;
   highlightType?: 'month' | 'vehicle' | 'category' | 'record' | 'card' | 'table-row';
   scrollTarget?: string;
   /** Secuencia narrativa (no va en URL; se encola en sessionStorage al navegar). */
@@ -92,6 +96,7 @@ function buildQueryParams(input: CopilotNavigateParams): Record<string, string> 
   if (input.highlightLabel?.trim()) params.highlightLabel = input.highlightLabel.trim().slice(0, 120);
   if (input.highlightType) params.highlightType = input.highlightType;
   if (input.scrollTarget?.trim()) params.scrollTarget = input.scrollTarget.trim();
+  if (input.mantenimientoScope) params.mantenimiento_scope = '1';
   return params;
 }
 

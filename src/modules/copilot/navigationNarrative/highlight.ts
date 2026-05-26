@@ -4,15 +4,16 @@ import {
   activateAIFocusMode,
   cancelAIFocusMode,
   deactivateAIFocusMode,
+  prepareAndActivateAIFocusMode,
 } from './aiFocusMode';
 
-/** @deprecated Use activateAIFocusMode — mantiene compatibilidad con narrative engine. */
-export function applyNarrativeHighlight(
+export async function applyNarrativeHighlight(
   el: HTMLElement,
   kind: NarrativeHighlightKind = 'neutral',
   _durationMs = 4000,
-): void {
-  activateAIFocusMode(el, kind);
+  callout?: { title?: string; subtitle?: string },
+): Promise<HTMLElement> {
+  return prepareAndActivateAIFocusMode(el, kind, callout);
 }
 
 export function clearNarrativeHighlight(): void {
@@ -23,7 +24,7 @@ export function fadeOutNarrativeHighlight(durationMs = 480): Promise<void> {
   return deactivateAIFocusMode(durationMs);
 }
 
-export { activateAIFocusMode, deactivateAIFocusMode, cancelAIFocusMode };
+export { activateAIFocusMode, deactivateAIFocusMode, cancelAIFocusMode, prepareAndActivateAIFocusMode };
 
 export function waitMs(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();

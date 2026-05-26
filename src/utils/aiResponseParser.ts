@@ -1,5 +1,7 @@
 /** Utilidades para parsear y sanitizar respuestas del asistente IA. */
 
+import type { AiStructuredResponse, AiSuggestedAction } from '../modules/ai/types';
+
 export interface ParsedAiAction {
   label: string;
   description: string;
@@ -16,6 +18,48 @@ export interface ParsedAiResponse {
   confidence: number | null;
 }
 
+const EXECUTIVE_MAX_TOTAL_CHARS = 900;
+const EXECUTIVE_MAX_SUMMARY_CHARS = 400;
+const EXECUTIVE_MAX_INSIGHTS = 4;
+const EXECUTIVE_MAX_WARNINGS = 2;
+const EXECUTIVE_MAX_METRICS = 3;
+
+export type ExecutiveBullet = {
+  label?: string;
+  value: string;
+};
+
+export type ExecutiveViewModel = {
+  headline: string;
+  bullets: ExecutiveBullet[];
+  warnings: string[];
+  metricCards: AiMetricCard[];
+  table: AiSimpleTable | null;
+  actions: AiSuggestedAction[];
+};
+
+/** Detecta JSON estructurado filtrado al texto visible. */
+export function looksLikeJsonLeak(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  if (t.startsWith('{') && (t.includes('"summary"') || t.includes('"insights"') || t.includes('"warnings"'))) {
+    return true;
+  }
+  if (/"summary"\s*:\s*"/.test(t) && /"(insights|warnings|data|confidence)"\s*:/.test(t)) {
+    return true;
+  }
+  return /^\s*\{\s*"summary"/.test(t);
+}
+
+function stripJsonFieldLabels(text: string): string {
+  let s = text;
+  s = s.replace(/^\s*"(summary|insights|warnings|data|confidence|suggestedActions)"\s*:\s*/gim, '');
+  s = s.replace(/^\s*(summary|insights|warnings|data|confidence|suggestedActions)\s*:\s*/gim, '');
+  s = s.replace(/^\s*[\[{]\s*$/gm, '');
+  s = s.replace(/^\s*[\]}],?\s*$/gm, '');
+  return s;
+}
+
 /**
  * Elimina markdown crudo, bloques JSON y caracteres de estructura visual
  * para producir texto limpio apto para mostrar en UI.
@@ -23,15 +67,24 @@ export interface ParsedAiResponse {
 export function sanitizeAiAssistantText(text: string): string {
   let s = text ?? '';
 
+  if (looksLikeJsonLeak(s)) {
+    const recovered = parseAiAssistantText(s);
+    if (recovered.summary) {
+      const parts = [recovered.summary, ...recovered.insights].filter(Boolean);
+      s = parts.join('\n\n');
+    }
+  }
+
   // Remove ```json ... ``` blocks
   s = s.replace(/```json[\s\S]*?```/gi, '');
   // Remove generic ``` ... ``` blocks
   s = s.replace(/```[\s\S]*?```/g, '');
 
   // Remove standalone JSON objects at end of message
-  // (lines that start with { after optional whitespace, going to end)
   s = s.replace(/\n\s*\{[\s\S]{10,}\}\s*$/, '');
   s = s.replace(/^\s*\{[\s\S]{20,}\}\s*$/, '');
+
+  s = stripJsonFieldLabels(s);
 
   // Convert ## Heading → plain text (keep text)
   s = s.replace(/^#{1,6}\s+(.+)$/gm, '$1');
@@ -93,6 +146,7 @@ export function sanitizeTechnicalLeakage(text: string): string {
     [/\bgetVehiculosConMasGasto\b/g, ''],
     [/\bgetGastosPorCategoria\b/g, ''],
     [/\bgetHistorialVehiculo\b/g, ''],
+    [/\bgetIngresosHistoricosPorMes\b/g, ''],
     [/\bgetResumenFinanciero\b/g, ''],
     [/\banio=\d{4}\b/g, ''],
     [/\bperiodo=["']?[\w]+["']?/g, ''],
@@ -199,11 +253,215 @@ export function simplifyBusinessLanguage(text: string): string {
   return s;
 }
 
+/** Suaviza afirmaciones absolutas que pueden ser incorrectas o prematuras. */
+export function softenAbsoluteClaims(text: string): string {
+  if (!text) return text;
+  let s = text;
+  const replacements: [RegExp, string][] = [
+    [/\bno hay duplicados\b/gi, 'No detecté duplicados con las reglas actuales'],
+    [/\bno existen duplicados\b/gi, 'No detecté duplicados con las reglas actuales'],
+    [/\bno hay sospechosos\b/gi, 'No hay alertas marcadas, pero puedo revisar patrones'],
+    [/\bno hay anomal[ií]as\b/gi, 'No detecté anomalías con las reglas actuales'],
+    [/\bno existe(n)? registros?\b/gi, 'No encontré registros bajo este criterio'],
+    [/\bno hay registros\b/gi, 'No encontré registros bajo este criterio'],
+    [/\bno hay movimientos\b/gi, 'No encontré movimientos bajo este criterio'],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    s = s.replace(pattern, replacement);
+  }
+  return s;
+}
+
 /** Pipeline completo de texto ejecutivo para UI. */
 export function formatExecutiveText(text: string): string {
   return sanitizeAiAssistantText(
-    simplifyBusinessLanguage(compressExecutiveNarrative(sanitizeTechnicalLeakage(text))),
+    softenAbsoluteClaims(
+      simplifyBusinessLanguage(
+        compressExecutiveNarrative(
+          sanitizeTechnicalLeakage(text),
+        ),
+      ),
+    ),
   );
+}
+
+function compressToLength(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1).trimEnd();
+  const lastSpace = cut.lastIndexOf(' ');
+  const base = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${base}…`;
+}
+
+function normalizeComparable(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, ' ').replace(/[^\w\sáéíóúüñ./,-]/gi, '').trim();
+}
+
+function isNearDuplicate(a: string, b: string): boolean {
+  const na = normalizeComparable(a);
+  const nb = normalizeComparable(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.length > 24 && nb.length > 24 && (na.includes(nb) || nb.includes(na))) return true;
+  return false;
+}
+
+function isTechnicalWarning(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    /get[a-z]{3,}/i.test(text)
+    || /\btool\b/.test(t)
+    || /\bpayload\b/.test(t)
+    || /permiso denegado/.test(t)
+    || /"ok"\s*:\s*false/.test(t)
+    || /falló\s*\(/.test(t)
+  );
+}
+
+function dedupeStrings(items: string[]): string[] {
+  const out: string[] = [];
+  for (const item of items) {
+    const clean = item.trim();
+    if (!clean) continue;
+    if (out.some((prev) => isNearDuplicate(prev, clean))) continue;
+    out.push(clean);
+  }
+  return out;
+}
+
+function parseLineToBullet(line: string): ExecutiveBullet {
+  const clean = line.replace(/^[•\-*]\s*/, '').trim();
+  const colon = clean.match(/^([^:]{2,42}):\s*(.+)$/);
+  if (colon) return { label: colon[1].trim(), value: colon[2].trim() };
+  const rank = clean.match(/^((?:Segundo|Tercer|Cuarto|Quinto)\s+lugar)\s*[—–-]\s*(.+)$/i);
+  if (rank) return { label: rank[1].trim(), value: rank[2].trim() };
+  return { value: clean };
+}
+
+function dedupeBullets(bullets: ExecutiveBullet[]): ExecutiveBullet[] {
+  const out: ExecutiveBullet[] = [];
+  for (const b of bullets) {
+    const key = `${b.label ?? ''}|${b.value}`;
+    if (out.some((prev) => `${prev.label ?? ''}|${prev.value}` === key)) continue;
+    const text = b.label ? `${b.label}: ${b.value}` : b.value;
+    if (out.some((prev) => {
+      const prevText = prev.label ? `${prev.label}: ${prev.value}` : prev.value;
+      return isNearDuplicate(prevText, text);
+    })) continue;
+    out.push(b);
+  }
+  return out;
+}
+
+function compressExecutivePayload(structured: AiStructuredResponse): AiStructuredResponse {
+  let summary = structured.summary ?? '';
+  let insights = [...(structured.insights ?? [])];
+  let warnings = [...(structured.warnings ?? [])];
+
+  let total = summary.length + insights.join('').length + warnings.join('').length;
+  while (total > EXECUTIVE_MAX_TOTAL_CHARS && insights.length > 2) {
+    insights.pop();
+    total = summary.length + insights.join('').length + warnings.join('').length;
+  }
+  if (total > EXECUTIVE_MAX_TOTAL_CHARS && summary.length > EXECUTIVE_MAX_SUMMARY_CHARS) {
+    summary = compressToLength(summary, EXECUTIVE_MAX_SUMMARY_CHARS);
+  }
+  return { ...structured, summary, insights, warnings };
+}
+
+/** Normaliza respuesta estructurada para ingest y UI (sin JSON ni ruido técnico). */
+export function prepareExecutiveStructuredResponse(
+  structured: AiStructuredResponse,
+): AiStructuredResponse {
+  let summary = structured.summary ?? '';
+  if (looksLikeJsonLeak(summary)) {
+    const recovered = parseAiAssistantText(summary);
+    summary = recovered.summary || summary;
+    if (!structured.insights?.length && recovered.insights.length) {
+      structured = { ...structured, insights: recovered.insights };
+    }
+    if (!structured.warnings?.length && recovered.warnings.length) {
+      structured = { ...structured, warnings: recovered.warnings };
+    }
+  }
+
+  summary = formatExecutiveText(summary);
+  const insights = dedupeStrings(
+    (structured.insights ?? [])
+      .map((i) => formatExecutiveText(i))
+      .filter(Boolean)
+      .filter((i) => !isNearDuplicate(i, summary)),
+  ).slice(0, EXECUTIVE_MAX_INSIGHTS);
+
+  const warnings = dedupeStrings(
+    (structured.warnings ?? [])
+      .map((w) => formatExecutiveText(w))
+      .filter(Boolean)
+      .filter((w) => !isTechnicalWarning(w))
+      .filter((w) => !isNearDuplicate(w, summary)),
+  ).slice(0, EXECUTIVE_MAX_WARNINGS);
+
+  const suggestedActions = (structured.suggestedActions ?? []).map((a) => ({
+    ...a,
+    label: formatExecutiveText(a.label),
+    description: formatExecutiveText(a.description),
+  }));
+
+  return compressExecutivePayload({
+    ...structured,
+    summary,
+    insights: insights.length ? insights : undefined,
+    warnings,
+    suggestedActions,
+  });
+}
+
+/** Construye vista ejecutiva compacta para render. */
+export function buildExecutiveView(structured: AiStructuredResponse): ExecutiveViewModel {
+  const prepared = prepareExecutiveStructuredResponse(structured);
+  const summaryLines = (prepared.summary ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const headline = summaryLines[0] ?? '';
+  const summaryBullets = summaryLines.slice(1).map(parseLineToBullet);
+  const insightBullets = (prepared.insights ?? []).map(parseLineToBullet);
+  const bullets = dedupeBullets([...summaryBullets, ...insightBullets]).slice(0, EXECUTIVE_MAX_INSIGHTS);
+
+  const metricCards = extractMetricCards(
+    prepared.data as Record<string, unknown> | unknown[] | null,
+  ).slice(0, EXECUTIVE_MAX_METRICS);
+
+  const table =
+    metricCards.length === 0 && bullets.length < 2
+      ? extractSimpleTable(prepared.data as Record<string, unknown> | unknown[] | null, 5)
+      : null;
+
+  const showMetrics = metricCards.length > 0 && bullets.length < 2;
+
+  return {
+    headline,
+    bullets,
+    warnings: (prepared.warnings ?? []).slice(0, EXECUTIVE_MAX_WARNINGS),
+    metricCards: showMetrics ? metricCards : [],
+    table,
+    actions: prepared.suggestedActions ?? [],
+  };
+}
+
+/** Recupera respuesta ejecutiva desde texto plano (fallback sin structured). */
+export function structuredFromAssistantContent(content: string): AiStructuredResponse {
+  const parsed = parseAiAssistantText(content);
+  return prepareExecutiveStructuredResponse({
+    summary: parsed.summary || content,
+    insights: parsed.insights,
+    warnings: parsed.warnings,
+    data: parsed.data,
+    suggestedActions: [],
+    confidence: parsed.confidence,
+  });
 }
 
 /** Intenta extraer un objeto JSON de un string (directo, en bloque ```json, o al final). */

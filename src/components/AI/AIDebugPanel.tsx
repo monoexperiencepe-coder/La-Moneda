@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Cpu } from 'lucide-react';
-import type { AiAssistantDebugInfo } from '../../modules/ai/types';
+import type { AiAssistantDebugInfo, AiStructuredResponse } from '../../modules/ai/types';
 
 type Props = {
   debug: AiAssistantDebugInfo;
+  confidence?: number | null;
+  structured?: AiStructuredResponse | null;
 };
 
-const AIDebugPanel: React.FC<Props> = ({ debug }) => {
+const AIDebugPanel: React.FC<Props> = ({ debug, confidence, structured }) => {
   const [open, setOpen] = useState(false);
 
   const toolDurationEntries = Object.entries(debug.toolDurationsMs ?? {}).filter(
@@ -18,12 +20,30 @@ const AIDebugPanel: React.FC<Props> = ({ debug }) => {
       ? `${debug.tokens.total} tok`
       : null;
 
+  const structuredPreview = structured
+    ? JSON.stringify(
+        {
+          summary: structured.summary,
+          insights: structured.insights,
+          warnings: structured.warnings,
+          confidence: structured.confidence ?? confidence ?? null,
+          data: structured.data,
+          suggestedActions: structured.suggestedActions?.map((a) => ({
+            label: a.label,
+            actionType: a.actionType,
+          })),
+        },
+        null,
+        2,
+      )
+    : null;
+
   return (
     <div className="overflow-hidden rounded-xl border border-dashed border-slate-200 text-[11px] text-slate-500">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50/80 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-50/80"
       >
         <Cpu className="h-3 w-3 shrink-0 text-slate-400" aria-hidden />
         <span className="flex-1 font-medium text-slate-400">
@@ -36,6 +56,7 @@ const AIDebugPanel: React.FC<Props> = ({ debug }) => {
                 `${Math.round(debug.durationMs)}ms`,
                 tokenSummary,
                 debug.toolsUsed.length ? `${debug.toolsUsed.length} tools` : null,
+                confidence != null ? `${Math.round(confidence * 100)}% conf.` : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -57,6 +78,9 @@ const AIDebugPanel: React.FC<Props> = ({ debug }) => {
               ['Duración', `${Math.round(debug.durationMs)} ms`],
               ...(debug.provider ? [['Proveedor', debug.provider]] : []),
               ...(debug.model ? [['Modelo', debug.model]] : []),
+              ...(confidence != null
+                ? [['Confianza', `${Math.round(confidence * 100)}%`]]
+                : []),
               ...(debug.tokens?.total != null
                 ? [
                     [
@@ -113,6 +137,17 @@ const AIDebugPanel: React.FC<Props> = ({ debug }) => {
               </dd>
             </div>
           )}
+
+          {structuredPreview ? (
+            <div className="px-3 py-2">
+              <dt className="mb-1 text-slate-400">Payload estructurado</dt>
+              <dd>
+                <pre className="max-h-56 overflow-auto rounded-lg bg-slate-900/95 p-2.5 text-[10px] leading-relaxed text-emerald-100">
+                  {structuredPreview}
+                </pre>
+              </dd>
+            </div>
+          ) : null}
         </dl>
       )}
     </div>

@@ -129,7 +129,7 @@ export function inferResponseMonthFocus(combined: string, data?: unknown): {
   const ingresoKeywords =
     /\b(mayor|mejor|m[aá]s alto|pico|bruto|ingreso[s]?|facturaci[oó]n|recaudaci[oó]n)\b/i;
   const eficienciaKeywords =
-    /\b(eficiencia|utilidad operativa|margen|m[aá]s eficiente|ratio|rentabilidad operativa)\b/i;
+    /\b(eficiencia|utilidad operativa|margen|m[aá]s eficiente|ratio|rentabilidad operativa|rendimiento|mejor mes)\b/i;
 
   const allMonths = detectAllMonthsFromText(combined);
   const ingresoBruto =
@@ -192,15 +192,26 @@ function buildIngresosHighlightPatch(
     highlightType: 'month',
     scrollTarget: 'income-summary',
     highlightLabel: label,
+    monthFocusReason: reason,
     narrativeSteps,
   };
+}
+
+function reasonForMonth(
+  month: number,
+  months: ReturnType<typeof inferResponseMonthFocus>,
+): ResponseMonthFocus['reason'] {
+  if (months.ingresoBruto === month) return 'ingreso_bruto';
+  if (months.eficiencia === month) return 'eficiencia';
+  return 'general';
 }
 
 function buildIngresosNarrativeSteps(
   primaryMonth: number,
   year: number | null | undefined,
+  reason: ResponseMonthFocus['reason'] = 'ingreso_bruto',
 ): NarrativeStep[] {
-  return [buildIngresosStep(primaryMonth, year ?? undefined, 'ingreso_bruto')];
+  return [buildIngresosStep(primaryMonth, year ?? undefined, reason)];
 }
 
 /** Enriquece suggestedActions con highlightMonth/Vehicle cuando la respuesta lo permite. */
@@ -227,14 +238,29 @@ export function enrichSuggestedActionsWithFocus(opts: {
     const copilotAction = typeof payload.copilotAction === 'string' ? payload.copilotAction : '';
     const cp = (payload.copilotParams ?? {}) as CopilotNavigateParams;
 
-    if (copilotAction === 'navigate_ingresos' && primaryMonth != null) {
-      const reason: ResponseMonthFocus['reason'] =
-        months.ingresoBruto != null ? 'ingreso_bruto' : 'general';
-      const narrativeSteps = buildIngresosNarrativeSteps(primaryMonth, year);
-      return patchActionFocus(
-        action,
-        buildIngresosHighlightPatch(primaryMonth, year, reason, narrativeSteps),
-      );
+    if (copilotAction === 'navigate_ingresos') {
+      const actionMonth = cp.highlightMonth ?? cp.month;
+      const monthNum = actionMonth != null ? Number(actionMonth) : primaryMonth;
+      if (monthNum != null && Number.isFinite(monthNum)) {
+        const reason = reasonForMonth(monthNum, months);
+        const narrativeSteps =
+          cp.narrativeSteps?.length
+            ? cp.narrativeSteps
+            : buildIngresosNarrativeSteps(monthNum, year, reason);
+        return patchActionFocus(
+          action,
+          buildIngresosHighlightPatch(monthNum, year, reason, narrativeSteps),
+        );
+      }
+      if (primaryMonth != null) {
+        const reason: ResponseMonthFocus['reason'] =
+          months.ingresoBruto != null ? 'ingreso_bruto' : 'general';
+        const narrativeSteps = buildIngresosNarrativeSteps(primaryMonth, year, reason);
+        return patchActionFocus(
+          action,
+          buildIngresosHighlightPatch(primaryMonth, year, reason, narrativeSteps),
+        );
+      }
     }
 
     if (copilotAction === 'navigate_gastos' && placa) {

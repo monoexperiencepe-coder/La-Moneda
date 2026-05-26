@@ -20,6 +20,7 @@ const OPERADOR_ALLOWED_TOOLS: ReadonlySet<AiToolName> = new Set([
 const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getResumenFinancieroPeriodo',
   'getIngresosPeriodo',
+  'getIngresosHistoricosPorMes',
   'getVehiculosConMasGasto',
   'getPrestamosActivos',
   'getHistorialVehiculo',
@@ -44,6 +45,7 @@ export function canExecuteAiTool(user: PermissionUser | null | undefined, tool: 
     return OPERADOR_ALLOWED_TOOLS.has(tool);
   }
   if (tool === 'getIngresosPeriodo') return canUseIngresos(user);
+  if (tool === 'getIngresosHistoricosPorMes') return canUseIngresos(user);
   if (tool === 'getResumenFinancieroPeriodo') return canUseReports(user);
   if (tool === 'getPrestamosActivos') return canUseFinanciamiento(user);
   if (FINANCE_TOOLS.has(tool)) return canUseReports(user) || canUseFinanciamiento(user);

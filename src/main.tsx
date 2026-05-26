@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import App from './App.tsx'
 import './styles/globals.css'
+import './styles/copilotFocus.css'
 import { testSimpleMoveCategoria } from './debug/testSimpleMoveCategoria'
 import { supabase } from './lib/supabase'
 

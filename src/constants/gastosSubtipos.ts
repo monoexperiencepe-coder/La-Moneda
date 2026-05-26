@@ -142,10 +142,11 @@ export const SUBTIPO_ALIASES_NORM_KEY: Record<string, string> = {
   suanrp: 'sunarp',
   sunat: 'sunat',
   sutran: 'sutran',
-  taxi: 'taxi',
-  'rt-taxi': 'taxi',
-  'rt taxi': 'taxi',
-  'revision tecnica taxi': 'taxi',
+  taxi: 'revision_tecnica_taxi',
+  'rt-taxi': 'revision_tecnica_taxi',
+  'rt taxi': 'revision_tecnica_taxi',
+  'revision tecnica taxi': 'revision_tecnica_taxi',
+  revision_tecnica_taxi: 'revision_tecnica_taxi',
 };
 
 function unionFactSubtiposForFinanza(cat: FinanzaGastoRegistroValue): string[] {

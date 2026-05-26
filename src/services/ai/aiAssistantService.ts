@@ -5,12 +5,14 @@ import { executeAiTool, type AiToolContext } from '../../modules/ai/tools/runner
 import {
   parseAiAssistantText,
   formatExecutiveText,
+  prepareExecutiveStructuredResponse,
 } from '../../utils/aiResponseParser';
 import type {
   AiAssistantApiResponse,
   AiAssistantDebugInfo,
   AiChatMessage,
   AiStructuredResponse,
+  AiSuggestedAction,
   AiToolCallRequest,
   AiToolName,
 } from '../../modules/ai/types';
@@ -23,6 +25,7 @@ import { insertAiAssistantAuditLog } from './aiAuditService';
 import { enrichCopilotSuggestedActions, mergeCopilotActions } from '../../modules/copilot/enrichCopilotActions';
 import { enrichSuggestedActionsWithFocus } from '../../modules/copilot/enrichCopilotFocus';
 import { humanizeSuggestedActions } from '../../modules/copilot/humanizeSuggestedActions';
+import { syncCopilotEvidence } from '../../modules/copilot/copilotEvidence';
 import { prepareToolPayloadForLlm } from '../../modules/ai/prepareToolPayloadForLlm';
 import {
   buildAiCacheKey,
@@ -71,8 +74,8 @@ function parseStructured(raw: string | null | undefined): AiStructuredResponse |
   if (!raw?.trim()) return null;
   const parsed = parseAiAssistantText(raw);
   if (!parsed.summary && !parsed.data && !parsed.warnings.length) return null;
-  return {
-    summary: formatExecutiveText(parsed.summary || raw.trim()),
+  return prepareExecutiveStructuredResponse({
+    summary: parsed.summary || formatExecutiveText(raw.trim()),
     insights: parsed.insights?.map((i) => formatExecutiveText(i)),
     data: parsed.data,
     warnings: parsed.warnings?.map((w) => formatExecutiveText(w)),
@@ -85,7 +88,21 @@ function parseStructured(raw: string | null | undefined): AiStructuredResponse |
         payload: a.payload,
       })),
     confidence: parsed.confidence,
+  });
+}
+
+function normalizeStructuredResponse(
+  structured: AiStructuredResponse | null | undefined,
+  fallbackText?: string,
+): AiStructuredResponse {
+  const base = structured ?? {
+    summary: fallbackText || 'Listo.',
+    data: null,
+    warnings: [],
+    suggestedActions: [],
+    confidence: null,
   };
+  return prepareExecutiveStructuredResponse(base);
 }
 
 function buildContext(user: PermissionUser, empresaId: string): AiToolContext {
@@ -340,8 +357,11 @@ export async function sendAiAssistantMessage(opts: {
     }
 
     if (res.status === 'complete') {
-      structured = res.structured ?? parseStructured(res.assistantText);
-      lastAssistantText = structured?.summary ?? res.assistantText ?? '';
+      structured = normalizeStructuredResponse(
+        res.structured ?? parseStructured(res.assistantText),
+        res.assistantText,
+      );
+      lastAssistantText = structured.summary ?? res.assistantText ?? '';
       if (res.toolsUsed?.length) {
         for (const t of res.toolsUsed) {
           if (!toolsUsed.includes(t)) toolsUsed.push(t);
@@ -403,16 +423,13 @@ export async function sendAiAssistantMessage(opts: {
     };
   }
 
-  const finalStructured: AiStructuredResponse = structured ?? {
-    summary: lastAssistantText || 'Listo.',
-    data: null,
-    warnings: [],
-    suggestedActions: [],
-    confidence: null,
-  };
+  const finalStructured = normalizeStructuredResponse(structured, lastAssistantText);
 
   if (toolWarnings.length) {
-    finalStructured.warnings = [...(finalStructured.warnings ?? []), ...toolWarnings];
+    finalStructured.warnings = [
+      ...(finalStructured.warnings ?? []),
+      ...toolWarnings,
+    ];
   }
 
   if (pendientesSugerenciasData?.sugerencias) {
@@ -472,11 +489,54 @@ export async function sendAiAssistantMessage(opts: {
 
   finalStructured.suggestedActions = humanizeSuggestedActions(finalStructured.suggestedActions);
 
+  const evidence = syncCopilotEvidence(finalStructured, opts.message);
+  if (evidence && finalStructured.data && typeof finalStructured.data === 'object' && !Array.isArray(finalStructured.data)) {
+    finalStructured.data = {
+      ...(finalStructured.data as Record<string, unknown>),
+      copilot_evidence: evidence,
+    };
+  } else if (evidence) {
+    finalStructured.data = { copilot_evidence: evidence };
+  }
+
+  if (evidence) {
+    const evidenceAction: AiSuggestedAction = {
+      label: evidence.formula ? 'Ver cálculo' : 'Ver dato',
+      description: evidence.formula
+        ? `${evidence.title}: ${evidence.formula}`
+        : evidence.subtitle ?? evidence.title,
+      actionType: 'navigate',
+      payload: {
+        copilotAction: 'navigate_ingresos',
+        copilotParams: {
+          scrollTarget: 'ai-evidence-card',
+          highlightLabel: evidence.title,
+          year: evidence.highlightYear != null ? String(evidence.highlightYear) : undefined,
+          narrativeSteps: [{
+            target: 'ai-evidence-card',
+            label: evidence.title,
+            description: evidence.formula ?? evidence.subtitle ?? 'Dato calculado',
+            highlightType: 'neutral',
+            duration: 5000,
+            scroll: true,
+            applyYear: evidence.highlightYear != null ? String(evidence.highlightYear) : undefined,
+          }],
+        },
+      },
+    };
+    finalStructured.suggestedActions = mergeCopilotActions(
+      finalStructured.suggestedActions,
+      humanizeSuggestedActions([evidenceAction]),
+    );
+  }
+
+  const executiveStructured = prepareExecutiveStructuredResponse(finalStructured);
+
   const assistantMessage: AiChatMessage = {
     id: newMessageId(),
     role: 'assistant',
-    content: finalStructured.summary,
-    structured: finalStructured,
+    content: executiveStructured.summary,
+    structured: executiveStructured,
     createdAt: new Date().toISOString(),
     toolsUsed,
     debug,

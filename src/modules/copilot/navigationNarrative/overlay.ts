@@ -1,9 +1,13 @@
 import { prefersReducedMotion } from './preferences';
+import { isAiFocusDebugEnabled } from './devLog';
 
 const OVERLAY_CLASS = 'copilot-narrative-overlay';
 const OVERLAY_VISIBLE = 'copilot-narrative-overlay-visible';
 
 export function showNarrativeOverlay(message = 'Copiloto IA guiándote…'): () => void {
+  if (!isAiFocusDebugEnabled()) {
+    return () => undefined;
+  }
   removeNarrativeOverlay();
 
   const el = document.createElement('div');

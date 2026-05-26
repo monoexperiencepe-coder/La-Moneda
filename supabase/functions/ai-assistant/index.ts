@@ -45,6 +45,20 @@ const AI_TOOLS = [
   {
     type: "function",
     function: {
+      name: "getIngresosHistoricosPorMes",
+      description: "Ranking histórico de ingresos por mes (todos los años o un año). Usar para récord histórico, mejor mes histórico.",
+      parameters: {
+        type: "object",
+        properties: {
+          anio: { type: "number", description: "Opcional. Año específico; omitir para histórico completo." },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "getGastosPeriodo",
       description: "Gastos operativos del periodo. Para año 2024 usa anio=2024. NO usar para inversión de compra vehicular.",
       parameters: {
@@ -55,6 +69,8 @@ const AI_TOOLS = [
           hasta: { type: "string" },
           anio: { type: "number", description: "Año histórico específico, ej: 2024" },
           tipo_gasto: { type: "string" },
+          solo_mantenimiento: { type: "boolean", description: "Solo mantenimiento/reparación vehicular" },
+          subtipo_grupo: { type: "string", enum: ["mantenimiento"] },
           limit: { type: "number" },
         },
       },
@@ -87,6 +103,8 @@ const AI_TOOLS = [
           periodo: { type: "string", enum: ["today", "week", "month", "year", "custom"] },
           anio: { type: "number", description: "Año histórico específico, ej: 2024" },
           limit: { type: "number" },
+          solo_mantenimiento: { type: "boolean", description: "Ranking solo por mantenimiento/reparación" },
+          subtipo_grupo: { type: "string", enum: ["mantenimiento"] },
         },
       },
     },

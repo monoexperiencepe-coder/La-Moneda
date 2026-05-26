@@ -2,6 +2,7 @@ import type { AiSuggestedAction, AiToolName } from '../ai/types';
 import type { CopilotActionId, CopilotNavigateParams } from './copilotActions';
 import { executeCopilotAction } from './copilotActions';
 import type { PermissionUser } from '../../utils/permissions';
+import { messageImpliesMaintenance } from '../ai/maintenanceSubtipos';
 
 function extractYear(text: string): string | null {
   const m = text.match(/\b(20\d{2})\b/);
@@ -43,8 +44,12 @@ function inferTipoGasto(text: string): string | undefined {
 function inferSubtipo(text: string): string | undefined {
   const t = text.toLowerCase();
   if (t.includes('combustible') || t.includes('gasolina')) return 'combustible';
-  if (t.includes('mantenimiento')) return 'mantenimiento';
+  if (messageImpliesMaintenance(t)) return 'mantenimiento';
   return undefined;
+}
+
+function inferMaintenanceScope(text: string): boolean {
+  return messageImpliesMaintenance(text);
 }
 
 function makeNavigateAction(
@@ -76,7 +81,10 @@ export function enrichCopilotSuggestedActions(opts: {
     /\b(muestr|muéstr|muestra|ver|abre|abrir|ll[eé]v|naveg|ir a|mostrar)\b/.test(text);
 
   const wantsIngresos =
-    text.includes('ingreso') || toolsUsed.includes('getIngresosPeriodo') || toolsUsed.includes('getResumenFinancieroPeriodo');
+    text.includes('ingreso') ||
+    toolsUsed.includes('getIngresosPeriodo') ||
+    toolsUsed.includes('getIngresosHistoricosPorMes') ||
+    toolsUsed.includes('getResumenFinancieroPeriodo');
   const wantsGastos =
     text.includes('gasto') ||
     toolsUsed.includes('getGastosPeriodo') ||
@@ -121,14 +129,28 @@ export function enrichCopilotSuggestedActions(opts: {
     if (month) params.month = month;
     const tipo = inferTipoGasto(text);
     const subtipo = inferSubtipo(text);
-    if (tipo) params.tipo_gasto = tipo;
-    if (subtipo) params.subtipo_gasto = subtipo;
+    const mantenimientoScope = inferMaintenanceScope(text);
+    if (mantenimientoScope) {
+      params.tipo_gasto = 'operativo_vehiculo';
+      params.mantenimientoScope = true;
+    } else {
+      if (tipo) params.tipo_gasto = tipo;
+      if (subtipo) params.subtipo_gasto = subtipo;
+    }
     const probe = executeCopilotAction(user, 'navigate_gastos', params);
     if (probe.ok) {
       actions.push(
         makeNavigateAction(
-          year ? `Ver gastos del ${year}` : 'Ver gastos',
-          'Ver gastos con filtros aplicados.',
+          mantenimientoScope
+            ? year
+              ? `Ver mantenimiento ${year}`
+              : 'Ver mantenimiento'
+            : year
+              ? `Ver gastos del ${year}`
+              : 'Ver gastos',
+          mantenimientoScope
+            ? 'Gastos de mantenimiento y reparación vehicular.'
+            : 'Ver gastos con filtros aplicados.',
           'navigate_gastos',
           params,
         ),
@@ -174,9 +196,9 @@ export function mergeCopilotActions(
   extra: AiSuggestedAction[],
 ): AiSuggestedAction[] {
   const out = [...(existing ?? [])];
-  const seen = new Set(out.map((a) => a.label.trim().toLowerCase()));
+  const seen = new Set(out.map((a) => `${a.label.trim().toLowerCase()}|${(a.description ?? '').trim().toLowerCase()}`));
   for (const a of extra) {
-    const key = a.label.trim().toLowerCase();
+    const key = `${a.label.trim().toLowerCase()}|${(a.description ?? '').trim().toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(a);

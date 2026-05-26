@@ -51,6 +51,23 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getIngresosHistoricosPorMes',
+      description:
+        'Ranking histórico de ingresos por mes (todos los años o un año). ' +
+        'Usar para: "mes con más ingresos histórico", "mejor mes histórico", "récord histórico", ' +
+        'comparar meses entre años. Sin anio = escanea todo el histórico disponible.',
+      parameters: {
+        type: 'object',
+        properties: {
+          anio: { type: 'number', description: 'Opcional. Filtrar a un solo año; omitir para histórico completo.' },
+          limit: { type: 'number', description: 'Top N meses (default 12, max 36)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getGastosPeriodo',
       description:
         'Gastos del periodo con total_opex_pen y total_capex_pen separados. ' +
@@ -61,6 +78,16 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
         properties: {
           ...periodParams.properties,
           tipo_gasto: { type: 'string', description: 'Filtrar por categoría: combustible, mantenimiento, operativo_vehiculo, etc.' },
+          subtipo_gasto: { type: 'string', description: 'Subtipo operativo vehicular (ej: mantenimiento, frenos, motor)' },
+          subtipo_grupo: {
+            type: 'string',
+            enum: ['mantenimiento'],
+            description: 'Filtrar solo gastos de mantenimiento/reparación vehicular (motor, frenos, llantas, etc.)',
+          },
+          solo_mantenimiento: {
+            type: 'boolean',
+            description: 'Si true, solo subtipos de mantenimiento/reparación vehicular',
+          },
           limit: { type: 'number', description: 'Máximo de filas (default 100)' },
         },
       },
@@ -81,15 +108,24 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: 'getVehiculosConMasGasto',
       description:
-        'Ranking de vehículos con mayor GASTO OPERATIVO recurrente (combustible, mantenimiento, reparaciones) en el periodo. ' +
-        'Solo roles financieros. ' +
-        'IMPORTANTE: esto es gasto operativo, NO inversión de compra. ' +
-        'Para inversión inicial de adquisición usa getRankingInversionVehiculos.',
+        'Ranking de vehículos con mayor gasto operativo en el periodo. ' +
+        'Para mantenimiento/reparación/taller usa solo_mantenimiento=true o subtipo_grupo=mantenimiento. ' +
+        'NO usar gasto operativo total si la pregunta es de mantenimiento. ' +
+        'Para inversión de compra usa getRankingInversionVehiculos.',
       parameters: {
         ...periodParams,
         properties: {
           ...periodParams.properties,
           limit: { type: 'number', description: 'Top N vehículos (default 10)' },
+          solo_mantenimiento: {
+            type: 'boolean',
+            description: 'Si true, ranking solo por gastos de mantenimiento/reparación',
+          },
+          subtipo_grupo: {
+            type: 'string',
+            enum: ['mantenimiento'],
+            description: 'Equivalente a solo_mantenimiento',
+          },
         },
       },
     },

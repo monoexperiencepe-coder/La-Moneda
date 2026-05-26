@@ -23,6 +23,7 @@ function scrollTargetId(scrollTarget?: string, fallback = 'copilot-income-summar
   if (scrollTarget === 'income-summary') return 'copilot-income-summary';
   if (scrollTarget === 'gastos-table') return 'copilot-gastos-table';
   if (scrollTarget === 'inversiones-table') return 'copilot-inversiones-table';
+  if (scrollTarget === 'ai-evidence-card') return 'ai-evidence-card';
   return fallback;
 }
 
@@ -37,7 +38,7 @@ function buildIngresosStep(
   const isIncome = reason === 'ingreso_bruto' || reason === 'general';
 
   return {
-    target: 'copilot-income-summary',
+    target: 'income-month',
     label: `Aquí está ${name}`,
     description: isIncome
       ? y
@@ -71,7 +72,20 @@ export function buildNarrativeFromSuggestedAction(action: AiSuggestedAction): Na
   const copilotAction = typeof payload.copilotAction === 'string' ? payload.copilotAction : '';
 
   if (copilotAction === 'navigate_ingresos' && cp.highlightMonth != null) {
-    return [buildIngresosStep(cp.highlightMonth, cp.year, 'ingreso_bruto')];
+    const reason = cp.monthFocusReason ?? 'ingreso_bruto';
+    return [buildIngresosStep(cp.highlightMonth, cp.year, reason)];
+  }
+
+  if (cp.scrollTarget === 'ai-evidence-card') {
+    return [{
+      target: 'ai-evidence-card',
+      label: cp.highlightLabel ?? 'Dato calculado',
+      description: cp.highlightLabel ?? 'Evidencia del cálculo',
+      highlightType: 'neutral',
+      duration: 5000,
+      scroll: true,
+      applyYear: cp.year,
+    }];
   }
 
   if (copilotAction === 'navigate_gastos' && cp.highlightVehicle) {
@@ -118,3 +132,35 @@ export function buildNarrativeFromSuggestedAction(action: AiSuggestedAction): Na
 }
 
 export { buildIngresosStep, monthName, padMonth as narrativePadMonth };
+
+/** Construye pasos desde params de navegación (fallback URL / copilot). */
+export function buildNarrativeFromCopilotParams(
+  params: CopilotNavigateParams,
+): NarrativeStep[] | null {
+  if (params.highlightMonth != null) {
+    const scroll = params.scrollTarget ?? 'income-summary';
+    if (scroll === 'income-summary' || !params.scrollTarget) {
+      const reason = params.monthFocusReason ?? 'ingreso_bruto';
+      return [buildIngresosStep(params.highlightMonth, params.year, reason)].map((s) => ({
+        ...s,
+        label: params.highlightLabel?.includes('Aquí')
+          ? params.highlightLabel
+          : s.label,
+        description: params.highlightLabel && !params.highlightLabel.includes('Aquí')
+          ? params.highlightLabel
+          : s.description,
+      }));
+    }
+  }
+
+  if (params.scrollTarget || params.highlightVehicle) {
+    return buildNarrativeFromSuggestedAction({
+      label: params.highlightLabel ?? 'Dato destacado',
+      description: '',
+      actionType: 'navigate',
+      payload: { copilotParams: params },
+    });
+  }
+
+  return null;
+}

@@ -3,6 +3,7 @@ import type { AiToolName } from './types';
 const EMPTY_MESSAGES: Partial<Record<AiToolName, string>> = {
   getResumenFinancieroPeriodo: 'No encontré movimientos financieros para ese periodo.',
   getIngresosPeriodo: 'No encontré ingresos registrados para ese periodo.',
+  getIngresosHistoricosPorMes: 'No encontré ingresos históricos por mes en los registros.',
   getGastosPeriodo: 'No encontré gastos para ese periodo o categoría.',
   getGastosPorCategoria: 'No encontré gastos por categoría en ese periodo.',
   getVehiculosConMasGasto: 'No encontré gastos operativos por vehículo en ese periodo.',
@@ -27,6 +28,7 @@ function countFromData(data: Record<string, unknown>): number | null {
   if (Array.isArray(data.movimientos)) return data.movimientos.length;
   if (Array.isArray(data.prestamos)) return data.prestamos.length;
   if (Array.isArray(data.gastos)) return data.gastos.length;
+  if (Array.isArray(data.ranking_meses)) return data.ranking_meses.length;
   if (Array.isArray(data.ranking)) return data.ranking.length;
   if (Array.isArray(data.categorias)) return data.categorias.length;
   if (Array.isArray(data.sugerencias)) return data.sugerencias.length;

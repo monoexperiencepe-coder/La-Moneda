@@ -22,11 +22,15 @@ function humanizeIngresosAction(
 ): { label: string; description: string } {
   const month = monthDisplayName(cp.highlightMonth ?? cp.month);
   const year = cp.year != null ? String(cp.year) : null;
+  const reason = cp.monthFocusReason;
 
   if (month) {
     const isEficiencia =
-      (cp.highlightLabel ?? '').toLowerCase().includes('eficiencia') ||
-      (cp.highlightLabel ?? '').toLowerCase().includes('rendimiento');
+      reason === 'eficiencia'
+      || ((cp.highlightLabel ?? '').toLowerCase().includes('eficiencia')
+        && reason !== 'ingreso_bruto')
+      || ((cp.highlightLabel ?? '').toLowerCase().includes('rendimiento')
+        && reason !== 'ingreso_bruto');
     return {
       label: `Ver ${month}`,
       description: isEficiencia
@@ -53,6 +57,15 @@ function humanizeIngresosAction(
 }
 
 function humanizeGastosAction(cp: CopilotNavigateParams, fallbackLabel: string): { label: string; description: string } {
+  if (cp.mantenimientoScope || cp.subtipo_gasto === 'mantenimiento') {
+    const year = cp.year != null ? String(cp.year) : null;
+    return {
+      label: year ? `Ver mantenimiento ${year}` : 'Ver mantenimiento',
+      description: year
+        ? `Gastos de mantenimiento y reparación del ${year}`
+        : 'Gastos de mantenimiento y reparación vehicular',
+    };
+  }
   if (cp.highlightVehicle || cp.placa) {
     const v = cp.highlightVehicle ?? cp.placa ?? 'vehículo';
     return {

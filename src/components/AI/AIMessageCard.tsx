@@ -14,9 +14,10 @@ type PendienteSugerenciaRow = {
 
 type Props = {
   structured: AiStructuredResponse;
-  toolsUsed?: string[];
   timestamp?: string;
   onAction?: (action: AiSuggestedAction) => void;
+  /** Oculta hora (copiloto flotante). */
+  hideMeta?: boolean;
 };
 
 function formatTime(iso: string): string {
@@ -36,7 +37,7 @@ function extractSugerencias(data: AiStructuredResponse['data']): PendienteSugere
   );
 }
 
-const AIMessageCard: React.FC<Props> = ({ structured, toolsUsed, timestamp, onAction }) => {
+const AIMessageCard: React.FC<Props> = ({ structured, timestamp, onAction, hideMeta = false }) => {
   const sugerencias = extractSugerencias(structured.data);
 
   return (
@@ -94,18 +95,10 @@ const AIMessageCard: React.FC<Props> = ({ structured, toolsUsed, timestamp, onAc
         </div>
       )}
 
-      {/* Footer: time + confidence + tools */}
-      {(timestamp || structured.confidence != null || (toolsUsed?.length ?? 0) > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
-          {timestamp && <span>{formatTime(timestamp)}</span>}
-          {structured.confidence != null && (
-            <span>Confianza {Math.round(structured.confidence * 100)}%</span>
-          )}
-          {toolsUsed && toolsUsed.length > 0 && (
-            <span className="truncate" title={toolsUsed.join(', ')}>
-              {toolsUsed.length === 1 ? `Tool: ${toolsUsed[0]}` : `${toolsUsed.length} tools`}
-            </span>
-          )}
+      {/* Footer: solo hora (tools/confianza → Debug IA) */}
+      {!hideMeta && timestamp && (
+        <div className="mt-3 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
+          <span>{formatTime(timestamp)}</span>
         </div>
       )}
     </div>

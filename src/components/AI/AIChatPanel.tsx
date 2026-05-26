@@ -22,10 +22,12 @@ import {
 } from '../../modules/copilot/copilotActions';
 import {
   buildNarrativeFromSuggestedAction,
+  buildNarrativeFromCopilotParams,
   cancelNarrativeNavigation,
   clearPendingNarrative,
   queueNarrativeNavigation,
 } from '../../modules/copilot/navigationNarrative';
+import { narrativeDevLog } from '../../modules/copilot/navigationNarrative/devLog';
 import { addCopilotNavHistory } from '../../modules/copilot/copilotSettings';
 import {
   clearCopilotMessages,
@@ -35,6 +37,7 @@ import {
 import type { AiChatMessage, AiSuggestedAction } from '../../modules/ai/types';
 import AIMessageCard from './AIMessageCard';
 import AIDebugPanel from './AIDebugPanel';
+import { structuredFromAssistantContent } from '../../utils/aiResponseParser';
 
 // ─── Safe navigation ──────────────────────────────────────────────────────────
 
@@ -363,7 +366,11 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
     () => permissionUserFromAuth(user, profile?.email ?? null),
     [user, profile?.email],
   );
-  const quickActions = useMemo(() => getAiQuickActionsForUser(permissionUser), [permissionUser]);
+  const isCompanion = variant === 'companion';
+  const quickActions = useMemo(
+    () => getAiQuickActionsForUser(permissionUser, { companion: isCompanion }),
+    [permissionUser, isCompanion],
+  );
   const showDebug = import.meta.env.DEV || user.role === 'admin';
   const contextChips = useMemo(() => extractContextChips(messages), [messages]);
 
@@ -459,15 +466,29 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
           return false;
         }
         const url = buildNavigateUrl(copilot);
-        const narrativeSteps = buildNarrativeFromSuggestedAction(action);
-        cancelNarrativeNavigation();
+        let narrativeSteps = buildNarrativeFromSuggestedAction(action);
+        if (!narrativeSteps?.length) {
+          narrativeSteps = buildNarrativeFromCopilotParams(copilot.params as import('../../modules/copilot/copilotActions').CopilotNavigateParams);
+        }
+
+        narrativeDevLog('[copilot:narrative:build]', {
+          steps: narrativeSteps?.length ?? 0,
+          path: url.split('?')[0],
+          highlightMonth: (copilot.params as Record<string, string>).highlightMonth,
+        });
+
+        cancelNarrativeNavigation('pre-navigate');
+
         if (narrativeSteps?.length) {
           queueNarrativeNavigation({
             path: url.split('?')[0],
             steps: narrativeSteps,
             showOverlay: true,
           });
-        } else {
+        } else if (
+          !(copilot.params as Record<string, string>).highlightMonth
+          && !(copilot.params as Record<string, string>).scrollTarget
+        ) {
           clearPendingNarrative();
         }
         setNavStatus({ type: 'loading', text: copilot.statusLabel });
@@ -524,7 +545,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
       const trimmed = text.trim();
       if (!trimmed || loading || !profile?.empresa_id) return;
 
-      cancelNarrativeNavigation();
+      cancelNarrativeNavigation('new-message');
       clearPendingNarrative();
 
       const phase = detectPhase(trimmed);
@@ -697,8 +718,8 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
           </div>
         )}
 
-        {/* Quick actions top strip */}
-        {hasMessages && quickActions.length > 0 && (
+        {/* Quick actions top strip — solo en página completa */}
+        {!isCompanion && hasMessages && quickActions.length > 0 && (
           <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 bg-slate-50/60 px-3 py-2 sm:px-4">
             {quickActions.map((a) => (
               <button
@@ -719,29 +740,47 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
           {/* Empty state */}
           {!hasMessages && (
-            <div className="flex flex-col items-center justify-center gap-5 py-10 text-center">
-              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-200">
-                <Sparkles className="h-8 w-8 text-white" aria-hidden />
+            <div
+              className={`flex flex-col items-center justify-center text-center ${
+                isCompanion ? 'gap-3 py-6' : 'gap-5 py-10'
+              }`}
+            >
+              <div
+                className={`relative flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-200 ${
+                  isCompanion ? 'h-12 w-12' : 'h-16 w-16'
+                }`}
+              >
+                <Sparkles className={isCompanion ? 'h-6 w-6 text-white' : 'h-8 w-8 text-white'} aria-hidden />
               </div>
               <div>
-                <p className="text-base font-semibold text-slate-800">Asistente Ejecutivo</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Análisis financiero · Solo lectura · Respuestas en tiempo real
+                <p className={isCompanion ? 'text-sm font-semibold text-slate-800' : 'text-base font-semibold text-slate-800'}>
+                  Asistente Ejecutivo
                 </p>
+                {!isCompanion && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Análisis financiero · Solo lectura · Respuestas en tiempo real
+                  </p>
+                )}
               </div>
-              <div className="flex max-w-xs flex-wrap justify-center gap-2">
-                {quickActions.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => void sendMessage(a.prompt)}
-                    disabled={loading}
-                    className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:shadow hover:text-indigo-700 disabled:opacity-40"
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
+              {quickActions.length > 0 && (
+                <div className={`flex flex-wrap justify-center gap-1.5 ${isCompanion ? 'max-w-full px-1' : 'max-w-xs gap-2'}`}>
+                  {quickActions.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => void sendMessage(a.prompt)}
+                      disabled={loading}
+                      className={
+                        isCompanion
+                          ? 'rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-40'
+                          : 'rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:shadow hover:text-indigo-700 disabled:opacity-40'
+                      }
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -761,18 +800,27 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
                 <div className="space-y-2">
                   <AIMessageCard
                     structured={m.structured}
-                    toolsUsed={m.toolsUsed}
                     timestamp={m.createdAt}
                     onAction={handleAction}
+                    hideMeta={isCompanion}
                   />
-                  {showDebug && m.debug && <AIDebugPanel debug={m.debug} />}
+                  {showDebug && m.debug && (
+                    <AIDebugPanel
+                      debug={m.debug}
+                      confidence={m.structured?.confidence}
+                      structured={m.structured}
+                    />
+                  )}
                 </div>
               </FadeIn>
             ) : (
               <FadeIn key={m.id} isNew={m.id === newestMsgId}>
-                <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm">
-                  {m.content}
-                </div>
+                <AIMessageCard
+                  structured={structuredFromAssistantContent(m.content)}
+                  timestamp={m.createdAt}
+                  onAction={handleAction}
+                  hideMeta={isCompanion}
+                />
               </FadeIn>
             ),
           )}

@@ -73,8 +73,8 @@ export function loadingLabelForTool(
   switch (tool) {
     case 'getResumenFinancieroPeriodo':
       return year ? `Analizando resumen financiero${yearSuffix}…` : 'Generando resumen financiero…';
-    case 'getIngresosPeriodo':
-      return year ? `Consultando ingresos${yearSuffix}…` : 'Consultando ingresos…';
+    case 'getIngresosHistoricosPorMes':
+      return year ? `Consultando récord histórico${yearSuffix}…` : 'Consultando ingresos históricos por mes…';
     case 'getGastosPeriodo':
       return year ? `Consultando gastos operativos${yearSuffix}…` : 'Consultando gastos…';
     case 'getGastosPorCategoria':
@@ -100,6 +100,9 @@ export function loadingLabelForMessage(message: string): string {
   const yearMatch = message.match(/\b(20\d{2})\b/);
   const year = yearMatch?.[1];
 
+  if (/\bhist[oó]ric|r[eé]cord|todos los a[nñ]os\b/.test(m) && /\bingreso|mes\b/.test(m)) {
+    return 'Consultando récord histórico de ingresos…';
+  }
   if (/\bmejor mes\b|\bpeor mes\b/.test(m)) {
     return year ? `Comparando meses de ${year}…` : 'Comparando meses…';
   }
