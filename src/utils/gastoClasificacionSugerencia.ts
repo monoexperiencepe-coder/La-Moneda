@@ -118,8 +118,19 @@ const REGLAS: Regla[] = [
     sug: { tipo_gasto: 'administrativo_empresa', subtipo_gasto: 'sutran', razon: 'Texto tipo SUTRAN' },
   },
   {
-    test: (t) => /\btaxi\b/.test(t) || /\brt\s+taxi\b/.test(t) || /\brevision\s+tecnica\s+taxi\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'taxi', razon: 'Texto tipo taxi / RT taxi' },
+    test: (t) =>
+      /\btaxi\b/.test(t)
+      || /\brt[\s-]*taxi\b/.test(t)
+      || /\brevision\s+tecnica\s+taxi\b/.test(t),
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'revision_tecnica_taxi', razon: 'Texto tipo taxi / RT taxi' },
+  },
+  {
+    test: (t) => /\brt\s+particular\b/.test(t) || /\brevision\s+tecnica\s+particular\b/.test(t),
+    sug: {
+      tipo_gasto: 'operativo_vehiculo',
+      subtipo_gasto: 'revision_tecnica_particular',
+      razon: 'Texto tipo RT particular / revisión técnica particular',
+    },
   },
   {
     test: (t) => /\b(multa|tramite|tramites|papeleta|infraccion)\b/.test(t) && !/\b(sat|sunat|sunarp|suanrp|sutran|callao)\b/.test(t),

@@ -3,14 +3,14 @@ import type { Gasto } from '../data/types';
 /** Ventana para badge «Reclasificado» / pin local tras mover. */
 export const HISTORIAL_RECENTLY_MOVED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Timestamp ISO de última actividad relevante (movimiento/clasificación/alta). */
+/** Timestamp ISO de última actividad: revisado_at (≈ updated_at) → createdAt → fechaRegistro → fecha. */
 export function gastoHistorialActivityStamp(g: Gasto, pinnedAtMs?: number): string {
   if (pinnedAtMs != null && pinnedAtMs > 0) {
     return new Date(pinnedAtMs).toISOString();
   }
-  const rev = g.revisado_at?.trim();
-  if (rev) {
-    const norm = rev.includes('T') ? rev : rev.replace(' ', 'T');
+  const updated = g.revisado_at?.trim();
+  if (updated) {
+    const norm = updated.includes('T') ? updated : updated.replace(' ', 'T');
     if (norm.length >= 19) return norm.slice(0, 19);
     if (norm.length >= 10) return `${norm.slice(0, 10)}T23:59:59`;
   }
@@ -25,6 +25,18 @@ export function gastoHistorialActivityStamp(g: Gasto, pinnedAtMs?: number): stri
   const f = g.fecha?.trim().slice(0, 10);
   if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) return `${f}T12:00:00`;
   return '1970-01-01T00:00:00';
+}
+
+export type GastosHistorialSortMode = 'actividad' | 'fecha';
+
+export function sortGastosHistorialByFecha(rows: Gasto[]): Gasto[] {
+  return [...rows].sort((a, b) => {
+    const fa = a.fecha?.trim().slice(0, 10) ?? '';
+    const fb = b.fecha?.trim().slice(0, 10) ?? '';
+    const cmp = fb.localeCompare(fa);
+    if (cmp !== 0) return cmp;
+    return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+  });
 }
 
 export function sortGastosHistorialByActivity(

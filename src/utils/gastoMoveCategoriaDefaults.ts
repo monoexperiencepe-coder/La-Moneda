@@ -1,4 +1,5 @@
-import { getOficialesSubtiposForCategoria, resolveCategoriaFinanzaParaSubtipos } from '../constants/gastosSubtipos';
+import { getOfficialSubtiposForCategoria as getOfficialEntriesForCategoria } from '../constants/subtipos/officialSubtiposCatalog';
+import { resolveCategoriaFinanzaParaSubtipos } from '../constants/subtipos/subtipoCategoria';
 import { getSubtiposGasto } from '../data/factCatalog';
 import { getFactTiposForFinanza, type FinanzaGastoRegistroValue } from '../data/finanzaGastoRegistro';
 import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSubtipoLabel';
@@ -35,7 +36,7 @@ export function tipoGastoUsaSubtipoOperativo(tipoGasto: string): boolean {
 }
 
 function catalogSubtiposUnionForFinanza(cat: FinanzaGastoRegistroValue): Set<string> {
-  return new Set(getOficialesSubtiposForCategoria(cat));
+  return new Set(getOfficialEntriesForCategoria(cat).map((o) => o.value));
 }
 
 /** Subtipos aceptados para `tipo_gasto` (finanza) al mover desde la UI. */

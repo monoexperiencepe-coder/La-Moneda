@@ -17,7 +17,7 @@ import {
   normalizeSubtipoForTipoGasto,
   tipoGastoRequiereVehiculo,
 } from '../../utils/gastoMoveCategoriaDefaults';
-import { buildSubtipoSelectOptions } from '../../constants/gastosSubtipos';
+import { buildSubtipoSelectOptions, logSubtipoMoverOperativoVehiculoDebug } from '../../constants/gastosSubtipos';
 import type { ApplyGastoLocalOpts } from '../../utils/gastoLocalMutations';
 import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
@@ -32,6 +32,7 @@ import type { ShowUndoToastParams } from '../../hooks/useUndoToast';
 import { updateGastoCategoriaManual } from '../../services/gastosService';
 import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
 import { useAuth } from '../../context/AuthContext';
+import { getUserRole } from '../../utils/permissions';
 
 export type CategoriaMovimientoOption = { value: string; label: string };
 
@@ -143,10 +144,17 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   const quickGasto = sortedPendientes[quickIndex] ?? null;
   const quickSugerencia = quickGasto ? sugerirClasificacionGasto(quickGasto) : null;
 
-  const subtipoOpts = useMemo(
-    () => subtipoOptionsForTipo(moveTipo, pendientes, moveSubtipo),
-    [moveTipo, pendientes, moveSubtipo],
-  );
+  const subtipoOpts = useMemo(() => {
+    const opts = subtipoOptionsForTipo(moveTipo, pendientes, moveSubtipo);
+    if (moveTipo === 'operativo_vehiculo') {
+      logSubtipoMoverOperativoVehiculoDebug({
+        role: getUserRole(profile),
+        categoriaSeleccionada: moveTipo,
+        options: opts,
+      });
+    }
+    return opts;
+  }, [moveTipo, pendientes, moveSubtipo, profile]);
 
   const bulkSubtipoOpts = useMemo(
     () => subtipoOptionsForTipo(bulkTipo, pendientes, bulkSubtipo),
@@ -172,7 +180,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
       setMoveTipo(tipo);
       setMoveSubtipo(
         allowed
-          ? quickSugerencia.subtipo_gasto
+          ? normalizeSubtipoForTipoGasto(tipo, quickSugerencia.subtipo_gasto)
           : getDefaultSubtipoForTipoGasto(tipo) ?? '',
       );
     }
@@ -186,15 +194,23 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   ]);
 
   useEffect(() => {
-    if (!subtipoOpts.some((o) => o.value === moveSubtipo)) {
-      setMoveSubtipo(getDefaultSubtipoForTipoGasto(moveTipo));
+    if (subtipoOpts.some((o) => o.value === moveSubtipo)) return;
+    const normalized = normalizeSubtipoForTipoGasto(moveTipo, moveSubtipo);
+    if (subtipoOpts.some((o) => o.value === normalized)) {
+      setMoveSubtipo(normalized);
+      return;
     }
+    setMoveSubtipo(getDefaultSubtipoForTipoGasto(moveTipo));
   }, [moveTipo, moveSubtipo, subtipoOpts]);
 
   useEffect(() => {
-    if (!bulkSubtipoOpts.some((o) => o.value === bulkSubtipo)) {
-      setBulkSubtipo(getDefaultSubtipoForTipoGasto(bulkTipo));
+    if (bulkSubtipoOpts.some((o) => o.value === bulkSubtipo)) return;
+    const normalized = normalizeSubtipoForTipoGasto(bulkTipo, bulkSubtipo);
+    if (bulkSubtipoOpts.some((o) => o.value === normalized)) {
+      setBulkSubtipo(normalized);
+      return;
     }
+    setBulkSubtipo(getDefaultSubtipoForTipoGasto(bulkTipo));
   }, [bulkTipo, bulkSubtipo, bulkSubtipoOpts]);
 
   const applyMove = useCallback(

@@ -63,6 +63,9 @@ import {
   formatSubtipoOptionLabel,
   mergeSubtiposHistoricosConOficiales,
   buildSubtipoSelectOptions,
+  buildSubtipoFilterSelectOptions,
+  logSubtipoInversionDebug,
+  logSubtipoMoverOperativoVehiculoDebug,
 } from '../../constants/gastosSubtipos';
 import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
@@ -70,7 +73,9 @@ import { cleanOperationalCommentForUi, gastoObservacionParaLista } from '../../u
 import {
   isGastoRecentlyReclassified,
   mergeHistorialRowsWithPins,
+  sortGastosHistorialByActivity,
 } from '../../utils/gastoHistorialOrder';
+import { extractYearsFromGastos, mergeHistorialYears } from '../../utils/gastoHistorialYears';
 import { devMemoPerf } from '../../utils/devPerf';
 
 const GastosMesChart = lazy(() => import('../../components/Finanzas/GastosMesChart'));
@@ -313,15 +318,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     [gastosTab],
   );
 
-  const availableYears = useMemo(() => {
-    const ys = new Set<number>();
-    for (const g of gastosTab) {
-      const y = Number(g.fecha.slice(0, 4));
-      if (Number.isFinite(y) && y >= GASTOS_TREND_YEAR_MIN) ys.add(y);
-    }
-    return [...ys].sort((a, b) => b - a);
-  }, [gastosTab]);
-
   const [chartYear, setChartYear] = useState<string>('');
   const [historyYear, setHistoryYear] = useState<string>('ALL');
   const [historyMonth, setHistoryMonth] = useState<string>('ALL');
@@ -380,6 +376,48 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const historialFullLoaded = Boolean(activeTipoGasto && historialFullLoadedByTipo[activeTipoGasto]);
   const historialFullLoading = Boolean(activeTipoGasto && historialFullLoadingByTipo[activeTipoGasto]);
   const historialFullError = activeTipoGasto ? historialFullErrorByTipo[activeTipoGasto] ?? null : null;
+
+  /** Base analítica: historial completo en caché si existe; si no, bootstrap en memoria. */
+  const gastosForCategoriaAnalytics = useMemo(() => {
+    if (historialFullLoaded && historialFullRows.length > 0) return historialFullRows;
+    return gastosTab;
+  }, [historialFullLoaded, historialFullRows, gastosTab]);
+
+  const categoriaYearsMeta = useMemo(() => {
+    const sources: { label: string; years: number[] }[] = [];
+    if (historialFullLoaded && historialFullRows.length > 0) {
+      sources.push({
+        label: 'historialFull',
+        years: extractYearsFromGastos(historialFullRows, { minYear: 1900, maxYear: 2100 }),
+      });
+    } else if (historialFullLoading) {
+      sources.push({
+        label: 'historialFullLoading',
+        years: extractYearsFromGastos(gastosTab, { minYear: GASTOS_TREND_YEAR_MIN, maxYear: 2100 }),
+      });
+    }
+    if (historialScope === 'recent' && historialRows.length > 0) {
+      sources.push({
+        label: 'historialRecent',
+        years: extractYearsFromGastos(historialRows, { minYear: 1900, maxYear: 2100 }),
+      });
+    }
+    sources.push({
+      label: 'gastosContext',
+      years: extractYearsFromGastos(gastosTab, { minYear: GASTOS_TREND_YEAR_MIN, maxYear: 2100 }),
+    });
+    return mergeHistorialYears(sources);
+  }, [
+    historialFullLoaded,
+    historialFullRows,
+    historialFullLoading,
+    historialScope,
+    historialRows,
+    gastosTab,
+  ]);
+
+  const chartAvailableYears = categoriaYearsMeta.years;
+  const historialAvailableYears = chartAvailableYears;
 
   const pinGastoHistorial = useCallback((gasto: Gasto) => {
     const id = String(gasto.id);
@@ -451,7 +489,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   }, [historialFullLoadingByTipo]);
 
   useEffect(() => {
-    if (historialScope !== 'full' || !tab || gastosDataPending || !tenantEmpresaId) return;
+    if (!tab || gastosDataPending || !tenantEmpresaId) return;
     const tipo = tab.tipo_gasto;
     if (historialFullLoadedRef.current[tipo] || historialFullLoadingRef.current[tipo]) return;
 
@@ -508,7 +546,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     return () => {
       ac.abort();
     };
-  }, [historialScope, tab, gastosDataPending, tenantEmpresaId, historialFullRetryTick]);
+  }, [tab, gastosDataPending, tenantEmpresaId, historialFullRetryTick]);
 
   const historialSourceRows = historialScope === 'full' ? historialFullRows : historialRows;
   const historialSourceTotal =
@@ -539,49 +577,49 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const [moveSaving, setMoveSaving] = useState(false);
 
   useEffect(() => {
-    if (availableYears.length === 0) {
+    if (chartAvailableYears.length === 0) {
       setChartYear('');
       return;
     }
     setChartYear((prev) => {
       const n = prev ? Number(prev) : NaN;
-      if (prev && Number.isFinite(n) && availableYears.includes(n)) return prev;
-      return String(availableYears[0]);
+      if (prev && Number.isFinite(n) && chartAvailableYears.includes(n)) return prev;
+      return String(chartAvailableYears[0]);
     });
-  }, [availableYears]);
+  }, [chartAvailableYears]);
 
   useEffect(() => {
-    if (availableYears.length === 0) {
+    if (chartAvailableYears.length === 0) {
       setHistoryYear('ALL');
       return;
     }
     setHistoryYear((prev) => {
       if (prev === 'ALL') return prev;
       const n = Number(prev);
-      if (Number.isFinite(n) && availableYears.includes(n)) return prev;
+      if (Number.isFinite(n) && chartAvailableYears.includes(n)) return prev;
       return 'ALL';
     });
-  }, [availableYears]);
+  }, [chartAvailableYears]);
 
   const chartYearNum = chartYear ? Number(chartYear) : NaN;
 
   const gastosDelAnioGrafico = useMemo(() => {
     if (!Number.isFinite(chartYearNum)) return [];
     const prefix = `${chartYearNum}-`;
-    return gastosTab.filter((g) => g.fecha.startsWith(prefix));
-  }, [gastosTab, chartYearNum]);
+    return gastosForCategoriaAnalytics.filter((g) => g.fecha.startsWith(prefix));
+  }, [gastosForCategoriaAnalytics, chartYearNum]);
 
   /** Misma base que el desglose por subtipo (año del gráfico; si es «un mes», solo ese mes). Alimenta KPIs y gráfico. */
   const gastosResumenEjecutivo = useMemo(() => {
     if (!Number.isFinite(chartYearNum)) return [];
     if (subtipoPeriod === 'MONTH') {
       const mm = subtipoAggMonth.padStart(2, '0');
-      return gastosTab.filter(
+      return gastosForCategoriaAnalytics.filter(
         (g) => g.fecha.startsWith(`${chartYearNum}-`) && g.fecha.slice(5, 7) === mm,
       );
     }
     return gastosDelAnioGrafico;
-  }, [gastosTab, gastosDelAnioGrafico, chartYearNum, subtipoPeriod, subtipoAggMonth]);
+  }, [gastosForCategoriaAnalytics, gastosDelAnioGrafico, chartYearNum, subtipoPeriod, subtipoAggMonth]);
 
   const totalAnioGrafico = gastosResumenEjecutivo.reduce((s, g) => s + g.monto, 0);
 
@@ -638,9 +676,9 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             return { mes: mes.label.slice(0, 3), total };
           });
         },
-        { gastosTab: gastosTab.length },
+        { gastosTab: gastosForCategoriaAnalytics.length },
       ),
-    [subtipoPeriod, chartYearNum, subtipoAggMonth, gastosResumenEjecutivo, gastosDelAnioGrafico, gastosTab.length],
+    [subtipoPeriod, chartYearNum, subtipoAggMonth, gastosResumenEjecutivo, gastosDelAnioGrafico, gastosForCategoriaAnalytics.length],
   );
 
   const chartMonthLabelG = useMemo(() => {
@@ -681,8 +719,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   }, [chartYearNum, subtipoPeriod, gastosDelAnioGrafico]);
 
   const yearOptions = useMemo(
-    () => availableYears.map((y) => ({ value: String(y), label: String(y) })),
-    [availableYears],
+    () => chartAvailableYears.map((y) => ({ value: String(y), label: String(y) })),
+    [chartAvailableYears],
   );
 
   const monthOptionsAgg = useMemo(
@@ -695,14 +733,14 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   );
 
   const gastosForSubtipoAgg = useMemo(() => {
-    if (subtipoPeriod === 'ALL') return gastosTab;
+    if (subtipoPeriod === 'ALL') return gastosForCategoriaAnalytics;
     if (!Number.isFinite(chartYearNum)) return [];
     const prefix = `${chartYearNum}-`;
-    const yearSlice = gastosTab.filter((g) => g.fecha.startsWith(prefix));
+    const yearSlice = gastosForCategoriaAnalytics.filter((g) => g.fecha.startsWith(prefix));
     if (subtipoPeriod === 'YEAR') return yearSlice;
     const mm = subtipoAggMonth.padStart(2, '0');
     return yearSlice.filter((g) => g.fecha.slice(5, 7) === mm);
-  }, [gastosTab, subtipoPeriod, chartYearNum, subtipoAggMonth]);
+  }, [gastosForCategoriaAnalytics, subtipoPeriod, chartYearNum, subtipoAggMonth]);
 
   const subtipoAggRows = useMemo(
     () =>
@@ -750,21 +788,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     return `${mesNombre ?? 'Mes'} ${chartYear}`;
   }, [subtipoPeriod, chartYear, chartYearNum, subtipoAggMonth]);
 
-  const historialAvailableYears = useMemo(() => {
-    if (historialScope === 'full') {
-      if (historialFullLoaded && historialFullRows.length > 0) {
-        const ys = new Set<number>();
-        for (const g of historialFullRows) {
-          const y = Number(g.fecha.slice(0, 4));
-          if (Number.isFinite(y) && y >= 1900 && y <= 2100) ys.add(y);
-        }
-        return [...ys].sort((a, b) => b - a);
-      }
-      if (historialFullLoading) return availableYears;
-    }
-    return availableYears;
-  }, [historialScope, historialFullRows, historialFullLoaded, historialFullLoading, availableYears]);
-
   const historyYearOptions = useMemo(
     () => [
       { value: 'ALL', label: 'Todos los años' },
@@ -811,6 +834,18 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const subtipoGastoOptions = useMemo(() => {
     const tipo = tab?.tipo_gasto;
     if (!tipo) return [{ value: '', label: 'Todos subtipo' }];
+    if (tipo === 'inversion_compra') {
+      const opts = buildSubtipoFilterSelectOptions(tipo, gastosForSubtipoOptions, {
+        todosLabel: 'Todos subtipo',
+        showHistoricoBadge: true,
+      });
+      logSubtipoInversionDebug({
+        source: 'gastos_filter',
+        categoria: tipo,
+        options: opts.filter((o) => o.value),
+      });
+      return opts;
+    }
     const historicos = collectHistoricosSubtiposForTipoGasto(gastosForSubtipoOptions, tipo);
     const merged = mergeSubtiposHistoricosConOficiales(tipo, historicos);
     const seen = new Set<string>();
@@ -891,28 +926,32 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       pinGastoHistorial(gasto);
       setHistorialRows((prev) => {
         const idx = prev.findIndex((g) => String(g.id) === id);
+        let next: Gasto[];
         if (idx >= 0) {
-          const next = [...prev];
+          next = [...prev];
           next[idx] = gasto;
-          return next;
+        } else {
+          setHistorialTotal((t) => t + 1);
+          next = [gasto, ...prev];
         }
-        setHistorialTotal((t) => t + 1);
-        return [gasto, ...prev];
+        return sortGastosHistorialByActivity(next, historialPinnedAt);
       });
       if (activeTipoGasto && historialFullLoadedByTipo[activeTipoGasto]) {
         setHistorialFullRowsByTipo((prev) => {
           const rows = prev[activeTipoGasto] ?? [];
           const idx = rows.findIndex((g) => String(g.id) === id);
+          let next: Gasto[];
           if (idx >= 0) {
-            const next = [...rows];
+            next = [...rows];
             next[idx] = gasto;
-            return { ...prev, [activeTipoGasto]: next };
+          } else {
+            next = [gasto, ...rows];
           }
-          return { ...prev, [activeTipoGasto]: [gasto, ...rows] };
+          return { ...prev, [activeTipoGasto]: sortGastosHistorialByActivity(next, historialPinnedAt) };
         });
       }
     },
-    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal, pinGastoHistorial, activeTipoGasto, historialFullLoadedByTipo],
+    [gastoVisibleEnHistorial, removeGastoFromHistorialLocal, pinGastoHistorial, activeTipoGasto, historialFullLoadedByTipo, historialPinnedAt],
   );
 
   const loadHistorialCompleto = useCallback(() => {
@@ -989,6 +1028,29 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       gastoMatchesSubtipoFinancieroFilter(g.subtipo_gasto, filterSubtipoGasto, tab?.tipo_gasto),
     );
   }, [historialRowsMerged, filterSubtipoGasto, tab?.tipo_gasto]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !tab) return;
+    console.log('[historial:years]', {
+      categoria: tab.tipo_gasto,
+      source: categoriaYearsMeta.source,
+      years: chartAvailableYears,
+      chartYear,
+      totalRows: gastosForCategoriaAnalytics.length,
+    });
+  }, [tab, categoriaYearsMeta.source, chartAvailableYears, chartYear, gastosForCategoriaAnalytics.length]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !tab || historialRowsDisplayed.length === 0) return;
+    const first = historialRowsDisplayed[0]!;
+    console.log('[historial:sort]', {
+      categoria: tab.tipo_gasto,
+      sortBy: 'actividad',
+      firstRowFecha: first.fecha,
+      firstRowUpdatedAt: first.revisado_at ?? null,
+      firstRowCreatedAt: first.createdAt ?? null,
+    });
+  }, [tab, historialRowsDisplayed]);
 
   useCopilotNarrativeNavigation({
     resolveTarget: (step) =>
@@ -1148,7 +1210,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   );
 
   const subtipoOptionsForMove = useMemo(() => {
-    const historicos = collectHistoricosSubtiposForTipoGasto(gastos, moveTipo);
     const extra: string[] = [];
     if (moveTarget?.subtipo_gasto?.trim()) extra.push(moveTarget.subtipo_gasto.trim());
     const rows = buildSubtipoSelectOptions(moveTipo, gastos, extra);
@@ -1159,8 +1220,23 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         label: formatSubtipoOptionLabel(moveTipo, { value: def, label: '', isHistorico: false }),
       });
     }
-    return rows.sort((a, b) => a.label.localeCompare(b.label, 'es'));
-  }, [gastos, moveTipo, moveTarget]);
+    const sorted = rows.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    if (moveTipo === 'inversion_compra') {
+      logSubtipoInversionDebug({
+        source: 'gastos_mover',
+        categoria: 'inversion_compra',
+        options: sorted,
+      });
+    }
+    if (moveTarget && moveTipo === 'operativo_vehiculo') {
+      logSubtipoMoverOperativoVehiculoDebug({
+        role: permissionUser.role,
+        categoriaSeleccionada: moveTipo,
+        options: sorted,
+      });
+    }
+    return sorted;
+  }, [gastos, moveTipo, moveTarget, permissionUser.role]);
 
   const vehicleOptions = useMemo(
     () => [
@@ -1253,9 +1329,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   useEffect(() => {
     if (!moveTarget) return;
     if (subtipoOptionsForMove.length === 0) return;
-    if (!subtipoOptionsForMove.some((o) => o.value === moveSubtipo)) {
-      setMoveSubtipo(getDefaultSubtipoForTipoGasto(moveTipo));
+    if (subtipoOptionsForMove.some((o) => o.value === moveSubtipo)) return;
+    const normalized = normalizeSubtipoForTipoGasto(moveTipo, moveSubtipo);
+    if (subtipoOptionsForMove.some((o) => o.value === normalized)) {
+      setMoveSubtipo(normalized);
+      return;
     }
+    setMoveSubtipo(getDefaultSubtipoForTipoGasto(moveTipo));
   }, [moveTarget, moveTipo, moveSubtipo, subtipoOptionsForMove]);
 
   const moveDisabled = !moveTarget
@@ -1368,6 +1448,21 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         movedOutOfView: result.movedOutOfView,
         ...localSyncSilent,
       });
+
+      if (import.meta.env.DEV) {
+        console.log('[historial:move-refresh]', {
+          gastoId: result.gasto.id,
+          oldCategoria: prevTipo,
+          newCategoria: result.gasto.tipo_gasto ?? moveTipo,
+          updatedAt: result.gasto.revisado_at ?? changedAt,
+          appearsOnTop:
+            !result.movedOutOfView &&
+            tab != null &&
+            gastoMatchesTipoGasto(result.gasto, tab.tipo_gasto),
+        });
+      }
+
+      bumpHistorial();
 
       if (
         !result.movedOutOfView &&
@@ -1858,10 +1953,11 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                   : `${historialSourceTotal} registro${historialSourceTotal === 1 ? '' : 's'} en esta categoría · carga paginada`}
               </p>
             ) : null}
+            <p className="mt-0.5 text-[11px] text-slate-500">Ordenado por última actualización</p>
             {historialFullError ? (
               <p className="mt-0.5 text-[11px] text-amber-800">{historialFullError}</p>
-            ) : historialScope === 'full' && historialFullLoading ? (
-              <p className="mt-0.5 text-[11px] text-slate-500">Cargando años históricos…</p>
+            ) : historialFullLoading && !historialFullLoaded ? (
+              <p className="mt-0.5 text-[11px] text-slate-500">Cargando años históricos para gráfico…</p>
             ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-end [&_.label]:mb-0.5 [&_.label]:text-[10px] [&_.label]:font-semibold [&_.label]:text-slate-600">

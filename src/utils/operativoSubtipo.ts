@@ -1,4 +1,4 @@
-import { normKey } from './subtipoFinancieroLabel';
+import { normKey } from './normKey';
 import { normalizeTramitesMovilidadSubtipo } from './tramitesMovilidadSubtipo';
 
 export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string }[] = [
@@ -16,6 +16,7 @@ export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string 
   { value: 'sunat', label: 'SUNAT' },
   { value: 'sutran', label: 'SUTRAN' },
   { value: 'revision_tecnica_taxi', label: 'REVISIÓN TÉCNICA TAXI' },
+  { value: 'revision_tecnica_particular', label: 'REVISIÓN TÉCNICA PARTICULAR' },
   { value: 'mantenimiento', label: 'Mantenimiento' },
   { value: 'accesorios', label: 'Accesorios' },
   { value: 'arreglo_linea_escape', label: 'Arreglo línea de escape' },
@@ -50,6 +51,7 @@ const FACT_DEFAULT_BY_CANON: Record<string, { tipo: string; subTipo: string }> =
   sunat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNAT' },
   sutran: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUTRAN' },
   revision_tecnica_taxi: { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA TAXI' },
+  revision_tecnica_particular: { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA PARTICULAR' },
   mantenimiento: { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
   accesorios: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
   arreglo_linea_escape: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
@@ -83,7 +85,8 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('GNV', 'gnv');
   add('SOAT', 'documentos');
   add('AFOCAT', 'documentos');
-  add('RT-PARTICULAR', 'multas_tramites');
+  add('RT-PARTICULAR', 'revision_tecnica_particular');
+  add('RT PARTICULAR', 'revision_tecnica_particular');
   add('RT-TAXI', 'revision_tecnica_taxi');
   add('RT TAXI', 'revision_tecnica_taxi');
   add('PERMISOS VARIOS', 'multas_tramites');
@@ -108,7 +111,8 @@ const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
   add('FORROS Y FUNDAS', 'interior');
   add('OTROS /ESPECIFICAR', 'otros_operativo');
   add('CIA DE SEGUROS', 'documentos');
-  add('REVISIÓN TÉCNICA PARTICULAR', 'multas_tramites');
+  add('REVISIÓN TÉCNICA PARTICULAR', 'revision_tecnica_particular');
+  add('REVISION TECNICA PARTICULAR', 'revision_tecnica_particular');
   add('REVISIÓN TÉCNICA TAXI', 'revision_tecnica_taxi');
   add('REVISION TECNICA TAXI', 'revision_tecnica_taxi');
   add('PAPELETAS /MULTAS', 'multas_tramites');
@@ -154,6 +158,13 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
   ) {
     return 'revision_tecnica_taxi';
   }
+  if (
+    nkEarly.includes('revision tecnica particular')
+    || nkEarly.includes('rt particular')
+    || nkEarly.includes('rtv particular')
+  ) {
+    return 'revision_tecnica_particular';
+  }
 
   const fromFact = NORM_FACT_SUBTIPO_TO_CANON[k];
   if (fromFact) return fromFact;
@@ -178,8 +189,6 @@ export function normalizeOperativoSubtipo(raw: string | null | undefined): strin
     || nk.includes('permisos municipales')
     || (nk.includes('multa') && !nk.includes('callao'))
     || nk.includes('papeleta')
-    || nk.includes('revision tecnica particular')
-    || nk.includes('revisiones')
     || nk.includes('brevete')
     || nk === 'licencia'
     || nk.startsWith('licencia ')

@@ -34,7 +34,6 @@ import {
 import {
   getDefaultFactTipoSubtipoForInversionCanon,
   getInversionSubtipoLabel,
-  getInversionSubtipoOptions,
   inversionSubtipoRequiereVehiculo,
   normalizeInversionSubtipo,
   type InversionSubtipoCanon,
@@ -44,7 +43,9 @@ import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefa
 import {
   buildSubtipoFormSelectOptions,
   formatSubtipoOptionLabel,
+  logSubtipoInversionDebug,
   mergeSubtiposHistoricosConOficiales,
+  buildSubtipoSelectOptions,
 } from '../../constants/gastosSubtipos';
 import { todayStr } from '../../utils/formatting';
 
@@ -255,6 +256,18 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     if (!form.categoriaFinanciera) return [...TIPOS_GASTO_FACT];
     return getFactTiposForFinanza(form.categoriaFinanciera);
   }, [form.categoriaFinanciera]);
+
+  const inversionSubtipoSelectOptions = useMemo(() => {
+    const options = buildSubtipoSelectOptions('inversion_compra', gastos);
+    if (form.categoriaFinanciera === 'inversion_compra') {
+      logSubtipoInversionDebug({
+        source: 'expense_form',
+        categoria: 'inversion_compra',
+        options,
+      });
+    }
+    return options;
+  }, [form.categoriaFinanciera, gastos]);
 
   const buildExpenseValidationErrors = (): Partial<Record<keyof FormState, string>> => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
@@ -580,7 +593,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   <Select
                     id="expense-field-subtipo-inversion"
                     label="Tipo de inversión"
-                    options={getInversionSubtipoOptions()}
+                    options={inversionSubtipoSelectOptions}
                     value={form.subtipoInversionCanon}
                     placeholder="Seleccionar…"
                     onChange={(v) => {

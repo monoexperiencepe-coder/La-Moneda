@@ -1,39 +1,34 @@
 /**
  * Catálogo híbrido de subtipos por categoría financiera (`tipo_gasto`).
- * Oficiales: Excel dueño + Fact acotado por categoría + códigos sintéticos del sistema.
- * Históricos: distinct en memoria (no altera BD).
+ * Fuente oficial: Excel (officialSubtiposCatalog) + históricos en memoria (BD).
  */
+import type { FinanzaGastoRegistroValue } from '../data/finanzaGastoRegistro';
 import { getSubtiposGasto } from '../data/factCatalog';
-import {
-  getFactTiposForFinanza,
-  type FinanzaGastoRegistroValue,
-} from '../data/finanzaGastoRegistro';
-import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
-import { OPERATIVO_SUBTIPO_OPTIONS } from '../utils/operativoSubtipo';
-import { INVERSION_SUBTIPO_OPTIONS } from '../utils/inversionSubtipo';
-import {
-  getRepresentacionInternaSubtipoLabel,
-  normalizeRepresentacionInternaSubtipo,
-} from '../utils/representacionInternaSubtipoLabel';
-import { getOperativoSubtipoLabel, resolveOperativoSubtipoGastoCanon } from '../utils/operativoSubtipo';
-import { getInversionSubtipoDedupeKey, getInversionSubtipoLabel, normalizeInversionSubtipo } from '../utils/inversionSubtipo';
-import {
-  ADMINISTRATIVO_SUBTIPO_OPTIONS,
-  getAdministrativoSubtipoLabel,
-  normalizeAdministrativoSubtipo,
-  resolveAdministrativoSubtipoGastoCanon,
-} from '../utils/administrativoSubtipo';
-import { getSubtipoFinancieroLabel, normKey } from '../utils/subtipoFinancieroLabel';
-import { tipoGastoUsaSubtipoOperativo } from '../utils/gastoMoveCategoriaDefaults';
 import { dedupeOptionsByKey } from '../utils/dedupeSelectOptions';
 import { gastoMatchesTipoGasto } from '../utils/gastosTipoGasto';
+import { normKey } from '../utils/normKey';
 import type { Gasto } from '../data/types';
+import {
+  buildUnifiedSubtipoCatalog,
+  getOficialesSubtiposForCategoria as getOficialesUnified,
+  getUnifiedSubtipoLabel,
+  isSubtipoOficialEnCategoria as isOficialUnified,
+} from './subtipos/buildUnifiedSubtipoCatalog';
+import {
+  getCanonicalSubtipoDedupeKey,
+  LEGACY_SUBTIPO_ALIASES_NORM_KEY,
+  resolveCanonicalSubtipoValue,
+  resolveLegacyAliasNormKey,
+} from './subtipos/legacySubtipoAliases';
+import {
+  FINANZA_CATEGORIAS_CON_CATALOGO,
+  resolveCategoriaFinanzaParaSubtipos,
+  type GastoSubtipoCategoria,
+} from './subtipos/subtipoCategoria';
 
-export type GastoSubtipoCategoria =
-  | FinanzaGastoRegistroValue
-  | 'financiero'
-  | 'inversion'
-  | 'pendiente_revision';
+export type { GastoSubtipoCategoria };
+export { resolveCategoriaFinanzaParaSubtipos, FINANZA_CATEGORIAS_CON_CATALOGO };
+export { LEGACY_SUBTIPO_ALIASES_NORM_KEY as SUBTIPO_ALIASES_NORM_KEY };
 
 export interface GastoSubtipoOption {
   value: string;
@@ -56,184 +51,14 @@ export const EXCEL_CATEGORIA_A_TIPO_GASTO: Record<string, GastoSubtipoCategoria>
   operativo_flota_general: 'operativo_flota_general',
 };
 
-/**
- * Subtipos oficiales adicionales (Excel) no siempre presentes en `factSubtiposGastos.json`.
- * Se fusionan con la unión Fact por categoría.
- */
-const EXCEL_EXTRAS_POR_CATEGORIA: Partial<Record<FinanzaGastoRegistroValue, readonly string[]>> = {
-  administrativo_empresa: [
-    'administrativo_general',
-    'movilidad',
-    'multas_callao',
-    'atu',
-    'sat',
-    'sunarp',
-    'sunat',
-    'sutran',
-    'taxi',
-    'EQUIPAMIENTO DE TALLER',
-    'ÚTILES DE OFICINA',
-    'MOBILIARIO',
-    'ALOJAMIENTOS',
-    'SERVICIOS DE LIMPIEZA',
-    'PAPELERÍA',
-  ],
-  financiero_prestamo: [
-    'prestamo',
-    'cuota',
-    'interes',
-    'prestamo_interes_banca',
-    'tarjeta_banco',
-  ],
-  inversion_compra: [
-    'adquisicion_vehiculo',
-    'compra_terreno',
-    'acondicionamiento_areas',
-    'laptops',
-    'electrodomesticos',
-    'sistema_seguridad',
-    'equipamiento_taller',
-    'compra_software_gestion',
-    'muebles_enseres',
-    'equipamiento_oficina',
-  ],
-  representacion_interna: ['regalos', 'alojamientos'],
-  gastos_globales: ['global_no_asignado'],
-  planilla_laboral: [],
-};
-
-/** Alias normKey → valor canónico oficial (solo deduplicación en UI; no reescribe BD). */
-export const SUBTIPO_ALIASES_NORM_KEY: Record<string, string> = {
-  alojameintos: 'ALOJAMIENTOS',
-  equipameinto_de_taller: 'EQUIPAMIENTO DE TALLER',
-  prestamos: 'prestamo',
-  intereses: 'interes',
-  cuotas: 'cuota',
-  adquisicion_auto: 'adquisicion_vehiculo',
-  vehiculo: 'adquisicion_vehiculo',
-  inversion_vehicular: 'adquisicion_vehiculo',
-  compra_activo_vehiculo: 'adquisicion_vehiculo',
-  inversion_terreno: 'compra_terreno',
-  terreno: 'compra_terreno',
-  laptops: 'laptops',
-  computadoras: 'laptops',
-  equipos_de_computo: 'laptops',
-  arreglo_linea_escape: 'arreglo_linea_escape',
-  linea_escape: 'arreglo_linea_escape',
-  tubo_escape: 'arreglo_linea_escape',
-  silenciador: 'arreglo_linea_escape',
-  mofle: 'arreglo_linea_escape',
-  autoparte: 'autopartes',
-  autopartes: 'autopartes',
-  repuesto: 'autopartes',
-  repuestos: 'autopartes',
-  movilidad: 'movilidad',
-  pasaje: 'movilidad',
-  pasajes: 'movilidad',
-  traslado: 'movilidad',
-  traslados: 'movilidad',
-  multas_callao: 'multas_callao',
-  multa_callao: 'multas_callao',
-  'multas callao': 'multas_callao',
-  atu: 'atu',
-  'autorizacion atu': 'atu',
-  sat: 'sat',
-  sunarp: 'sunarp',
-  suanrp: 'sunarp',
-  sunat: 'sunat',
-  sutran: 'sutran',
-  taxi: 'revision_tecnica_taxi',
-  'rt-taxi': 'revision_tecnica_taxi',
-  'rt taxi': 'revision_tecnica_taxi',
-  'revision tecnica taxi': 'revision_tecnica_taxi',
-  revision_tecnica_taxi: 'revision_tecnica_taxi',
-};
-
-function unionFactSubtiposForFinanza(cat: FinanzaGastoRegistroValue): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const factTipo of getFactTiposForFinanza(cat)) {
-    for (const s of getSubtiposGasto(factTipo)) {
-      const t = s.trim();
-      if (!t) continue;
-      const nk = normKey(t);
-      if (seen.has(nk)) continue;
-      seen.add(nk);
-      out.push(t);
-    }
-  }
-  return out;
-}
-
-function appendUniqueStable(target: string[], values: readonly string[]): void {
-  const seen = new Set(target.map(normKey));
-  for (const raw of values) {
-    const t = raw.trim();
-    if (!t) continue;
-    const nk = normKey(t);
-    if (seen.has(nk)) continue;
-    seen.add(nk);
-    target.push(t);
-  }
-}
-
-const FINANZA_CATEGORIAS_CON_CATALOGO: readonly FinanzaGastoRegistroValue[] = [
-  'operativo_vehiculo',
-  'operativo_flota_general',
-  'administrativo_empresa',
-  'financiero_prestamo',
-  'planilla_laboral',
-  'representacion_interna',
-  'gastos_globales',
-  'inversion_compra',
-];
-
-const FINANZA_CATEGORIAS_SET = new Set<string>(FINANZA_CATEGORIAS_CON_CATALOGO);
-
-/** Resuelve tipo_gasto → categoría de catálogo. NO depende de SUBTIPOS_OFICIALES_POR_CATEGORIA. */
-export function resolveCategoriaFinanzaParaSubtipos(tipoGasto: string): FinanzaGastoRegistroValue | null {
-  const t = tipoGasto.trim();
-  if (t === 'financiero') return 'financiero_prestamo';
-  if (t === 'inversion') return 'inversion_compra';
-  if (FINANZA_CATEGORIAS_SET.has(t)) return t as FinanzaGastoRegistroValue;
-  return null;
-}
-
-/** Dedupe key cuando la categoría ya es conocida (evita TDZ durante init del catálogo). */
 function getSubtipoOptionDedupeKeyForCat(cat: FinanzaGastoRegistroValue, value: string): string {
-  const v = value.trim();
-  if (!v) return '';
-  if (cat === 'inversion_compra') return getInversionSubtipoDedupeKey(v);
-  if (cat === 'administrativo_empresa') {
-    return resolveAdministrativoSubtipoGastoCanon(v) ?? normKey(v);
-  }
-  if (cat === 'representacion_interna') {
-    return normalizeRepresentacionInternaSubtipo(v) || normKey(v);
-  }
-  if (tipoGastoUsaSubtipoOperativo(cat)) {
-    return resolveOperativoSubtipoGastoCanon(v) ?? normKey(v);
-  }
-  return normKey(v);
+  return getCanonicalSubtipoDedupeKey(cat, value);
 }
 
-/** Valor canónico cuando la categoría ya es conocida. */
 function getSubtipoOptionCanonicalValueForCat(cat: FinanzaGastoRegistroValue, value: string): string {
-  const v = value.trim();
-  if (!v) return v;
-  if (cat === 'inversion_compra') return normalizeInversionSubtipo(v) ?? v;
-  if (cat === 'administrativo_empresa') {
-    return normalizeAdministrativoSubtipo(v) ?? v;
-  }
-  if (cat === 'representacion_interna') {
-    return normalizeRepresentacionInternaSubtipo(v) || v;
-  }
-  if (tipoGastoUsaSubtipoOperativo(cat)) {
-    return resolveOperativoSubtipoGastoCanon(v) ?? v;
-  }
-  return v;
+  return resolveCanonicalSubtipoValue(cat, value);
 }
 
-/** Clave de deduplicación UI: colapsa alias/canónicos (inversión, operativo, representación). */
 export function getSubtipoOptionDedupeKey(tipoGasto: string, value: string): string {
   const v = value.trim();
   if (!v) return '';
@@ -242,7 +67,6 @@ export function getSubtipoOptionDedupeKey(tipoGasto: string, value: string): str
   return normKey(v);
 }
 
-/** Valor preferido en selects (canónico cuando aplica). */
 export function getSubtipoOptionCanonicalValue(tipoGasto: string, value: string): string {
   const v = value.trim();
   if (!v) return v;
@@ -251,103 +75,26 @@ export function getSubtipoOptionCanonicalValue(tipoGasto: string, value: string)
   return v;
 }
 
-function appendFactSubtiposSinDuplicarCanon(
-  target: string[],
-  cat: FinanzaGastoRegistroValue,
-  factValues: readonly string[],
-): void {
-  const seenKeys = new Set(target.map((v) => getSubtipoOptionDedupeKeyForCat(cat, v)));
-  for (const raw of factValues) {
-    const t = raw.trim();
-    if (!t) continue;
-    const dedupeKey = getSubtipoOptionDedupeKeyForCat(cat, t);
-    if (seenKeys.has(dedupeKey)) continue;
-    seenKeys.add(dedupeKey);
-    target.push(t);
-  }
+/** Listas oficiales por categoría (Excel, deduplicadas). Lazy — no construir al cargar módulo. */
+export function getSubtiposOficialesPorCategoriaMap(): Record<
+  FinanzaGastoRegistroValue,
+  readonly string[]
+> {
+  return Object.fromEntries(
+    FINANZA_CATEGORIAS_CON_CATALOGO.map((cat) => [cat, getOficialesUnified(cat)]),
+  ) as Record<FinanzaGastoRegistroValue, readonly string[]>;
 }
-
-function buildOficialesLista(cat: FinanzaGastoRegistroValue): readonly string[] {
-  if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
-    return OPERATIVO_SUBTIPO_OPTIONS.map((o) => o.value);
-  }
-  if (cat === 'representacion_interna') {
-    const base = [...SUBTIPOS_REPRESENTACION_INTERNA];
-    appendUniqueStable(base, EXCEL_EXTRAS_POR_CATEGORIA.representacion_interna ?? []);
-    return base;
-  }
-  if (cat === 'administrativo_empresa') {
-    const out: string[] = ADMINISTRATIVO_SUBTIPO_OPTIONS.map((o) => o.value);
-    appendUniqueStable(out, EXCEL_EXTRAS_POR_CATEGORIA.administrativo_empresa ?? []);
-    appendFactSubtiposSinDuplicarCanon(out, cat, unionFactSubtiposForFinanza(cat));
-    return out.map((v) => getSubtipoOptionCanonicalValueForCat(cat, v));
-  }
-  if (cat === 'inversion_compra') {
-    return INVERSION_SUBTIPO_OPTIONS.map((o) => o.value);
-  }
-  const out: string[] = [];
-  appendUniqueStable(out, EXCEL_EXTRAS_POR_CATEGORIA[cat] ?? []);
-  appendUniqueStable(out, unionFactSubtiposForFinanza(cat));
-  return out;
-}
-
-/** Listas oficiales por categoría financiera (orden estable: extras Excel → Fact → códigos). */
-export const SUBTIPOS_OFICIALES_POR_CATEGORIA = Object.fromEntries(
-  FINANZA_CATEGORIAS_CON_CATALOGO.map((cat) => [cat, buildOficialesLista(cat)]),
-) as Record<FinanzaGastoRegistroValue, readonly string[]>;
 
 export function getOficialesSubtiposForCategoria(tipoGasto: string): readonly string[] {
-  const cat = resolveCategoriaFinanzaParaSubtipos(tipoGasto);
-  if (!cat) return [];
-  return SUBTIPOS_OFICIALES_POR_CATEGORIA[cat];
+  return getOficialesUnified(tipoGasto);
 }
 
 export function isSubtipoOficialEnCategoria(tipoGasto: string, value: string): boolean {
-  const v = value.trim();
-  if (!v) return false;
-  const nk = normKey(v);
-  for (const o of getOficialesSubtiposForCategoria(tipoGasto)) {
-    if (normKey(o) === nk) return true;
-  }
-  const alias = SUBTIPO_ALIASES_NORM_KEY[nk];
-  if (!alias) return false;
-  for (const o of getOficialesSubtiposForCategoria(tipoGasto)) {
-    if (normKey(o) === normKey(alias)) return true;
-  }
-  return false;
-}
-
-function resolveAliasOfficialNormKey(value: string, tipoGasto: string): string | null {
-  const nk = normKey(value);
-  const alias = SUBTIPO_ALIASES_NORM_KEY[nk];
-  if (!alias) return null;
-  const aNk = normKey(alias);
-  for (const o of getOficialesSubtiposForCategoria(tipoGasto)) {
-    if (normKey(o) === aNk) return aNk;
-  }
-  return null;
+  return isOficialUnified(tipoGasto, value);
 }
 
 export function labelForSubtipoCatalogo(tipoGasto: string, value: string): string {
-  const v = value.trim();
-  if (!v) return '—';
-  const cat = resolveCategoriaFinanzaParaSubtipos(tipoGasto);
-  if (cat === 'representacion_interna') {
-    const lab = getRepresentacionInternaSubtipoLabel(v);
-    if (lab !== '—' && lab !== v) return lab;
-    if (v === 'regalos') return 'Regalos';
-    if (v === 'alojamientos') return 'Alojamientos';
-  }
-  if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
-    return getOperativoSubtipoLabel(v);
-  }
-  if (cat === 'administrativo_empresa') {
-    return getAdministrativoSubtipoLabel(v);
-  }
-  if (cat === 'inversion_compra') {
-    return getInversionSubtipoLabel(v);
-  }
-  return getSubtipoFinancieroLabel(v, tipoGasto);
+  return getUnifiedSubtipoLabel(tipoGasto, value);
 }
 
 export function formatSubtipoOptionLabel(
@@ -356,71 +103,25 @@ export function formatSubtipoOptionLabel(
   showHistoricoBadge = true,
 ): string {
   const base = opt.label || labelForSubtipoCatalogo(tipoGasto, opt.value);
-  if (showHistoricoBadge && opt.isHistorico) return `${base} (histórico)`;
+  if (showHistoricoBadge && opt.isHistorico) return `${base} (legacy)`;
   return base;
 }
 
 /**
- * Unión única: oficiales primero (orden estable), luego históricos no cubiertos por clave canónica.
+ * Unión única: oficiales Excel primero, luego históricos BD no cubiertos por dedupe.
  */
 export function mergeSubtiposHistoricosConOficiales(
   tipoGasto: string,
   historicos: Iterable<string> = [],
 ): GastoSubtipoOption[] {
-  const cat = resolveCategoriaFinanzaParaSubtipos(tipoGasto);
-  if (!cat) {
-    const histOnly = [...historicos]
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b, 'es'));
-    const seen = new Set<string>();
-    return histOnly
-      .filter((v) => {
-        const nk = normKey(v);
-        if (seen.has(nk)) return false;
-        seen.add(nk);
-        return true;
-      })
-      .map((value) => ({
-        value,
-        label: labelForSubtipoCatalogo(tipoGasto, value),
-        isHistorico: true,
-      }));
-  }
-
-  const oficial = getOficialesSubtiposForCategoria(cat);
-  const seenDedupe = new Set<string>();
-  const out: GastoSubtipoOption[] = [];
-
-  const pushOption = (raw: string, isHistorico: boolean) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-    const dedupeKey = getSubtipoOptionDedupeKeyForCat(cat, trimmed);
-    if (seenDedupe.has(dedupeKey)) return;
-    const aliasNk = resolveAliasOfficialNormKey(trimmed, cat);
-    if (aliasNk && seenDedupe.has(aliasNk)) return;
-    seenDedupe.add(dedupeKey);
-    const canonValue = getSubtipoOptionCanonicalValueForCat(cat, trimmed);
-    out.push({
-      value: canonValue,
-      label: labelForSubtipoCatalogo(cat, canonValue),
-      isHistorico,
-    });
-  };
-
-  for (const raw of oficial) pushOption(raw, false);
-
-  const histSorted = [...historicos]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, 'es'));
-
-  for (const value of histSorted) pushOption(value, true);
-
-  return dedupeOptionsByKey(out, (o) => getSubtipoOptionDedupeKeyForCat(cat, o.value));
+  const { options } = buildUnifiedSubtipoCatalog(tipoGasto, historicos, { showLegacyBadge: false });
+  return options.map((o) => ({
+    value: o.value,
+    label: o.label,
+    isHistorico: o.isLegacy,
+  }));
 }
 
-/** Opciones listas para Select: deduplicadas por valor canónico. */
 export function buildSubtipoSelectOptions(
   tipoGasto: string,
   gastos: readonly Pick<Gasto, 'tipo_gasto' | 'subtipo_gasto'>[] | undefined,
@@ -452,7 +153,6 @@ export function collectHistoricosSubtiposForTipoGasto(
   return [...out];
 }
 
-/** Opciones de filtro / select con fila «Todos». */
 export function buildSubtipoFilterSelectOptions(
   tipoGasto: string,
   gastos: readonly Pick<Gasto, 'tipo_gasto' | 'subtipo_gasto'>[],
@@ -460,8 +160,7 @@ export function buildSubtipoFilterSelectOptions(
 ): { value: string; label: string }[] {
   const historicos = collectHistoricosSubtiposForTipoGasto(gastos, tipoGasto);
   const merged = mergeSubtiposHistoricosConOficiales(tipoGasto, historicos);
-  logSubtipoMergeDiagnostico(tipoGasto, historicos, merged);
-  const showBadge = opts?.showHistoricoBadge ?? false;
+  const showBadge = opts?.showHistoricoBadge ?? true;
   const options = merged.map((o) => ({
     value: o.value,
     label: formatSubtipoOptionLabel(tipoGasto, o, showBadge),
@@ -485,24 +184,72 @@ export function buildSubtipoFormSelectOptions(
     ...extraHistoricos,
   ];
   const merged = mergeSubtiposHistoricosConOficiales(tipoGasto, historicos);
-  logSubtipoMergeDiagnostico(tipoGasto, historicos, merged);
+  if (tipoGasto === 'inversion_compra') return merged;
   if (!factTipoSeleccionado?.trim()) return merged;
   const forTipo = new Set(getSubtiposGasto(factTipoSeleccionado).map((s) => normKey(s)));
   return merged.filter((o) => o.isHistorico || forTipo.has(normKey(o.value)));
 }
 
-/** Diagnóstico DEV: merge por categoría. */
+export function buildCanonicalInversionSubtipoSelectOptions(): { value: string; label: string }[] {
+  return buildSubtipoSelectOptions('inversion_compra', undefined);
+}
+
+export function getCanonicalInversionSubtipoValues(): readonly string[] {
+  return getOficialesSubtiposForCategoria('inversion_compra');
+}
+
+export function buildInversionSubtipoSelectOptions(
+  gastos: readonly Pick<Gasto, 'tipo_gasto' | 'subtipo_gasto'>[] | undefined,
+  extraHistoricos: Iterable<string> = [],
+  opts?: { showHistoricoBadge?: boolean },
+): { value: string; label: string }[] {
+  return buildSubtipoSelectOptions('inversion_compra', gastos, extraHistoricos, opts);
+}
+
+export function logSubtipoInversionDebug(opts: {
+  source: string;
+  categoria: string;
+  options: readonly { value: string; label: string }[];
+}): void {
+  if (!import.meta.env.DEV) return;
+  if (opts.categoria !== 'inversion_compra') return;
+  console.log('[subtipos:inversion]', {
+    source: opts.source,
+    categoria: opts.categoria,
+    optionsCount: opts.options.length,
+    options: opts.options.map((o) => ({ value: o.value, label: o.label })),
+    canonicalValues: [...getCanonicalInversionSubtipoValues()],
+  });
+}
+
+export function logSubtipoMoverOperativoVehiculoDebug(opts: {
+  role?: string | null;
+  categoriaSeleccionada: string;
+  options: readonly { value: string; label: string }[];
+}): void {
+  if (!import.meta.env.DEV) return;
+  if (opts.categoriaSeleccionada !== 'operativo_vehiculo') return;
+  const options = opts.options.map((o) => ({ value: o.value, label: o.label }));
+  console.log('[subtipos:mover:operativo_vehiculo]', {
+    role: opts.role ?? null,
+    categoriaSeleccionada: opts.categoriaSeleccionada,
+    subtiposCount: options.length,
+    hasRevisionTecnicaTaxi: options.some((o) => o.value === 'revision_tecnica_taxi'),
+    hasRevisionTecnicaParticular: options.some((o) => o.value === 'revision_tecnica_particular'),
+    options,
+  });
+}
+
 export function logSubtipoMergeDiagnostico(
   categoria: string,
   historicos: readonly string[],
   merged: readonly GastoSubtipoOption[],
 ): void {
   if (!import.meta.env.DEV) return;
-  const oficiales = getOficialesSubtiposForCategoria(categoria);
+  buildUnifiedSubtipoCatalog(categoria, historicos);
   console.log('[gastosSubtipos merge]', {
     categoria,
     historicosEncontrados: [...historicos],
-    oficialesExcelFact: [...oficiales],
     mergeFinal: merged.map((o) => ({
       value: o.value,
       label: o.label,
@@ -510,3 +257,10 @@ export function logSubtipoMergeDiagnostico(
     })),
   });
 }
+
+export { buildUnifiedSubtipoCatalog } from './subtipos/buildUnifiedSubtipoCatalog';
+export {
+  resolveCanonicalSubtipoValue,
+  resolveLegacyAliasNormKey,
+  legacyTextMatchesSubtipo,
+} from './subtipos/legacySubtipoAliases';

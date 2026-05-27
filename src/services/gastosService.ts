@@ -1081,7 +1081,7 @@ export type GastosHistorialFilters = {
   month?: string;
   subtipo?: string;
   search?: string;
-  /** `actividad`: revisado_at → fecha (movimientos recientes arriba). */
+  /** `actividad`: revisado_at → created_at → fecha (movimientos/editions recientes arriba). */
   orderMode?: GastosHistorialOrderMode;
 };
 
@@ -1147,6 +1147,7 @@ export async function fetchGastosHistorialPage(
       if (orderMode === 'actividad') {
         q = q
           .order('revisado_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false, nullsFirst: false })
           .order('fecha', { ascending: false })
           .order('id', { ascending: false });
       } else {
@@ -1226,6 +1227,7 @@ export async function fetchGastosByTipoFullAll(
             if (orderMode === 'actividad') {
               q = q
                 .order('revisado_at', { ascending: false, nullsFirst: false })
+                .order('created_at', { ascending: false, nullsFirst: false })
                 .order('fecha', { ascending: false })
                 .order('id', { ascending: false });
             } else {

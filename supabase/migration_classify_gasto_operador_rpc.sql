@@ -35,6 +35,7 @@ declare
   v_restricted boolean;
   v_old_canon text;
   v_old_visible boolean;
+  v_dest_visible boolean;
   v_moved_out boolean;
   v_rows int;
 begin
@@ -79,7 +80,12 @@ begin
   v_old_visible := public.gasto_tipo_operador_visible(v_row.tipo_gasto)
     or v_old_canon in ('gastos_globales', 'pendiente_revision');
 
-  if v_restricted and not v_old_visible then
+  v_dest_visible := public.gasto_tipo_operador_visible(btrim(p_tipo_gasto))
+    or public.gastos_canonical_tipo_gasto(btrim(p_tipo_gasto), p_vehicle_id is not null)
+      in ('gastos_globales', 'pendiente_revision');
+
+  -- Operador: origen visible (globales/pendiente) o destino visible (p. ej. deshacer mover categoría).
+  if v_restricted and not v_old_visible and not v_dest_visible then
     return jsonb_build_object(
       'ok', false,
       'error', 'operador_solo_puede_clasificar_globales_o_pendiente',

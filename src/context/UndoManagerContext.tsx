@@ -16,6 +16,29 @@ function logUndo(...args: unknown[]) {
   if (DEV) console.log('[undo]', ...args);
 }
 
+function logUndoOperator(payload: {
+  role: string | null;
+  actionRegistered: boolean;
+  canUndo: boolean;
+  lastAction: UndoAction | null;
+}) {
+  if (!DEV) return;
+  console.log('[undo:operator]', {
+    role: payload.role,
+    actionRegistered: payload.actionRegistered,
+    canUndo: payload.canUndo,
+    lastAction: payload.lastAction
+      ? {
+          id: payload.lastAction.id,
+          type: payload.lastAction.type,
+          label: payload.lastAction.label,
+          entityType: payload.lastAction.entityType,
+          entityId: payload.lastAction.entityId,
+        }
+      : null,
+  });
+}
+
 /** @deprecated Usar `RegisterUndoInput`. */
 export type UndoableEntry = {
   id: string;
@@ -42,13 +65,15 @@ function newActionId(): string {
 }
 
 export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role, isFinancialOperador } = useAuth();
   const [lastAction, setLastAction] = useState<UndoAction | null>(null);
   const [undoRunning, setUndoRunning] = useState(false);
   const lastActionRef = useRef<UndoAction | null>(null);
+  const undoRunningRef = useRef(false);
   const wasAuthenticatedRef = useRef(false);
 
   lastActionRef.current = lastAction;
+  undoRunningRef.current = undoRunning;
 
   useEffect(() => {
     logUndo('provider mounted');
@@ -81,8 +106,16 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
     setLastAction(action);
     logUndo('set action', { id, label: input.label, type: input.type, entityType: input.entityType });
+    if (isFinancialOperador) {
+      logUndoOperator({
+        role: role ?? null,
+        actionRegistered: true,
+        canUndo: true,
+        lastAction: action,
+      });
+    }
     return id;
-  }, []);
+  }, [isFinancialOperador, role]);
 
   const registerUndoable = useCallback(
     (entry: UndoableEntry | null) => {
@@ -104,7 +137,17 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const executeUndo = useCallback(
     async (actionId?: string): Promise<UndoExecuteResult> => {
       const target = lastActionRef.current;
-      if (!target || undoRunning) return 'noop';
+      if (!target || undoRunningRef.current) {
+        if (isFinancialOperador) {
+          logUndoOperator({
+            role: role ?? null,
+            actionRegistered: Boolean(target),
+            canUndo: Boolean(target) && !undoRunningRef.current,
+            lastAction: target,
+          });
+        }
+        return 'noop';
+      }
 
       if (actionId && actionId !== target.id) {
         logUndo('execute stale', { actionId, current: target.id });
@@ -112,6 +155,15 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       logUndo('execute', { id: target.id, label: target.label });
+      if (isFinancialOperador) {
+        logUndoOperator({
+          role: role ?? null,
+          actionRegistered: true,
+          canUndo: true,
+          lastAction: target,
+        });
+      }
+      undoRunningRef.current = true;
       setUndoRunning(true);
       try {
         await target.undo();
@@ -122,10 +174,11 @@ export const UndoManagerProvider: React.FC<{ children: React.ReactNode }> = ({ c
         logUndo('fail', e);
         return 'fail';
       } finally {
+        undoRunningRef.current = false;
         setUndoRunning(false);
       }
     },
-    [undoRunning],
+    [isFinancialOperador, role],
   );
 
   const getAction = useCallback((actionId: string) => {

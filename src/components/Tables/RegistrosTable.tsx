@@ -13,10 +13,6 @@ import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../u
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
 import { TIPOS_GASTO_FACT, getSubtiposGasto, getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
-import {
-  buildSubtipoFormSelectOptions,
-  formatSubtipoOptionLabel,
-} from '../../constants/gastosSubtipos';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
 import { undoUpdateGastoDetalle } from '../../undo/factories';
@@ -211,17 +207,8 @@ function buildGastoDetallePatch(
 
   const subs = getSubtiposGasto(tipoTrim);
   const allowedSubtipos = new Set(subs);
-  if (subNorm != null && !allowedSubtipos.has(subNorm)) {
-    const tipoGasto = baseline.tipo_gasto ?? 'gastos_globales';
-    const merged = buildSubtipoFormSelectOptions(
-      tipoGasto,
-      undefined,
-      tipoTrim,
-      [baseline.subTipo ?? '', subNorm],
-    );
-    if (!merged.some((o) => o.value === subNorm)) {
-      return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
-    }
+  if (subNorm != null && !allowedSubtipos.has(subNorm) && subNorm !== baseSub) {
+    return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
   }
 
   if (draft.categoria !== baseline.categoria) patch.categoria = draft.categoria;
@@ -399,6 +386,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     gastoEditInitialSerialized.current !== '' &&
     JSON.stringify(gastoEditDraft) !== gastoEditInitialSerialized.current;
 
+  useEffect(() => {
+    if (!import.meta.env.DEV || mode !== 'gastos') return;
+    console.log('[form:edit]', {
+      role,
+      canEdit: Boolean(onGastoDetalleSaved),
+      disabledReason: onGastoDetalleSaved ? null : 'sin permiso canEditFinances (onGastoDetalleSaved undefined)',
+      submitBlocked: gastoDetailEditing ? !gastoEditDirty || gastoSaveBusy : 'not_editing',
+    });
+  }, [mode, role, onGastoDetalleSaved, gastoDetailEditing, gastoEditDirty, gastoSaveBusy]);
+
   const categoriaKpiOptions = useMemo(
     () =>
       (Object.keys(CATEGORIAS_GASTO_LABELS) as CategoriaGasto[]).map((k) => ({
@@ -443,19 +440,15 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   }, [gastoEditDraft]);
 
   const subtipoFactOptions = useMemo(() => {
-    if (!gastoEditDraft || !gastoEditBaseline) return [];
-    const tipoGasto = gastoEditBaseline.tipo_gasto ?? 'gastos_globales';
-    const merged = buildSubtipoFormSelectOptions(
-      tipoGasto,
-      gastos,
-      gastoEditDraft.tipo,
-      [gastoEditBaseline.subTipo ?? '', gastoEditDraft.subTipo].filter(Boolean),
-    );
-    return merged.map((o) => ({
-      value: o.value,
-      label: formatSubtipoOptionLabel(tipoGasto, o, o.isHistorico),
-    }));
-  }, [gastoEditDraft, gastoEditBaseline, gastos]);
+    if (!gastoEditDraft) return [];
+    const subs = getSubtiposGasto(gastoEditDraft.tipo);
+    const cur = gastoEditDraft.subTipo.trim();
+    const out = subs.map((s) => ({ value: s, label: s }));
+    if (cur && !subs.includes(cur)) {
+      out.unshift({ value: cur, label: `${cur} (actual)` });
+    }
+    return out;
+  }, [gastoEditDraft]);
 
   const startGastoEdit = useCallback(() => {
     if (mode !== 'gastos' || !viewItem || !onGastoDetalleSaved || !('signo' in viewItem)) return;
@@ -481,7 +474,10 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       toast.error('Revisa el formulario', buildErr);
       return;
     }
-    if (Object.keys(patch).length === 0) return;
+    if (Object.keys(patch).length === 0) {
+      toast.info('Sin cambios', 'No hay campos modificados para guardar.');
+      return;
+    }
     setGastoSaveBusy(true);
     try {
       const res = await updateGastoDetalleManual(gastoEditBaseline.id, patch, tenantEmpresaId);

@@ -276,6 +276,8 @@ const Header: React.FC = () => {
       toast.success('Cambio revertido', label ? `Se revirtió: ${label}` : undefined);
     } else if (res === 'fail') {
       toast.error('No se pudo revertir el cambio.');
+    } else if (res === 'noop') {
+      toast.error('No se pudo deshacer', 'La acción ya no está disponible o hay otra en curso.');
     }
   };
 
