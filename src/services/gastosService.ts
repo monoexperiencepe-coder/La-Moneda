@@ -19,6 +19,7 @@ import {
   cleanUuid,
 } from '../utils/uuidColumn';
 import { isOperadorVisibleTipoGasto } from '../utils/permissions';
+import { tipoGastoRequiereVehiculo } from '../utils/gastoMoveCategoriaDefaults';
 import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
 import { splitGeneralSearchQuery } from '../utils/generalRecordSearch';
 
@@ -362,8 +363,6 @@ export async function updateGastoDetalleManual(
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }
 
-const TIPO_GASTO_REQUIERE_VEHICULO = new Set(['operativo_vehiculo', 'inversion_compra']);
-
 function isInvalidVehicleSentinel(v: unknown): boolean {
   if (v == null || v === '' || v === 0 || v === '0') return true;
   if (typeof v === 'string' && v.trim() === '0') return true;
@@ -379,9 +378,10 @@ function isInvalidVehicleSentinel(v: unknown): boolean {
 function normalizeVehicleIdForGastoRow(
   tipoGasto: string | null | undefined,
   raw: unknown,
+  subtipoGasto?: string | null,
 ): string | number | null {
   const t = tipoGasto == null ? '' : String(tipoGasto).trim();
-  if (!TIPO_GASTO_REQUIERE_VEHICULO.has(t)) return null;
+  if (!tipoGastoRequiereVehiculo(t, subtipoGasto)) return null;
   if (isInvalidVehicleSentinel(raw)) return null;
   if (typeof raw === 'string') {
     const s = raw.trim();
@@ -406,7 +406,8 @@ function finalizeGastoCategoriaManualUpdateRow(row: Record<string, unknown>): vo
   sanitizePostgrestRowZeroIdColumns(row);
   const tg = row.tipo_gasto;
   const ts = tg == null || tg === '' ? '' : String(tg).trim();
-  if (ts && !TIPO_GASTO_REQUIERE_VEHICULO.has(ts)) {
+  const sub = row.subtipo_gasto != null ? String(row.subtipo_gasto) : '';
+  if (ts && !tipoGastoRequiereVehiculo(ts, sub)) {
     row.vehicle_id = null;
     row.es_global_flota = true;
   }
@@ -521,11 +522,12 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
     const tipo = patch.tipo_gasto;
     if (tipo !== undefined) {
       const t = tipo == null ? '' : String(tipo).trim();
-      if (!TIPO_GASTO_REQUIERE_VEHICULO.has(t)) {
+      const sub = patch.subtipo_gasto != null ? String(patch.subtipo_gasto) : '';
+      if (!tipoGastoRequiereVehiculo(t, sub)) {
         row.vehicle_id = null;
         row.es_global_flota = true;
       } else {
-        row.vehicle_id = normalizeVehicleIdForGastoRow(t, patch.vehicle_id);
+        row.vehicle_id = normalizeVehicleIdForGastoRow(t, patch.vehicle_id, sub);
         row.es_global_flota = patch.es_global_flota ?? false;
       }
     } else {
@@ -764,12 +766,13 @@ export async function updateGastoCategoriaManual(
 
   if (patch.tipo_gasto !== undefined && patch.tipo_gasto != null) {
     const tg = String(patch.tipo_gasto).trim();
-    if (TIPO_GASTO_REQUIERE_VEHICULO.has(tg)) {
-      const nv = normalizeVehicleIdForGastoRow(tg, patch.vehicle_id);
+    const sub = patch.subtipo_gasto != null ? String(patch.subtipo_gasto).trim() : '';
+    if (tipoGastoRequiereVehiculo(tg, sub)) {
+      const nv = normalizeVehicleIdForGastoRow(tg, patch.vehicle_id, sub);
       if (nv == null) {
         return fail({
           message:
-            'Operativo e inversión con utilidad requieren un vehículo válido. Elige un N° de unidad (no uses 0 ni vacío).',
+            'Operativo e inversión vehicular requieren un vehículo válido. Elige un N° de unidad (no uses 0 ni vacío).',
           gastoId: idNorm,
           empresaIdFrontend,
           empresaIdRow: null,
@@ -1080,6 +1083,8 @@ export type GastosHistorialFilters = {
   year?: string;
   month?: string;
   subtipo?: string;
+  /** Variantes BD (aliases/legacy) para filtro canónico; usa .in en lugar de eq exacto. */
+  subtipoVariants?: string[];
   search?: string;
   /** `actividad`: revisado_at → created_at → fecha (movimientos/editions recientes arriba). */
   orderMode?: GastosHistorialOrderMode;
@@ -1123,8 +1128,13 @@ export async function fetchGastosHistorialPage(
         }
       }
 
+      const subtipoDbVariants = filters.subtipoVariants?.map((s) => s.trim()).filter(Boolean) ?? [];
       const subtipo = filters.subtipo?.trim();
-      if (subtipo) {
+      if (subtipoDbVariants.length > 1) {
+        q = q.in('subtipo_gasto', subtipoDbVariants);
+      } else if (subtipoDbVariants.length === 1) {
+        q = q.eq('subtipo_gasto', subtipoDbVariants[0]!);
+      } else if (subtipo) {
         q = q.eq('subtipo_gasto', subtipo);
       }
 

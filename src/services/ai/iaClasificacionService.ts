@@ -129,7 +129,7 @@ export function canApplyIaSugerencia(
   if (actual && !canViewGastoTipo(user, actual)) {
     return { ok: false, message: 'No puedes modificar este registro.' };
   }
-  if (tipoGastoRequiereVehiculo(tipo)) {
+  if (tipoGastoRequiereVehiculo(tipo, sub)) {
     const vid = row.vehicle_id;
     const n = typeof vid === 'number' ? vid : typeof vid === 'string' && vid ? Number(vid) : NaN;
     if (!Number.isFinite(n) || n <= 0) {
@@ -201,7 +201,7 @@ export async function applyIaClasificacionSugerencia(params: {
   }
 
   let vehicleId: number | null = null;
-  if (tipoGastoRequiereVehiculo(tipoDestino)) {
+  if (tipoGastoRequiereVehiculo(tipoDestino, subDestino)) {
     const raw = row.vehicle_id ?? gasto.vehicleId;
     const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw ? Number(raw) : NaN;
     vehicleId = Number.isFinite(n) && n > 0 ? n : null;

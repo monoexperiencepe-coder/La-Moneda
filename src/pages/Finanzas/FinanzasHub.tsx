@@ -107,7 +107,7 @@ const FinanzasHub: React.FC = () => {
     {
       id: 'inversiones',
       title: 'Inversiones',
-      desc: 'Inversión con utilidad (gastos) e inversión inicial por vehículo (Excel)',
+      desc: 'Inversión inicial por vehículo (Excel). Inversión con utilidad: Finanzas → Gastos.',
       emoji: '🚗',
       path: '/finanzas/inversiones',
       gradient: 'from-purple-500/10 to-violet-500/10',

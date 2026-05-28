@@ -2,6 +2,7 @@
  * Catálogo canónico de subtipos de inversión (tipo_gasto = inversion_compra).
  * Solo define catálogo visible, labels, aliases y normalización (no altera BD).
  */
+import { resolveLegacyAliasNormKey } from '../constants/subtipos/legacySubtipoAliases';
 import { normKey } from './normKey';
 
 export type InversionSubtipoCanon =
@@ -80,8 +81,15 @@ export const FACT_DEFAULT_BY_INVERSION_CANON: Record<InversionSubtipoCanon, { ti
 const LEGACY_TO_CANON: Record<string, InversionSubtipoCanon> = {
   adquisicion_vehiculo: 'adquisicion_vehiculo',
   adquisicion_de_vehiculo: 'adquisicion_vehiculo',
+  adquisicion_auto: 'adquisicion_vehiculo',
   inversion_vehicular: 'adquisicion_vehiculo',
   compra_activo_vehiculo: 'adquisicion_vehiculo',
+  compra_activo_vehiculos: 'adquisicion_vehiculo',
+  compra_de_vehiculo: 'adquisicion_vehiculo',
+  compra_de_vehículo: 'adquisicion_vehiculo',
+  compra_vehiculo: 'adquisicion_vehiculo',
+  compra_vehículo: 'adquisicion_vehiculo',
+  compra_auto: 'adquisicion_vehiculo',
   vehiculo: 'adquisicion_vehiculo',
   vehículo: 'adquisicion_vehiculo',
   compra_terreno: 'compra_terreno',
@@ -146,12 +154,20 @@ export function isInversionSubtipoOficial(value: string): boolean {
 export function normalizeInversionSubtipo(raw: string): InversionSubtipoCanon | null {
   const trimmed = raw.trim();
   if (!trimmed) return 'adquisicion_vehiculo';
-  const nk = invNormKey(trimmed);
+  const globalAlias = resolveLegacyAliasNormKey(trimmed);
+  const nk = invNormKey(globalAlias ?? trimmed);
   if (OFFICIAL_SET.has(nk)) return nk as InversionSubtipoCanon;
   if (nk === 'inversion_compra') return 'adquisicion_vehiculo';
   const mapped = LEGACY_TO_CANON[nk];
   if (mapped) return mapped;
   return null;
+}
+
+/** true si el valor en BD es oficial o alias legacy válido de inversión (no sospechoso). */
+export function isInversionSubtipoReconocido(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return true;
+  return normalizeInversionSubtipo(t) != null;
 }
 
 export function getInversionSubtipoDedupeKey(raw: string): string {

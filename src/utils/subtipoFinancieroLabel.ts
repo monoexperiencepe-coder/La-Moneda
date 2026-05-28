@@ -6,7 +6,8 @@ import {
   getOperativoSubtipoLabel,
   resolveOperativoSubtipoGastoCanon,
 } from './operativoSubtipo';
-import { getInversionSubtipoDedupeKey, getInversionSubtipoLabel, normalizeInversionSubtipo } from './inversionSubtipo';
+import { getInversionSubtipoLabel, normalizeInversionSubtipo } from './inversionSubtipo';
+import { subtipoMatchesFilter } from '../constants/subtipos/subtipoMatchesFilter';
 import {
   getAdministrativoSubtipoLabel,
   normalizeAdministrativoSubtipo,
@@ -103,8 +104,8 @@ export function gastoMatchesSubtipoFinancieroFilter(
   if (tabTipoGasto === 'administrativo_empresa') {
     return resolveAdministrativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
   }
-  if (tabTipoGasto === 'inversion_compra') {
-    return getInversionSubtipoDedupeKey(subtipoGasto ?? '') === getInversionSubtipoDedupeKey(filterValue);
+  if (tabTipoGasto) {
+    return subtipoMatchesFilter(tabTipoGasto, subtipoGasto, filterValue);
   }
   return (subtipoGasto ?? '').trim() === filterValue;
 }

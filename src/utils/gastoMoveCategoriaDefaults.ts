@@ -6,6 +6,7 @@ import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSu
 import { normalizeOperativoSubtipo } from './operativoSubtipo';
 import { normalizeInversionSubtipo } from './inversionSubtipo';
 import { normalizeAdministrativoSubtipo } from './administrativoSubtipo';
+import { inversionSubtipoRequiereVehiculo } from './inversionSubtipo';
 import {
   TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   TIPO_GASTO_OPERATIVO_VEHICULO,
@@ -24,10 +25,14 @@ const FINANZA_TAB_TIPOS = new Set<string>([
   'inversion_compra',
 ]);
 
-/** Categorías financieras que no deben llevar `vehicle_id` en gastos (flota global). */
-export function tipoGastoRequiereVehiculo(tipoGasto: string): boolean {
+/** Categorías que exigen `vehicle_id` (inversión solo si el subtipo es vehicular). */
+export function tipoGastoRequiereVehiculo(tipoGasto: string, subtipoGasto?: string | null): boolean {
   const t = tipoGasto.trim();
-  return isOperativoVehiculoTipoGasto(t) || t === 'inversion_compra';
+  if (isOperativoVehiculoTipoGasto(t)) return true;
+  if (t === 'inversion_compra') {
+    return inversionSubtipoRequiereVehiculo(subtipoGasto ?? 'adquisicion_vehiculo');
+  }
+  return false;
 }
 
 export function tipoGastoUsaSubtipoOperativo(tipoGasto: string): boolean {

@@ -52,7 +52,12 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
     registrarMemoriaHumana = true,
     userRole,
   } = input;
-  const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto);
+  const subtipoFinal =
+    normalizeSubtipoForTipoGasto(toTipoGasto, toSubtipoGasto).trim()
+    || getDefaultSubtipoForTipoGasto(toTipoGasto)
+    || null;
+
+  const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto, subtipoFinal);
 
   let toVehicleId: number | null = null;
   if (targetNeedsVehicle) {
@@ -62,11 +67,6 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
     }
     toVehicleId = n;
   }
-
-  const subtipoFinal =
-    normalizeSubtipoForTipoGasto(toTipoGasto, toSubtipoGasto).trim()
-    || getDefaultSubtipoForTipoGasto(toTipoGasto)
-    || null;
 
   const changedAt = new Date().toISOString();
   const prevExtra =
