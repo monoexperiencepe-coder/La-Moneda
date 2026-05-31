@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, UserCog, Pencil } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { conductorAsignadoLabel, formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { formatKmFechaLine, getKmDesdeUltimoMantenimiento } from '../../utils/kmMantenimientoControl';
@@ -30,6 +31,10 @@ import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
 import KilometrajeMantenimientoPanel from '../../components/operaciones/KilometrajeMantenimientoPanel';
 import ValorTiempoSection from '../../components/operaciones/ValorTiempoSection';
+import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
+import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
+import { useAuth } from '../../context/AuthContext';
+import { canMutateVehiculos } from '../../utils/permissions';
 
 const DOC_TIPOS = DOC_MODULE_COLUMNS.map((c) => c.tipo);
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
@@ -52,11 +57,17 @@ function parseTab(t: string | null): TabId {
 
 const VehiculoDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { formatGlobalAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseTab(searchParams.get('tab'));
 
   const vid = Number(id);
+  const { user } = useAuth();
+  const canAssign = canMutateVehiculos(user);
+  const [showAsignarConductor, setShowAsignarConductor] = useState(false);
+  const [showEditarVehiculo, setShowEditarVehiculo] = useState(false);
+
   const {
     vehicles,
     ingresos,
@@ -202,6 +213,16 @@ const VehiculoDetalle: React.FC = () => {
             </div>
           </div>
         </div>
+        {canAssign ? (
+          <button
+            type="button"
+            onClick={() => setShowEditarVehiculo(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 shrink-0"
+          >
+            <Pencil size={16} />
+            Editar vehículo
+          </button>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-3">
@@ -252,21 +273,21 @@ const VehiculoDetalle: React.FC = () => {
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-4">
                 <p className="text-[11px] font-medium text-emerald-800">Ingresos (total)</p>
-                <p className="text-lg font-bold text-emerald-900 tabular-nums">{formatCurrency(totalIngresos)}</p>
+                <p className="text-lg font-bold text-emerald-900 tabular-nums">{formatGlobalAmount(totalIngresos)}</p>
               </div>
               <div className="rounded-xl border border-red-100 bg-red-50/80 p-4">
                 <p className="text-[11px] font-medium text-red-800">Gastos operativos</p>
-                <p className="text-lg font-bold text-red-900 tabular-nums">{formatCurrency(totalGastosOperativos)}</p>
+                <p className="text-lg font-bold text-red-900 tabular-nums">{formatGlobalAmount(totalGastosOperativos)}</p>
               </div>
               <div className="rounded-xl border border-teal-100 bg-teal-50/80 p-4">
                 <p className="text-[11px] font-medium text-teal-900">Caja negocio / utilidad</p>
-                <p className="text-lg font-bold text-teal-950 tabular-nums">{formatCurrency(totalCajaNegocio)}</p>
+                <p className="text-lg font-bold text-teal-950 tabular-nums">{formatGlobalAmount(totalCajaNegocio)}</p>
                 <p className="text-[10px] text-teal-800 mt-1">No suma a gastos ni a ingresos de arriendo</p>
               </div>
               <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-4">
                 <p className="text-[11px] font-medium text-violet-800">Utilidad operativa</p>
                 <p className={`text-lg font-bold tabular-nums ${utilidad >= 0 ? 'text-violet-900' : 'text-red-800'}`}>
-                  {formatCurrency(utilidad)}
+                  {formatGlobalAmount(utilidad)}
                 </p>
                 <p className="text-[10px] text-violet-700 mt-1">Ingresos − gastos operativos + rebajes</p>
               </div>
@@ -288,23 +309,23 @@ const VehiculoDetalle: React.FC = () => {
                 <div className="rounded-lg border border-emerald-100 bg-white/90 p-2.5">
                   <p className="text-[10px] font-medium text-emerald-800">Ingresos</p>
                   <p className="text-sm font-bold text-emerald-900 tabular-nums">
-                    {formatCurrency(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
+                    {formatGlobalAmount(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-red-100 bg-white/90 p-2.5">
                   <p className="text-[10px] font-medium text-red-800">Gastos operativos</p>
-                  <p className="text-sm font-bold text-red-900 tabular-nums">{formatCurrency(intelKpi.gastos_operativos)}</p>
+                  <p className="text-sm font-bold text-red-900 tabular-nums">{formatGlobalAmount(intelKpi.gastos_operativos)}</p>
                 </div>
                 <div className="rounded-lg border border-amber-100 bg-white/90 p-2.5">
                   <p className="text-[10px] font-medium text-amber-900">Gastos financieros</p>
-                  <p className="text-sm font-bold text-amber-950 tabular-nums">{formatCurrency(intelKpi.gastos_financieros)}</p>
+                  <p className="text-sm font-bold text-amber-950 tabular-nums">{formatGlobalAmount(intelKpi.gastos_financieros)}</p>
                 </div>
                 <div className="rounded-lg border border-violet-100 bg-white/90 p-2.5">
                   <p className="text-[10px] font-medium text-violet-800">Utilidad operativa</p>
                   <p
                     className={`text-sm font-bold tabular-nums ${intelKpi.utilidad_operativa >= 0 ? 'text-violet-900' : 'text-red-800'}`}
                   >
-                    {formatCurrency(intelKpi.utilidad_operativa)}
+                    {formatGlobalAmount(intelKpi.utilidad_operativa)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-indigo-100 bg-white/90 p-2.5">
@@ -312,7 +333,7 @@ const VehiculoDetalle: React.FC = () => {
                   <p
                     className={`text-sm font-bold tabular-nums ${intelKpi.utilidad_neta_simple >= 0 ? 'text-indigo-900' : 'text-red-800'}`}
                   >
-                    {formatCurrency(intelKpi.utilidad_neta_simple)}
+                    {formatGlobalAmount(intelKpi.utilidad_neta_simple)}
                   </p>
                 </div>
               </div>
@@ -336,7 +357,7 @@ const VehiculoDetalle: React.FC = () => {
             {inversionTotalUsd != null && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
                 <p className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">Inversión histórica (adquisición)</p>
-                <p className="text-lg font-bold text-amber-950 tabular-nums mt-1">{formatUSD(inversionTotalUsd)}</p>
+                <p className="text-lg font-bold text-amber-950 tabular-nums mt-1">{formatGlobalAmount(inversionTotalUsd, 'USD')}</p>
                 <p className="text-[10px] text-amber-900/90 mt-1 max-w-xl">
                   Costo total de inversión cargado en el Excel de adquisición. No suma al total de gastos operativos ni al margen de arriba.
                 </p>
@@ -361,9 +382,21 @@ const VehiculoDetalle: React.FC = () => {
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase">Conductor actual</p>
                 <p className="mt-1 text-sm font-medium text-gray-900">{conductorActual}</p>
-                <button type="button" className="mt-2 text-sm font-semibold text-primary-600 hover:underline" onClick={() => setTab('conductor')}>
-                  Ver conductores →
-                </button>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {canAssign ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:underline"
+                      onClick={() => setShowAsignarConductor(true)}
+                    >
+                      <UserCog size={14} />
+                      {conductorActual === '—' ? 'Asignar conductor' : 'Reasignar conductor'}
+                    </button>
+                  ) : null}
+                  <button type="button" className="text-sm font-semibold text-primary-600 hover:underline" onClick={() => setTab('conductor')}>
+                    Ver conductores →
+                  </button>
+                </div>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4 md:col-span-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase">Pendientes (esta unidad)</p>
@@ -386,19 +419,19 @@ const VehiculoDetalle: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border p-3 bg-emerald-50/50 border-emerald-100">
                 <span className="text-gray-600">Ingresos</span>
-                <p className="font-bold text-emerald-800 tabular-nums">{formatCurrency(totalIngresos)}</p>
+                <p className="font-bold text-emerald-800 tabular-nums">{formatGlobalAmount(totalIngresos)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-red-50/50 border-red-100">
                 <span className="text-gray-600">Gastos operativos</span>
-                <p className="font-bold text-red-800 tabular-nums">{formatCurrency(totalGastosOperativos)}</p>
+                <p className="font-bold text-red-800 tabular-nums">{formatGlobalAmount(totalGastosOperativos)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-teal-50/50 border-teal-100">
                 <span className="text-gray-600">Caja negocio</span>
-                <p className="font-bold text-teal-900 tabular-nums">{formatCurrency(totalCajaNegocio)}</p>
+                <p className="font-bold text-teal-900 tabular-nums">{formatGlobalAmount(totalCajaNegocio)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-white border-gray-200">
                 <span className="text-gray-600">Utilidad operativa</span>
-                <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(utilidad)}</p>
+                <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatGlobalAmount(utilidad)}</p>
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
@@ -409,27 +442,27 @@ const VehiculoDetalle: React.FC = () => {
                 <div className="rounded-lg border border-emerald-100 bg-white/90 p-2.5">
                   <span className="text-gray-600 text-xs">Ingresos</span>
                   <p className="font-bold text-emerald-800 tabular-nums">
-                    {formatCurrency(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
+                    {formatGlobalAmount(intelKpi.utilidad_operativa + intelKpi.gastos_operativos)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-red-100 bg-white/90 p-2.5">
                   <span className="text-gray-600 text-xs">Gastos operativos</span>
-                  <p className="font-bold text-red-800 tabular-nums">{formatCurrency(intelKpi.gastos_operativos)}</p>
+                  <p className="font-bold text-red-800 tabular-nums">{formatGlobalAmount(intelKpi.gastos_operativos)}</p>
                 </div>
                 <div className="rounded-lg border border-amber-100 bg-white/90 p-2.5">
                   <span className="text-gray-600 text-xs">Gastos financieros</span>
-                  <p className="font-bold text-amber-950 tabular-nums">{formatCurrency(intelKpi.gastos_financieros)}</p>
+                  <p className="font-bold text-amber-950 tabular-nums">{formatGlobalAmount(intelKpi.gastos_financieros)}</p>
                 </div>
                 <div className="rounded-lg border border-violet-100 bg-white/90 p-2.5">
                   <span className="text-gray-600 text-xs">Utilidad operativa</span>
                   <p className={`font-bold tabular-nums ${intelKpi.utilidad_operativa >= 0 ? 'text-violet-900' : 'text-red-700'}`}>
-                    {formatCurrency(intelKpi.utilidad_operativa)}
+                    {formatGlobalAmount(intelKpi.utilidad_operativa)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-indigo-100 bg-white/90 p-2.5">
                   <span className="text-gray-600 text-xs">Utilidad neta simple</span>
                   <p className={`font-bold tabular-nums ${intelKpi.utilidad_neta_simple >= 0 ? 'text-indigo-900' : 'text-red-700'}`}>
-                    {formatCurrency(intelKpi.utilidad_neta_simple)}
+                    {formatGlobalAmount(intelKpi.utilidad_neta_simple)}
                   </p>
                 </div>
               </div>
@@ -476,10 +509,10 @@ const VehiculoDetalle: React.FC = () => {
                             {inv.fechaCompra ? formatDate(inv.fechaCompra) : '—'}
                           </td>
                           <td className="py-2 px-3 text-right tabular-nums font-semibold text-amber-950">
-                            {inv.totalInversionUsd != null ? formatUSD(inv.totalInversionUsd) : '—'}
+                            {inv.totalInversionUsd != null ? formatGlobalAmount(inv.totalInversionUsd, 'USD') : '—'}
                           </td>
                           <td className="py-2 px-3 text-right tabular-nums text-gray-700">
-                            {inv.totalInversionPen != null ? formatCurrency(inv.totalInversionPen) : '—'}
+                            {inv.totalInversionPen != null ? formatGlobalAmount(inv.totalInversionPen) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -533,7 +566,7 @@ const VehiculoDetalle: React.FC = () => {
                           <tr key={row.id}>
                             <td className="py-2 px-3 text-gray-700 whitespace-nowrap">{formatDate(row.fecha)}</td>
                             <td className="py-2 px-3 text-gray-900">{row.concepto}</td>
-                            <td className="py-2 px-3 text-right tabular-nums font-semibold text-teal-950">{formatCurrency(row.monto)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-semibold text-teal-950">{formatGlobalAmount(row.monto)}</td>
                           </tr>
                         ))
                     )}
@@ -596,9 +629,21 @@ const VehiculoDetalle: React.FC = () => {
 
         {tab === 'conductor' && (
           <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/80">
-              <p className="text-sm font-semibold text-gray-900">Asignado hoy (vigente)</p>
-              <p className="text-base font-bold text-primary-800 mt-1">{conductorActual}</p>
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/80 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Asignado hoy (vigente)</p>
+                <p className="text-base font-bold text-primary-800 mt-1">{conductorActual}</p>
+              </div>
+              {canAssign ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAsignarConductor(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700"
+                >
+                  <UserCog size={14} />
+                  {conductorActual === '—' ? 'Asignar conductor' : 'Reasignar conductor'}
+                </button>
+              ) : null}
             </div>
             {conductoresVehiculo.length === 0 ? (
               <p className="p-6 text-sm text-gray-500">No hay conductores vinculados a esta unidad en el contexto.</p>
@@ -687,6 +732,18 @@ const VehiculoDetalle: React.FC = () => {
           </div>
         )}
       </div>
+
+      <AsignarConductorModal
+        vehicle={vehicle}
+        isOpen={showAsignarConductor}
+        onClose={() => setShowAsignarConductor(false)}
+      />
+      <EditarVehiculoModal
+        vehicle={vehicle}
+        isOpen={showEditarVehiculo}
+        onClose={() => setShowEditarVehiculo(false)}
+        onDeleted={() => navigate('/vehiculos/inventario')}
+      />
     </div>
   );
 };

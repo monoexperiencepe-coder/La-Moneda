@@ -1,26 +1,30 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
-import { formatCurrency, formatUSD } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(
+  amount: number,
+  moneda: Moneda,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
-function fmtUsdCell(v: number | null | undefined): string {
+function fmtUsdCell(v: number | null | undefined, formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string): string {
   if (v == null || Number.isNaN(Number(v))) return '—';
-  return formatUSD(Number(v));
+  return formatGlobalAmount(Number(v), 'USD');
 }
 
-function fmtPenRef(v: number | null | undefined): string {
+function fmtPenRef(v: number | null | undefined, formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string): string {
   if (v == null || Number.isNaN(Number(v))) return '—';
-  return formatCurrency(Number(v), 'S/');
+  return formatGlobalAmount(Number(v));
 }
 
 type SortKey = 'numero' | 'referencia' | 'placa' | 'monto' | 'moneda';
@@ -84,6 +88,7 @@ const tdText = `${tdBase} text-left`;
 const tdUsd = `${tdBase} text-right max-w-[4.75rem]`;
 
 const InversionesGeneralesPanel: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const [searchParams] = useSearchParams();
   const filterPlaca = (searchParams.get('placa') ?? '').trim().toUpperCase();
   const filterVehicleId = (searchParams.get('vehicleId') ?? '').trim();
@@ -213,8 +218,8 @@ const InversionesGeneralesPanel: React.FC = () => {
             <div className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-800/90">Total invertido (por moneda)</p>
               <div className="mt-1 space-y-1 text-lg font-bold tabular-nums text-violet-950">
-                {totalesPorMoneda.usdSum > 0 ? <p>{montoFmt(totalesPorMoneda.usdSum, 'USD')}</p> : null}
-                {totalesPorMoneda.penSum > 0 ? <p>{montoFmt(totalesPorMoneda.penSum, 'PEN')}</p> : null}
+                {totalesPorMoneda.usdSum > 0 ? <p>{montoFmt(totalesPorMoneda.usdSum, 'USD', formatGlobalAmount)}</p> : null}
+                {totalesPorMoneda.penSum > 0 ? <p>{montoFmt(totalesPorMoneda.penSum, 'PEN', formatGlobalAmount)}</p> : null}
                 {totalesPorMoneda.usdSum <= 0 && totalesPorMoneda.penSum <= 0 ? (
                   <p className="text-slate-500 font-normal text-base">—</p>
                 ) : null}
@@ -282,14 +287,14 @@ const InversionesGeneralesPanel: React.FC = () => {
                     <td className={`${tdText} tabular-nums text-slate-600 whitespace-nowrap`}>
                       {r.fechaCompra ? r.fechaCompra.slice(0, 10) : '—'}
                     </td>
-                    <td className={tdUsd}>{fmtUsdCell(r.valorCompraUsd)}</td>
-                    <td className={tdUsd}>{fmtUsdCell(r.gastoGnvUsd)}</td>
-                    <td className={tdUsd}>{fmtUsdCell(r.gastoNotarialUsd)}</td>
-                    <td className={tdUsd}>{fmtUsdCell(r.seguroUsd)}</td>
-                    <td className={tdUsd}>{fmtUsdCell(r.gpsUsd)}</td>
-                    <td className={tdUsd}>{fmtUsdCell(r.fundasAccesoriosUsd)}</td>
-                    <td className={`${tdUsd} font-semibold text-slate-900`}>{montoFmt(r.montoTotal, r.moneda)}</td>
-                    <td className={tdUsd}>{fmtPenRef(r.totalInversionPen)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.valorCompraUsd, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gastoGnvUsd, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gastoNotarialUsd, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.seguroUsd, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.gpsUsd, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtUsdCell(r.fundasAccesoriosUsd, formatGlobalAmount)}</td>
+                    <td className={`${tdUsd} font-semibold text-slate-900`}>{montoFmt(r.montoTotal, r.moneda, formatGlobalAmount)}</td>
+                    <td className={tdUsd}>{fmtPenRef(r.totalInversionPen, formatGlobalAmount)}</td>
                     <td className={`${tdText} text-slate-500`}>{r.moneda}</td>
                   </tr>
                 ))}

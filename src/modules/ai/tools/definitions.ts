@@ -253,6 +253,96 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       },
     },
   },
+  // ─── Flota operativa (vehículos + conductores) ───────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'getFlotaResumen',
+      description:
+        'Resumen de flota: total de vehículos, activos, inactivos, disponibles (activos sin conductor vigente), ' +
+        'conductores vigentes y asignados. Usar para: "¿cuántos vehículos tiene la empresa?", "¿cuántos activos hay?". ' +
+        'No incluye montos ni gastos.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getVehiculosDisponibles',
+      description:
+        'Lista vehículos activos sin conductor vigente asignado (unidades libres). ' +
+        'Usar para: "¿qué unidades están libres?", "vehículos disponibles".',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Máximo filas (default 50, max 100)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getVehiculosSinConductor',
+      description:
+        'Vehículos activos que no tienen conductor vigente asignado. ' +
+        'Usar para: "¿qué vehículos no tienen conductor?", "carros sin chofer".',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Máximo filas (default 50, max 100)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getConductoresAsignados',
+      description:
+        'Conductores vigentes con vehículo asignado (placa, marca, modelo). ' +
+        'Usar para: "¿quién maneja qué carro?", "asignaciones de conductores".',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Máximo filas (default 80, max 120)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getVehiculoPorPlaca',
+      description:
+        'Busca un vehículo por placa y devuelve datos básicos más conductor vigente si existe. ' +
+        'Usar para: "datos del vehículo placa ABC", "¿existe la placa X?".',
+      parameters: {
+        type: 'object',
+        properties: {
+          placa: { type: 'string', description: 'Placa del vehículo (requerido)' },
+        },
+        required: ['placa'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getConductorPorVehiculo',
+      description:
+        'Conductor vigente de un vehículo (por placa o ID) o vehículo asignado a un conductor (por nombre). ' +
+        'Usar para: "¿qué conductor tiene la placa ABC?", "¿qué vehículo tiene el conductor Juan?".',
+      parameters: {
+        type: 'object',
+        properties: {
+          placa: { type: 'string', description: 'Placa del vehículo' },
+          vehicle_id: { type: 'string', description: 'ID numérico del vehículo' },
+          conductor: { type: 'string', description: 'Nombre o apellido del conductor' },
+        },
+      },
+    },
+  },
   // ─── Inversiones no vehiculares ─────────────────────────────────────────────
   {
     type: 'function',

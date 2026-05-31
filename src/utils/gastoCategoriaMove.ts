@@ -4,6 +4,7 @@ import { updateGastoCategoriaManual } from '../services/gastosService';
 import {
   getDefaultSubtipoForTipoGasto,
   normalizeSubtipoForTipoGasto,
+  tipoGastoAdmiteVehiculoOpcional,
   tipoGastoRequiereVehiculo,
 } from './gastoMoveCategoriaDefaults';
 import { normalizeGastoVehicleFkForDb } from './vehicleId';
@@ -58,6 +59,7 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
     || null;
 
   const targetNeedsVehicle = tipoGastoRequiereVehiculo(toTipoGasto, subtipoFinal);
+  const inversionOpcional = tipoGastoAdmiteVehiculoOpcional(toTipoGasto);
 
   let toVehicleId: number | null = null;
   if (targetNeedsVehicle) {
@@ -66,6 +68,11 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
       return { ok: false, message: 'Selecciona un vehículo válido para esta categoría.' };
     }
     toVehicleId = n;
+  } else if (inversionOpcional && vehicleId != null) {
+    const n = vehicleId;
+    if (Number.isFinite(n) && n > 0 && vehicles.some((v) => v.id === n)) {
+      toVehicleId = n;
+    }
   }
 
   const changedAt = new Date().toISOString();
@@ -79,7 +86,7 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
     from_subtipo_gasto: gasto.subtipo_gasto ?? null,
     to_subtipo_gasto: subtipoFinal,
     from_vehicle_id: normalizeGastoVehicleFkForDb(gasto.vehicleId),
-    to_vehicle_id: targetNeedsVehicle ? normalizeGastoVehicleFkForDb(toVehicleId) : null,
+    to_vehicle_id: normalizeGastoVehicleFkForDb(toVehicleId),
     motivo: motivo.trim() || null,
     changed_at: changedAt,
   };
@@ -96,8 +103,8 @@ export async function moveGastoCategoria(input: MoveGastoCategoriaInput): Promis
     {
       tipo_gasto: toTipoGasto,
       subtipo_gasto: subtipoFinal,
-      vehicle_id: normalizeGastoVehicleFkForDb(targetNeedsVehicle ? toVehicleId : null),
-      es_global_flota: !targetNeedsVehicle,
+      vehicle_id: normalizeGastoVehicleFkForDb(inversionOpcional || targetNeedsVehicle ? toVehicleId : null),
+      es_global_flota: inversionOpcional ? false : !targetNeedsVehicle,
       clasificacion_manual: true,
       clasificacion_confianza:
         clasificacionConfianza != null && Number.isFinite(clasificacionConfianza)

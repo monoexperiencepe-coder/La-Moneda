@@ -1,4 +1,13 @@
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useMemo,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import {
   Ingreso,
   Gasto,
@@ -18,7 +27,13 @@ import {
   GastoCaja,
   CajaNegocioVehiculo,
 } from '../data/types';
-import { fetchVehiculos } from '../services/vehiculosService';
+import {
+  deleteVehiculo,
+  fetchVehiculos,
+  insertVehiculo,
+  patchVehiculo,
+  type InsertVehiculoInput,
+} from '../services/vehiculosService';
 import { fetchUnidades, insertUnidad, removeUnidad } from '../services/unidadesService';
 import {
   fetchConductores,
@@ -26,6 +41,11 @@ import {
   patchConductor,
   removeConductor,
 } from '../services/conductoresService';
+import {
+  assignConductorToVehicle as runFleetAssignment,
+  unassignVehiculoConductor,
+  type FleetAssignmentResult,
+} from '../services/fleetAssignmentService';
 import { fetchIngresos, insertIngreso, removeIngreso } from '../services/ingresosService';
 import {
   fetchGastosByTipo,
@@ -42,6 +62,7 @@ import {
   fetchControlFechasHistoryPage,
   getDefaultControlFechasHistoryPageSize,
   insertControlFecha,
+  patchControlFecha,
   removeControlFecha,
   type ControlFechasHistoryFilters,
 } from '../services/controlFechasService';
@@ -74,6 +95,7 @@ import {
   patchSummaryForGastoMove,
   patchSummaryRemoveGasto,
 } from '../utils/gastoLocalMutations';
+import { enrichGastoHistorialActivity } from '../utils/gastoHistorialOrder';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -117,6 +139,20 @@ function mergeConductorSorted(prev: Conductor[], row: Conductor): Conductor[] {
   const next = [...without, row];
   next.sort((a, b) => String(b.id).localeCompare(String(a.id)));
   return next;
+}
+
+function applyFleetAssignmentPatches(
+  setConductores: Dispatch<SetStateAction<Conductor[]>>,
+  rows: readonly Conductor[],
+): void {
+  if (rows.length === 0) return;
+  setConductores((prev) => {
+    let next = prev;
+    for (const row of rows) {
+      next = mergeConductorSorted(next, row);
+    }
+    return next;
+  });
 }
 
 function mergeKilometrajeSorted(prev: KilometrajeRegistro[], row: KilometrajeRegistro): KilometrajeRegistro[] {
@@ -214,6 +250,9 @@ export const useRegistros = () => {
   const gastosLoadGenRef = useRef(0);
   const gastosAuditRef = useRef(gastos);
   gastosAuditRef.current = gastos;
+  const ingresosAuditRef = useRef(ingresos);
+  ingresosAuditRef.current = ingresos;
+  const permissionUserAuditRef = useRef<ReturnType<typeof permissionUserFromAuth> | null>(null);
   const { isAuthenticated, profile, user } = useAuth();
 
   const [isLoadingGastos, setIsLoadingGastos] = useState(false);
@@ -251,6 +290,7 @@ export const useRegistros = () => {
     () => (profile ? permissionUserFromAuth(user, profile.email) : null),
     [user, profile],
   );
+  permissionUserAuditRef.current = permissionUser;
 
   const canLoadIngresos = useMemo(() => canUseIngresos(permissionUser), [permissionUser]);
 
@@ -456,15 +496,16 @@ export const useRegistros = () => {
 
   const applyGastoCreatedLocal = useCallback(
     (gasto: Gasto, opts?: ApplyGastoLocalOpts) => {
-      setGastos((prev) => mergeGastoSorted(prev, gasto));
+      const active = enrichGastoHistorialActivity(gasto);
+      setGastos((prev) => mergeGastoSorted(prev, active));
       patchFinancialSummary(
-        (s) => patchSummaryAddGasto(s, gasto, (t) => includeTipoInSummaryPatch(t)),
+        (s) => patchSummaryAddGasto(s, active, (t) => includeTipoInSummaryPatch(t)),
         opts,
       );
-      notifyGastoHistorialSync({ kind: 'created', gasto });
+      notifyGastoHistorialSync({ kind: 'created', gasto: active });
       devLogGastoLocalMutation('created', {
-        id: gasto.id,
-        tipo_gasto: gasto.tipo_gasto,
+        id: active.id,
+        tipo_gasto: active.tipo_gasto,
         monto: gasto.monto,
         source: opts?.source,
         updatedSummary: opts?.optimisticSummary !== false,
@@ -643,6 +684,13 @@ export const useRegistros = () => {
       setVehicles(v);
       setUnidades(u);
       setConductores(c);
+      if (dev) {
+        void import('../audit/techAuditDiagnostics').then(({ auditVehiculos, auditConductores, auditFlotaSummary }) => {
+          auditVehiculos(v);
+          auditConductores(c, v);
+          auditFlotaSummary(v, c);
+        });
+      }
       setIngresos(canLoadIngresos ? i : []);
       setGastosFinancialSummary(gSummary);
       if (import.meta.env.DEV) {
@@ -868,6 +916,54 @@ export const useRegistros = () => {
     [profile?.empresa_id],
   );
 
+  const addVehicle = useCallback(
+    async (row: InsertVehiculoInput, opts?: { conductorId?: string | null }) => {
+      const created = await insertVehiculo(row, profile?.empresa_id);
+      if (!created) throw new Error('No se pudo guardar el vehículo en Supabase.');
+      setVehicles((prev) => mergeVehicleSorted(prev, created));
+
+      const conductorId = opts?.conductorId?.trim();
+      if (conductorId) {
+        const { updatedConductores } = await runFleetAssignment(
+          conductorId,
+          created.id,
+          conductores,
+          profile?.empresa_id,
+        );
+        applyFleetAssignmentPatches(setConductores, updatedConductores);
+      }
+
+      return created;
+    },
+    [profile?.empresa_id, conductores],
+  );
+
+  const updateVehicle = useCallback(
+    async (id: number, patch: Partial<Omit<Vehicle, 'id'>>): Promise<Vehicle | null> => {
+      const updated = await patchVehiculo(id, patch, profile?.empresa_id);
+      if (!updated) return null;
+      setVehicles((prev) => mergeVehicleSorted(prev, updated));
+      return updated;
+    },
+    [profile?.empresa_id],
+  );
+
+  const deleteVehicle = useCallback(
+    async (id: number) => {
+      let prevSnapshot: Vehicle[] = [];
+      setVehicles((prev) => {
+        prevSnapshot = prev;
+        return prev.filter((v) => v.id !== id);
+      });
+      const ok = await deleteVehiculo(id, profile?.empresa_id);
+      if (!ok) {
+        setVehicles(prevSnapshot);
+        throw new Error('No se pudo eliminar el vehículo.');
+      }
+    },
+    [profile?.empresa_id],
+  );
+
   const addControlFecha = useCallback(
     async (row: Omit<ControlFecha, 'id' | 'createdAt'>) => {
       const created = await insertControlFecha(row, profile?.empresa_id);
@@ -878,11 +974,30 @@ export const useRegistros = () => {
     [refreshControlFechasViews, profile?.empresa_id],
   );
 
+  const updateControlFecha = useCallback(
+    async (id: number, patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>): Promise<ControlFecha | null> => {
+      const updated = await patchControlFecha(id, patch, profile?.empresa_id);
+      if (!updated) return null;
+      await refreshControlFechasViews();
+      return updated;
+    },
+    [refreshControlFechasViews, profile?.empresa_id],
+  );
+
   const addKilometraje = useCallback(
     async (row: Omit<KilometrajeRegistro, 'id' | 'createdAt'>) => {
       const created = await insertKilometraje(row, profile?.empresa_id);
       if (!created) throw new Error('No se pudo guardar el kilometraje en Supabase.');
-      setKilometrajes((prev) => mergeKilometrajeSorted(prev, created));
+      setKilometrajes((prev) => {
+        const next = mergeKilometrajeSorted(prev, created);
+        if (import.meta.env.DEV) {
+          void import('../audit/techAuditDiagnostics').then(({ logKmAfterCreate, logKmSummaryRefresh }) => {
+            logKmAfterCreate(created, next);
+            logKmSummaryRefresh(created.vehicleId, next);
+          });
+        }
+        return next;
+      });
       return created;
     },
     [profile?.empresa_id],
@@ -1071,12 +1186,17 @@ export const useRegistros = () => {
           });
         }
       } else {
+        const active = enrichGastoHistorialActivity(row);
         patchFinancialSummary(
-          (s) => patchSummaryAddGasto(s, row, (t) => includeTipoInSummaryPatch(t)),
+          (s) => patchSummaryAddGasto(s, active, (t) => includeTipoInSummaryPatch(t)),
           { ...opts, source: opts?.source ?? 'user' },
         );
-        notifyGastoHistorialSync({ kind: 'created', gasto: row });
-        devLogGastoLocalMutation('created', { id: row.id, tipo_gasto: row.tipo_gasto, source: opts?.source ?? 'user' });
+        notifyGastoHistorialSync({ kind: 'created', gasto: active });
+        devLogGastoLocalMutation('created', {
+          id: active.id,
+          tipo_gasto: active.tipo_gasto,
+          source: opts?.source ?? 'user',
+        });
       }
       if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
     },
@@ -1218,6 +1338,29 @@ export const useRegistros = () => {
     [profile?.empresa_id],
   );
 
+  const assignConductorToVehicle = useCallback(
+    async (conductorId: string, vehicleId: number | null): Promise<FleetAssignmentResult> => {
+      const result = await runFleetAssignment(
+        conductorId,
+        vehicleId,
+        conductores,
+        profile?.empresa_id,
+      );
+      applyFleetAssignmentPatches(setConductores, result.updatedConductores);
+      return result;
+    },
+    [conductores, profile?.empresa_id],
+  );
+
+  const clearVehicleConductor = useCallback(
+    async (vehicleId: number): Promise<FleetAssignmentResult | null> => {
+      const result = await unassignVehiculoConductor(vehicleId, conductores, profile?.empresa_id);
+      if (result) applyFleetAssignmentPatches(setConductores, result.updatedConductores);
+      return result;
+    },
+    [conductores, profile?.empresa_id],
+  );
+
   const deleteControlFecha = useCallback(
     async (id: number) => {
       const ok = await removeControlFecha(id, profile?.empresa_id);
@@ -1272,10 +1415,27 @@ export const useRegistros = () => {
     [gastos],
   );
 
+  const vehiclesRef = useRef<Vehicle[]>([]);
+  const conductoresRef = useRef<Conductor[]>([]);
+  const kilometrajesRef = useRef<KilometrajeRegistro[]>([]);
+  vehiclesRef.current = vehicles;
+  conductoresRef.current = conductores;
+  kilometrajesRef.current = kilometrajes;
+
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     void import('../audit/registerAuditGastosWindow').then(({ registerAuditGastosWindow }) => {
       registerAuditGastosWindow(() => gastosAuditRef.current);
+    });
+    void import('../audit/registerTechAuditWindow').then(({ registerTechAuditWindow }) => {
+      registerTechAuditWindow({
+        getVehicles: () => vehiclesRef.current,
+        getConductores: () => conductoresRef.current,
+        getKilometrajes: () => kilometrajesRef.current,
+        getGastos: () => gastosAuditRef.current,
+        getIngresos: () => ingresosAuditRef.current,
+        getPermissionUser: () => permissionUserAuditRef.current,
+      });
     });
   }, []);
 
@@ -1313,8 +1473,14 @@ export const useRegistros = () => {
     addPrestamoAbono,
     addUnidad,
     addConductor,
+    addVehicle,
+    updateVehicle,
+    deleteVehicle,
+    assignConductorToVehicle,
+    clearVehicleConductor,
     updateConductor,
     addControlFecha,
+    updateControlFecha,
     addKilometraje,
     addPendiente,
     updatePendiente,

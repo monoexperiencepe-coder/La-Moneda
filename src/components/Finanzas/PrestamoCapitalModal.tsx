@@ -1,13 +1,17 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo, useState } from 'react';
 import Modal from '../Common/Modal';
 import type { Moneda, PrestamoFinancieroDetalle } from '../../data/types';
 import { aplicarMovimientoCapitalPrestamo } from '../../services/prestamosFinancierosService';
 import { useAuth } from '../../context/AuthContext';
 import { recalcularCuotaMensualPrestamo } from '../../utils/prestamoMovimientos';
-import { formatCurrency, formatUSD } from '../../utils/formatting';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(
+  amount: number,
+  moneda: Moneda,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
 function parseNum(s: string): number | null {
@@ -42,6 +46,7 @@ const PrestamoCapitalModal: React.FC<PrestamoCapitalModalProps> = ({
   onClose,
   onApplied,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const { profile } = useAuth();
   const tenantEmpresaId = profile?.empresa_id;
   const p = detalle?.prestamo;
@@ -159,7 +164,7 @@ const PrestamoCapitalModal: React.FC<PrestamoCapitalModalProps> = ({
 
         <p className="text-xs text-slate-500">
           {p.prestamista || p.titulo || `Préstamo #${p.id}`} · capital actual{' '}
-          {montoFmt(capActual, p.monedaCapital)}
+          {montoFmt(capActual, p.monedaCapital, formatGlobalAmount)}
         </p>
 
         <div>
@@ -193,23 +198,23 @@ const PrestamoCapitalModal: React.FC<PrestamoCapitalModalProps> = ({
         <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 space-y-1 text-xs">
           <p className="font-semibold text-indigo-950">Vista previa</p>
           <p className="text-slate-700 tabular-nums">
-            Capital actual: <span className="font-medium">{montoFmt(capActual, p.monedaCapital)}</span>
+            Capital actual: <span className="font-medium">{montoFmt(capActual, p.monedaCapital, formatGlobalAmount)}</span>
           </p>
           {montoNum > 0 ? (
             <p className="text-slate-700 tabular-nums">
               {esRetiro ? 'Retiro' : 'Aumento'}:{' '}
               <span className="font-medium">
                 {esRetiro ? '−' : '+'}
-                {montoFmt(montoNum, p.monedaCapital)}
+                {montoFmt(montoNum, p.monedaCapital, formatGlobalAmount)}
               </span>
             </p>
           ) : null}
           <p className="text-slate-700 tabular-nums">
-            Nuevo capital: <span className="font-semibold text-indigo-900">{montoFmt(nuevoCapital, p.monedaCapital)}</span>
+            Nuevo capital: <span className="font-semibold text-indigo-900">{montoFmt(nuevoCapital, p.monedaCapital, formatGlobalAmount)}</span>
           </p>
           <p className="text-slate-700 tabular-nums">
             Nueva cuota mensual:{' '}
-            <span className="font-semibold text-indigo-900">{montoFmt(nuevaCuota, p.monedaPago)}</span>
+            <span className="font-semibold text-indigo-900">{montoFmt(nuevaCuota, p.monedaPago, formatGlobalAmount)}</span>
           </p>
         </div>
       </div>

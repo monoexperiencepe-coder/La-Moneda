@@ -6,14 +6,17 @@
 export const REPRESENTACION_INTERNA_FACT_TIPO = 'OTROS GASTOS' as const;
 export const REPRESENTACION_INTERNA_FACT_SUBTIPO = 'REPRESENTACIÓN' as const;
 
-/** Códigos persistidos en `subtipo_gasto` (snake_case). Orden = formulario. */
+/** Valores oficiales Excel (nuevos registros). Históricos snake_case siguen en BD. */
 export const SUBTIPOS_REPRESENTACION_INTERNA = [
-  'movilidad_socios',
-  'almuerzo_socios',
-  'reunion_socios',
-  'gasto_representacion',
-  'regalos',
-  'alojamientos',
+  'ALMUERZOS SOCIOS',
+  'REGALOS EMPRESARIALES',
+  'INVITACIONES A EVENTOS PARA CLIENTES',
+  'ALOJAMIENTOS',
+  'TRASLADO EJECUTIVOS',
+  'REUNIONES CORPORATIVOS INTERNOS',
+  'RECONOCIMIENTOS',
+  'CAPACITACION',
+  'MOBILIARIO',
 ] as const;
 
 export type SubtipoRepresentacionInterna = (typeof SUBTIPOS_REPRESENTACION_INTERNA)[number];
@@ -22,10 +25,10 @@ const DEFAULT_SUBTIPO: SubtipoRepresentacionInterna = SUBTIPOS_REPRESENTACION_IN
 
 /**
  * Frase ya normalizada (`norm` de parseQuickEntry): devuelve código `subtipo_gasto` o null.
- * Orden: movilidad → almuerzo → reunión → representación (quick entry).
- * «Cena familiar» ya no es subtipo propio: va a `gasto_representacion` si coincide la frase.
  */
-export function matchRepresentacionInternaSubtipoFromNormPhrase(n: string): SubtipoRepresentacionInterna | null {
+export function matchRepresentacionInternaSubtipoFromNormPhrase(
+  n: string,
+): SubtipoRepresentacionInterna | null {
   if (!n) return null;
   if (
     n.includes('TAXI SOCIOS')
@@ -37,8 +40,9 @@ export function matchRepresentacionInternaSubtipoFromNormPhrase(n: string): Subt
     || n.includes('UBER')
     || n.includes('DIDI')
     || n.includes('INDRIVE')
+    || n.includes('TRASLADO EJECUTIV')
   ) {
-    return 'movilidad_socios';
+    return 'TRASLADO EJECUTIVOS';
   }
   if (
     (n.includes('ALMUERZO') && n.includes('SOCIO'))
@@ -46,20 +50,29 @@ export function matchRepresentacionInternaSubtipoFromNormPhrase(n: string): Subt
     || n.includes('ALMUERZO SOCIOS')
     || n.includes('COMIDA SOCIOS')
   ) {
-    return 'almuerzo_socios';
+    return 'ALMUERZOS SOCIOS';
   }
   if (
     n.includes('REUNION SOCIOS')
     || n.includes('REUNIÓN SOCIOS')
+    || n.includes('REUNIONES CORPORATIV')
     || ((n.includes('REUNION') || n.includes('REUNIÓN')) && n.includes('SOCIO'))
   ) {
-    return 'reunion_socios';
+    return 'REUNIONES CORPORATIVOS INTERNOS';
+  }
+  if (n.includes('REGALO')) return 'REGALOS EMPRESARIALES';
+  if (n.includes('ALOJAM')) return 'ALOJAMIENTOS';
+  if (n.includes('RECONOCIM')) return 'RECONOCIMIENTOS';
+  if (n.includes('CAPACITAC')) return 'CAPACITACION';
+  if (n.includes('MOBILIARIO')) return 'MOBILIARIO';
+  if (n.includes('INVITACION') && n.includes('EVENTO')) {
+    return 'INVITACIONES A EVENTOS PARA CLIENTES';
   }
   if (n.includes('CENA FAMILIAR') || (n.includes('CENA') && (n.includes('FAMILIAR') || n.includes('FAMILIA')))) {
-    return 'gasto_representacion';
+    return 'INVITACIONES A EVENTOS PARA CLIENTES';
   }
   if (n.includes('REPRESENTACION') || n.includes('REPRESENTACIÓN')) {
-    return 'gasto_representacion';
+    return 'INVITACIONES A EVENTOS PARA CLIENTES';
   }
   return null;
 }

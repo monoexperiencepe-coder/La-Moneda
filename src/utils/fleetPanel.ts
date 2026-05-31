@@ -70,12 +70,12 @@ export function conductorDisplayInitials(c: Conductor): string {
   return '?';
 }
 
+import { conductorVigentePorVehiculo } from '../modules/fleet/fleetAnalytics';
+
+export { conductorVigentePorVehiculo };
+
 export function conductorAsignadoLabel(conductores: Conductor[], vehicleId: number): string {
-  const vigentes = conductores.filter(
-    (c) => c.vehicleId != null && Number(c.vehicleId) === Number(vehicleId) && c.estado === 'VIGENTE',
-  );
-  vigentes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  const c = vigentes[0];
+  const c = conductorVigentePorVehiculo(conductores, vehicleId);
   if (!c) return '—';
   return formatConductorDisplayLabel(c);
 }

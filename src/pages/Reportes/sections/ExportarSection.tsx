@@ -1,12 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, ShieldAlert } from 'lucide-react';
 import type { Descuento, Gasto, Ingreso } from '../../../data/types';
 import { MESES } from '../../../data/catalogs';
 import { gastosOperativosSolamente } from '../../../utils/cajaNegocio';
 import { ingresoMontoPEN } from '../../../utils/moneda';
-import { exportGastosCsv, exportIngresosCsv, exportMensualCsv } from '../../../utils/reportesExport';
+import {
+  AmountExportBlockedError,
+  exportGastosCsv,
+  exportIngresosCsv,
+  exportMensualCsv,
+} from '../../../utils/reportesExport';
 import { useRegistrosContext } from '../../../context/RegistrosContext';
 import { useDelayedLoading } from '../../../hooks/useDelayedLoading';
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 
 interface ExportarSectionProps {
   ingresos: Ingreso[];
@@ -16,6 +22,7 @@ interface ExportarSectionProps {
 
 const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, descuentos }) => {
   const { toast } = useRegistrosContext();
+  const { canViewGlobal, role } = useAmountDisplay();
   const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
 
@@ -52,14 +59,18 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
   }, [ingresos, gastosOp, descuentos, exportYear]);
 
   const runExport = (key: string, fn: () => void) => {
-    if (exportingKey) return;
+    if (exportingKey || !canViewGlobal) return;
     setExportingKey(key);
     window.requestAnimationFrame(() => {
       try {
         fn();
         toast.success('Reporte exportado', 'El archivo CSV se descargó correctamente.');
-      } catch {
-        toast.error('No se pudo exportar', 'Intenta de nuevo en unos segundos.');
+      } catch (e) {
+        if (e instanceof AmountExportBlockedError) {
+          toast.error('Exportación no permitida', 'Tu rol no puede descargar montos en CSV.');
+        } else {
+          toast.error('No se pudo exportar', 'Intenta de nuevo en unos segundos.');
+        }
       } finally {
         window.setTimeout(() => setExportingKey(null), 400);
       }
@@ -68,6 +79,24 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
 
   const mensualBusy = exportingKey === 'mensual';
   const { showLoader: mensualShowLoader, showMessage: mensualSlow } = useDelayedLoading(Boolean(mensualBusy));
+
+  if (!canViewGlobal) {
+    return (
+      <section className="space-y-4 content-enter">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Exportar información</h2>
+          <p className="mt-1 text-sm text-slate-600">Descarga CSV para Excel o análisis externo.</p>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
+          <ShieldAlert size={20} className="mt-0.5 shrink-0 text-amber-700" />
+          <p>
+            La exportación CSV incluye montos en claro y no está disponible para tu rol. Puedes consultar
+            movimientos individuales en Gastos e Ingresos según tus permisos.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4 content-enter">
@@ -81,13 +110,13 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
           title="Exportar gastos"
           description="Todos los gastos registrados (incluye categorías financieras)."
           busy={exportingKey === 'gastos'}
-          onClick={() => runExport('gastos', () => exportGastosCsv(gastos))}
+          onClick={() => runExport('gastos', () => exportGastosCsv(gastos, '', role))}
         />
         <ExportButton
           title="Exportar ingresos"
           description="Todos los ingresos con monto en soles de referencia."
           busy={exportingKey === 'ingresos'}
-          onClick={() => runExport('ingresos', () => exportIngresosCsv(ingresos))}
+          onClick={() => runExport('ingresos', () => exportIngresosCsv(ingresos, '', role))}
         />
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -113,7 +142,7 @@ const ExportarSection: React.FC<ExportarSectionProps> = ({ ingresos, gastos, des
               <button
                 type="button"
                 disabled={Boolean(exportingKey)}
-                onClick={() => runExport('mensual', () => exportMensualCsv(exportYear, mensualRows))}
+                onClick={() => runExport('mensual', () => exportMensualCsv(exportYear, mensualRows, role))}
                 className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
               >
                 {mensualBusy && mensualShowLoader ? (

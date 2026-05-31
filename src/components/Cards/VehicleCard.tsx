@@ -1,7 +1,10 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Vehicle, Ingreso, Gasto, Documentacion } from '../../data/types';
-import { formatCurrency, formatUSD, todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
+import { Vehicle, Ingreso, Gasto, Documentacion, Conductor } from '../../data/types';
+import { conductorAsignadoLabel } from '../../utils/fleetPanel';
+import { UserCog } from 'lucide-react';
+import { todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { Eye, Edit } from 'lucide-react';
@@ -15,6 +18,9 @@ interface VehicleCardProps {
   inversionTotalUsd?: number | null;
   /** Orden en el inventario (1-based), para enumerar la flota. */
   listaIndice?: number;
+  conductores?: Conductor[];
+  canAssignConductor?: boolean;
+  onAsignarConductor?: () => void;
 }
 
 const VehicleCard: React.FC<VehicleCardProps> = ({
@@ -24,7 +30,11 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   documentaciones,
   inversionTotalUsd,
   listaIndice,
+  conductores = [],
+  canAssignConductor = false,
+  onAsignarConductor,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
 
   const todayIngresos = ingresos
@@ -116,23 +126,23 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
           {inversionTotalUsd != null && (
             <div className="bg-amber-50/90 rounded-lg p-2 backdrop-blur-sm border border-amber-100 col-span-2">
               <p className="text-[9px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión adquisición (hist.)</p>
-              <p className="text-xs font-bold text-amber-950 tabular-nums">{formatUSD(inversionTotalUsd)}</p>
+              <p className="text-xs font-bold text-amber-950 tabular-nums">{formatGlobalAmount(inversionTotalUsd, 'USD')}</p>
               <p className="text-[9px] text-amber-800/90 mt-0.5">No es gasto operativo mensual</p>
             </div>
           )}
           <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📊 HOY</p>
-            <p className="text-xs font-bold text-gray-900">{formatCurrency(todayIngresos)}</p>
+            <p className="text-xs font-bold text-gray-900">{formatGlobalAmount(todayIngresos)}</p>
           </div>
           <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">💰 MES</p>
-            <p className="text-xs font-bold text-gray-900">{formatCurrency(monthIngresos)}</p>
+            <p className="text-xs font-bold text-gray-900">{formatGlobalAmount(monthIngresos)}</p>
           </div>
           <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm col-span-2">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📈 MARGEN</p>
             <div className="flex items-center justify-between">
               <p className={`text-xs font-bold ${margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {formatCurrency(margen)}
+                {formatGlobalAmount(margen)}
               </p>
               <div className="flex-1 ml-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -142,6 +152,27 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Conductor */}
+        <div className="rounded-lg px-2.5 py-1.5 mb-2.5 bg-white/70 text-[11px]">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Conductor</p>
+          <p className="font-semibold text-gray-800 truncate">
+            {conductores.length ? conductorAsignadoLabel(conductores, vehicle.id) : '—'}
+          </p>
+          {canAssignConductor && onAsignarConductor ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAsignarConductor();
+              }}
+              className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-primary-600 hover:underline"
+            >
+              <UserCog size={11} />
+              Asignar / Reasignar
+            </button>
+          ) : null}
         </div>
 
         {/* Doc status */}

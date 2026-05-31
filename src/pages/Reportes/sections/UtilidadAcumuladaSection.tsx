@@ -1,8 +1,9 @@
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { Vehicle } from '../../../data/types';
 import type { CajaNegocioVehiculo } from '../../../data/types';
-import { formatCurrency } from '../../../utils/formatting';
+;
 import {
   buildUtilidadHistoricaPorVehiculo,
   sumUtilidadHistoricaEnRango,
@@ -28,6 +29,7 @@ const UtilidadAcumuladaSection: React.FC<UtilidadAcumuladaSectionProps> = ({
   cajaNegocioVehiculo,
   yearOptions,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const [preset, setPreset] = React.useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = React.useState(() => yearOptions[0] ?? new Date().getFullYear());
 
@@ -87,8 +89,8 @@ const UtilidadAcumuladaSection: React.FC<UtilidadAcumuladaSectionProps> = ({
       <p className="text-xs text-slate-500">{range.label}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <StatBox label="Total histórico importado" value={formatCurrency(totalHistorico)} highlight />
-        <StatBox label="En el período filtrado" value={formatCurrency(utilidadPeriodo)} />
+        <StatBox label="Total histórico importado" value={formatGlobalAmount(totalHistorico)} highlight />
+        <StatBox label="En el período filtrado" value={formatGlobalAmount(utilidadPeriodo)} />
       </div>
 
       <p className="text-xs text-slate-500">
@@ -113,7 +115,7 @@ const UtilidadAcumuladaSection: React.FC<UtilidadAcumuladaSectionProps> = ({
                   {idx + 1}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">{vehicleLabel(row.vehicleId)}</span>
-                <span className="text-sm font-bold tabular-nums text-emerald-700">{formatCurrency(row.monto)}</span>
+                <span className="text-sm font-bold tabular-nums text-emerald-700">{formatGlobalAmount(row.monto)}</span>
               </li>
             ))}
           </ul>

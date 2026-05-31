@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_EMPRESA_ID: string;
   readonly VITE_OPERADOR_EMAIL?: string;
   readonly VITE_AI_FOCUS_DEBUG?: string;
+  readonly VITE_DATA_QUALITY_TOOLS?: string;
+  readonly VITE_VERBOSE_DEBUG?: string;
 }
 
 interface ImportMeta {

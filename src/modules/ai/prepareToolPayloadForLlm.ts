@@ -3,6 +3,7 @@
  * El usuario final NO ve este JSON — solo lo interpreta el modelo.
  */
 import type { AiToolName } from './types';
+import { formatFleetToolPayloadForLlm, isFleetAiTool } from './fleetExecutiveFormat';
 import { enrichToolPayloadForLlm } from './toolEmptyResults';
 
 const MAX_FILAS = 8;
@@ -51,6 +52,18 @@ function compactPayload(tool: AiToolName, data: Record<string, unknown>): Record
   if (Array.isArray(out.insights_automaticos) && (out.insights_automaticos as unknown[]).length > 10) {
     out.insights_automaticos = (out.insights_automaticos as unknown[]).slice(0, 10);
   }
+  if (Array.isArray(out.vehiculos) && (out.vehiculos as unknown[]).length > 25) {
+    out.vehiculos = (out.vehiculos as unknown[]).slice(0, 25);
+    out._vehiculos_truncados = true;
+  }
+  if (Array.isArray(out.asignados) && (out.asignados as unknown[]).length > 40) {
+    out.asignados = (out.asignados as unknown[]).slice(0, 40);
+    out._asignados_truncados = true;
+  }
+
+  if (isFleetAiTool(tool)) {
+    return formatFleetToolPayloadForLlm(tool, out);
+  }
 
   out._instruccion_interpretacion =
     'Datos internos para interpretar. NO copies este JSON al usuario. Redacta narrativa ejecutiva en español (analista financiero). Separa siempre OPEX vs CAPEX. Usa S/ y US$.';
@@ -65,6 +78,10 @@ function compactPayload(tool: AiToolName, data: Record<string, unknown>): Record
 
 export function prepareToolPayloadForLlm(tool: AiToolName, data: unknown): Record<string, unknown> {
   const base = enrichToolPayloadForLlm(tool, data);
-  if (base.empty === true) return base;
+  if (base.empty === true) {
+    if (isFleetAiTool(tool)) return formatFleetToolPayloadForLlm(tool, base);
+    return base;
+  }
+  if (isFleetAiTool(tool)) return formatFleetToolPayloadForLlm(tool, compactPayload(tool, base));
   return compactPayload(tool, base);
 }

@@ -1,8 +1,9 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { formatCurrency, formatUSD } from '../../utils/formatting';
+;
 import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
 import { EMPRESA_ID } from '../../config/app';
 import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
@@ -18,6 +19,7 @@ type HubSubCard = {
 };
 
 const Inversiones: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { profile, user } = useAuth();
   const canLoadInversiones = useMemo(
@@ -79,10 +81,10 @@ const Inversiones: React.FC = () => {
     ) : (
       <div className="flex flex-col items-end gap-0.5 text-right">
         {genUsd > 0 ? (
-          <span className="text-sm sm:text-base font-bold text-violet-800 leading-snug tabular-nums">{formatUSD(genUsd)}</span>
+          <span className="text-sm sm:text-base font-bold text-violet-800 leading-snug tabular-nums">{formatGlobalAmount(genUsd, 'USD')}</span>
         ) : null}
         {genPen > 0 ? (
-          <span className="text-sm sm:text-base font-bold text-violet-700 leading-snug tabular-nums">{formatCurrency(genPen)}</span>
+          <span className="text-sm sm:text-base font-bold text-violet-700 leading-snug tabular-nums">{formatGlobalAmount(genPen)}</span>
         ) : null}
       </div>
     );

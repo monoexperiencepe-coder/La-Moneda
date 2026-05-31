@@ -1,9 +1,10 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, AlertTriangle, Filter, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatDate, formatCurrency, todayStr } from '../../utils/formatting';
+import { formatDate, todayStr } from '../../utils/formatting';
 import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
 import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperativeAlerts';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
@@ -19,6 +20,7 @@ function diffDays(dateStr: string): number {
 }
 
 const ControlGlobal: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { vehicles, unidades, conductores, controlFechas, kilometrajes, pendientes, ingresos, gastos } =
     useRegistrosContext();
@@ -305,7 +307,7 @@ const ControlGlobal: React.FC = () => {
                       <p className="text-gray-400 font-medium mb-0.5">Último ingreso</p>
                       {ultimoIngreso ? (
                         <>
-                          <p className="font-bold text-emerald-700">{formatCurrency(ultimoIngreso.monto)}</p>
+                          <p className="font-bold text-emerald-700">{formatRecordAmount(ultimoIngreso.monto, ultimoIngreso)}</p>
                           <p className="text-gray-500">{formatDate(ultimoIngreso.fecha)}</p>
                           {diasSinIngreso != null && diasSinIngreso > 14 && (
                             <p className="text-amber-600 font-semibold mt-0.5">{diasSinIngreso}d sin cobro</p>
@@ -319,7 +321,7 @@ const ControlGlobal: React.FC = () => {
                       <p className="text-gray-400 font-medium mb-0.5">Último gasto</p>
                       {ultimoGasto ? (
                         <>
-                          <p className="font-bold text-red-600">{formatCurrency(ultimoGasto.monto)}</p>
+                          <p className="font-bold text-red-600">{formatRecordAmount(ultimoGasto.monto, ultimoGasto)}</p>
                           <p className="text-gray-500">{formatDate(ultimoGasto.fecha)}</p>
                           <p className="text-gray-400 truncate">{ultimoGasto.tipo}</p>
                         </>

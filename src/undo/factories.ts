@@ -158,6 +158,7 @@ export function gastoDetallePatchFromRow(g: Gasto): GastoDetalleManualPatch {
     fecha: g.fecha,
     fechaRegistro: g.fechaRegistro,
     vehicleId: normalizeVehicleIdForDetallePatch(g.vehicleId),
+    subtipo_gasto: g.subtipo_gasto,
     tipo: g.tipo,
     subTipo: g.subTipo,
     categoria: g.categoria,
@@ -166,6 +167,8 @@ export function gastoDetallePatchFromRow(g: Gasto): GastoDetalleManualPatch {
     metodoPagoDetalle: g.metodoPagoDetalle,
     monto: g.monto,
     comentarios: g.comentarios,
+    revisado_at: g.revisado_at ?? null,
+    revisado_por: g.revisado_por ?? null,
   };
 }
 

@@ -1,8 +1,9 @@
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Descuento, Gasto, Ingreso, Vehicle } from '../../../data/types';
 import { calculateVehicleRentability } from '../../../utils/calculations';
-import { formatCurrency } from '../../../utils/formatting';
+;
 import {
   filterGastosPeriod,
   filterIngresosPeriod,
@@ -27,6 +28,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
   descuentos,
   yearOptions,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
@@ -114,6 +116,7 @@ function RankingList({
   tone: 'good' | 'warn';
   onRow: (id: number) => void;
 }) {
+  const { formatGlobalAmount } = useAmountDisplay();
   return (
     <div className="glass-panel overflow-hidden p-0">
       <div className="border-b border-slate-100 px-4 py-3">
@@ -149,7 +152,7 @@ function RankingList({
                       tone === 'good' ? 'text-emerald-600' : r.margen >= 0 ? 'text-slate-700' : 'text-rose-600'
                     }`}
                   >
-                    {formatCurrency(r.margen)}
+                    {formatGlobalAmount(r.margen)}
                   </span>
                   <span className="text-xs text-slate-400">Margen {margenPct(r)}%</span>
                 </span>

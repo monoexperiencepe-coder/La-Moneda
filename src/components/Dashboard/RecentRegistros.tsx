@@ -3,7 +3,8 @@ import { Clock, TrendingUp, TrendingDown } from 'lucide-react';
 import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Ingreso, Gasto, Vehicle } from '../../data/types';
-import { formatCurrency, formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { vehicleIdKey } from '../../utils/vehicleId';
 
@@ -22,11 +23,13 @@ type RecentItem = {
   vehiculo: string;
   monto: number;
   createdAt: string;
+  source: Ingreso | Gasto;
 };
 
 const RecentRegistros: React.FC<RecentRegistrosProps> = ({
   ingresos, gastos, vehicles, limit = 8
 }) => {
+  const { formatRecordAmount } = useAmountDisplay();
   const getVehicleLabel = (vehicleId: number | string | null) => {
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
@@ -43,6 +46,7 @@ const RecentRegistros: React.FC<RecentRegistrosProps> = ({
       vehiculo: getVehicleLabel(i.vehicleId),
       monto: ingresoMontoPEN(i),
       createdAt: i.createdAt,
+      source: i,
     })),
     ...gastos.map(g => ({
       id: `gasto-${g.id}`,
@@ -52,6 +56,7 @@ const RecentRegistros: React.FC<RecentRegistrosProps> = ({
       vehiculo: getVehicleLabel(g.vehicleId),
       monto: g.monto,
       createdAt: g.createdAt,
+      source: g,
     })),
   ]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -91,7 +96,9 @@ const RecentRegistros: React.FC<RecentRegistrosProps> = ({
                   <td className="px-3 py-3 text-xs text-gray-500">{item.vehiculo}</td>
                   <td className="px-6 py-3 text-right">
                     <span className={`text-sm font-bold ${item.tipo === 'ingreso' ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {item.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(item.monto)}
+                      {formatRecordAmount(item.monto, item.source, {
+                        signPrefix: item.tipo === 'ingreso' ? '+' : '−',
+                      })}
                     </span>
                   </td>
                 </tr>

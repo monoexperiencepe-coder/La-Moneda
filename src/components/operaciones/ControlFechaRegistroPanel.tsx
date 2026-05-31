@@ -19,7 +19,8 @@ import {
   type DocumentacionSearchContext,
 } from '../../utils/documentacionHistorialSearch';
 import type { ControlFecha, TipoControlFecha } from '../../data/types';
-import { ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Loader2, Pencil } from 'lucide-react';
+import EditarControlFechaModal from './EditarControlFechaModal';
 
 const emptyHistFilters = (): ControlFechasHistoryFilters => ({});
 
@@ -89,6 +90,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   const [openHistFilters, setOpenHistFilters] = useState(false);
   const [savingRegistro, setSavingRegistro] = useState(false);
   const [deletingControlId, setDeletingControlId] = useState<number | null>(null);
+  const [editingControl, setEditingControl] = useState<ControlFecha | null>(null);
 
   useEffect(() => {
     void loadControlFechasHistory(emptyHistFilters(), 0);
@@ -580,21 +582,32 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
                     <span className={`text-[11px] font-semibold ${cls}`} title={estadoTitulo}>
                       {rightLabel}
                     </span>
-                    <button
-                      type="button"
-                      title="Eliminar"
-                      disabled={deletingControlId === c.id || savingRegistro}
-                      onClick={() => {
-                        void handleDeleteHistorial(c.id);
-                      }}
-                      className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-40 inline-flex"
-                    >
-                      {deletingControlId === c.id ? (
-                        <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
-                      ) : (
-                        <Trash2 size={14} />
-                      )}
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        title="Editar documento"
+                        disabled={deletingControlId === c.id || savingRegistro}
+                        onClick={() => setEditingControl(c)}
+                        className="text-gray-400 hover:text-indigo-600 p-1 disabled:opacity-40 inline-flex"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar"
+                        disabled={deletingControlId === c.id || savingRegistro}
+                        onClick={() => {
+                          void handleDeleteHistorial(c.id);
+                        }}
+                        className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-40 inline-flex"
+                      >
+                        {deletingControlId === c.id ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -638,6 +651,19 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
         ) : null}
         </div>
       </Card>
+      <EditarControlFechaModal
+        record={editingControl}
+        isOpen={editingControl != null}
+        onClose={() => setEditingControl(null)}
+        onSaved={(updated) => {
+          if (docSearchMode && documentacionFullLoaded) {
+            setDocumentacionFullRows((prev) =>
+              sortHistorialRows(prev.map((r) => (r.id === updated.id ? updated : r))),
+            );
+          }
+          setBusquedaPagina(updated.comentarios?.includes(' ') ? updated.comentarios.split(' ').slice(0, 3).join(' ') : String(updated.id));
+        }}
+      />
     </div>
   );
 };

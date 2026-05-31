@@ -65,6 +65,8 @@ export interface Ingreso {
   estadoPago?: string | null;
   /** Columnas Excel no mapeadas a campos dedicados (Supabase: excel_extra). */
   excelExtra?: Record<string, unknown> | null;
+  /** Usuario creador (excel_extra._lm_created_by o columna futura created_by). */
+  createdBy?: string | null;
   createdAt: string;
 }
 
@@ -246,6 +248,8 @@ export interface Gasto {
   revisado_at?: string | null;
   es_global_flota?: boolean | null;
   origen_clasificacion?: string | null;
+  /** Usuario creador (excel_extra._lm_created_by o columna futura created_by). */
+  createdBy?: string | null;
   createdAt: string;
 }
 

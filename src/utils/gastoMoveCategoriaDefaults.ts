@@ -6,7 +6,9 @@ import { normalizeRepresentacionInternaSubtipo } from './representacionInternaSu
 import { normalizeOperativoSubtipo } from './operativoSubtipo';
 import { normalizeInversionSubtipo } from './inversionSubtipo';
 import { normalizeAdministrativoSubtipo } from './administrativoSubtipo';
-import { inversionSubtipoRequiereVehiculo } from './inversionSubtipo';
+import { normalizeFinancieroPrestamoSubtipo } from './financieroPrestamoSubtipo';
+import { resolveOperativoSubtipoGastoCanon } from './operativoSubtipo';
+import { subtipoBelongsToCategoria } from '../constants/subtipos/subtipoBelongsToCategoria';
 import {
   TIPO_GASTO_OPERATIVO_FLOTA_GENERAL,
   TIPO_GASTO_OPERATIVO_VEHICULO,
@@ -25,19 +27,78 @@ const FINANZA_TAB_TIPOS = new Set<string>([
   'inversion_compra',
 ]);
 
-/** Categorías que exigen `vehicle_id` (inversión solo si el subtipo es vehicular). */
-export function tipoGastoRequiereVehiculo(tipoGasto: string, subtipoGasto?: string | null): boolean {
-  const t = tipoGasto.trim();
-  if (isOperativoVehiculoTipoGasto(t)) return true;
-  if (t === 'inversion_compra') {
-    return inversionSubtipoRequiereVehiculo(subtipoGasto ?? 'adquisicion_vehiculo');
-  }
-  return false;
+/** Categorías que exigen `vehicle_id` (solo operativo por vehículo). */
+export function tipoGastoRequiereVehiculo(tipoGasto: string, _subtipoGasto?: string | null): boolean {
+  return isOperativoVehiculoTipoGasto(tipoGasto.trim());
+}
+
+/** Inversión con utilidad: vehículo opcional si se conoce la unidad. */
+export function tipoGastoAdmiteVehiculoOpcional(tipoGasto: string): boolean {
+  return tipoGasto.trim() === 'inversion_compra';
 }
 
 export function tipoGastoUsaSubtipoOperativo(tipoGasto: string): boolean {
   const t = tipoGasto.trim();
   return isOperativoVehiculoTipoGasto(t) || isOperativoFlotaGeneralTipoGasto(t);
+}
+
+/** Financieros: subtipo oficial en UI; Tipo Fact se infiere al guardar. */
+export function tipoGastoUsaSubtipoFinancieroCanon(tipoGasto: string): boolean {
+  return tipoGasto.trim() === 'financiero_prestamo';
+}
+
+/** Administrativos: subtipo oficial en UI; Tipo Fact se infiere al guardar. */
+export function tipoGastoUsaSubtipoAdministrativoCanon(tipoGasto: string): boolean {
+  return tipoGasto.trim() === 'administrativo_empresa';
+}
+
+/** Categorías con subtipo oficial en registro / mover / editar (sin Tipo Fact manual). */
+export function tipoGastoPermiteEdicionSubtipoOficial(tipoGasto: string): boolean {
+  const t = tipoGasto.trim();
+  return (
+    tipoGastoUsaSubtipoAdministrativoCanon(t)
+    || tipoGastoUsaSubtipoFinancieroCanon(t)
+    || t === 'inversion_compra'
+    || t === 'representacion_interna'
+    || tipoGastoUsaSubtipoOperativo(t)
+  );
+}
+
+/** Valor canónico para selector de edición (aliases legacy → oficial). */
+export function resolveSubtipoCanonForGastoEdit(
+  tipoGasto: string,
+  subtipoGasto: string | null | undefined,
+): string {
+  const t = tipoGasto.trim();
+  const raw = (subtipoGasto ?? '').trim();
+  if (!raw) return getDefaultSubtipoForTipoGasto(t);
+
+  if (tipoGastoUsaSubtipoAdministrativoCanon(t)) {
+    return normalizeAdministrativoSubtipo(raw) ?? raw;
+  }
+  if (tipoGastoUsaSubtipoFinancieroCanon(t)) {
+    return normalizeFinancieroPrestamoSubtipo(raw) ?? raw;
+  }
+  if (t === 'inversion_compra') {
+    return normalizeInversionSubtipo(raw) ?? raw;
+  }
+  if (t === 'representacion_interna') {
+    return normalizeRepresentacionInternaSubtipo(raw) || raw;
+  }
+  if (tipoGastoUsaSubtipoOperativo(t)) {
+    return normalizeOperativoSubtipo(raw) ?? resolveOperativoSubtipoGastoCanon(raw) ?? raw;
+  }
+  return raw;
+}
+
+/** Normaliza subtipo elegido en edición antes de persistir. */
+export function normalizeSubtipoCanonForGastoSave(tipoGasto: string, canon: string): string {
+  const trimmed = canon.trim();
+  if (!trimmed) return getDefaultSubtipoForTipoGasto(tipoGasto);
+  if (!subtipoBelongsToCategoria(tipoGasto, trimmed)) {
+    return getDefaultSubtipoForTipoGasto(tipoGasto);
+  }
+  return resolveSubtipoCanonForGastoEdit(tipoGasto, trimmed);
 }
 
 function catalogSubtiposUnionForFinanza(cat: FinanzaGastoRegistroValue): Set<string> {
@@ -62,9 +123,9 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
   const t = tipoGasto.trim();
   switch (t) {
     case 'representacion_interna':
-      return 'gasto_representacion';
+      return 'ALMUERZOS SOCIOS';
     case 'financiero_prestamo':
-      return 'prestamo';
+      return 'PRÉSTAMO';
     case 'administrativo_empresa':
       return 'administrativo_general';
     case 'inversion_compra':
@@ -73,7 +134,7 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
       return 'global_no_asignado';
     case TIPO_GASTO_OPERATIVO_VEHICULO:
     case TIPO_GASTO_OPERATIVO_FLOTA_GENERAL:
-      return 'motor';
+      return 'OTROS / ESPECIFICAR';
     case 'planilla_laboral': {
       const cat = t as FinanzaGastoRegistroValue;
       const tipos = getFactTiposForFinanza(cat);
@@ -92,6 +153,9 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
 /** Ajusta `subtipo_gasto` al catálogo de la categoría destino; preserva históricos reconocibles. */
 export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): string {
   const trimmed = raw.trim();
+  if (trimmed && !subtipoBelongsToCategoria(tipoGasto, trimmed)) {
+    return getDefaultSubtipoForTipoGasto(tipoGasto);
+  }
   const valid = getValidSubtiposForTipoGastoFinanza(tipoGasto);
 
   if (tipoGasto.trim() === 'representacion_interna') {
@@ -110,7 +174,7 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
         if (v.toLowerCase() === lower) return v;
       }
     }
-    if (trimmed) return trimmed;
+    if (trimmed && subtipoBelongsToCategoria(tipoGasto, trimmed)) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
@@ -118,7 +182,7 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
   if (tipoGasto.trim() === 'inversion_compra') {
     const n = normalizeInversionSubtipo(trimmed);
     if (n) return n;
-    if (trimmed) return trimmed;
+    if (trimmed && subtipoBelongsToCategoria(tipoGasto, trimmed)) return trimmed;
     return 'adquisicion_vehiculo';
   }
 
@@ -131,7 +195,14 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
         if (v.toLowerCase() === lower) return v;
       }
     }
-    if (trimmed) return trimmed;
+    if (trimmed && subtipoBelongsToCategoria(tipoGasto, trimmed)) return trimmed;
+    return getDefaultSubtipoForTipoGasto(tipoGasto);
+  }
+
+  if (tipoGasto.trim() === 'financiero_prestamo') {
+    const n = normalizeFinancieroPrestamoSubtipo(trimmed);
+    if (n) return n;
+    if (trimmed && subtipoBelongsToCategoria(tipoGasto, trimmed)) return trimmed;
     return getDefaultSubtipoForTipoGasto(tipoGasto);
   }
 
@@ -142,5 +213,6 @@ export function normalizeSubtipoForTipoGasto(tipoGasto: string, raw: string): st
   for (const v of valid) {
     if (v.toLowerCase() === lower) return v;
   }
-  return trimmed;
+  if (subtipoBelongsToCategoria(tipoGasto, trimmed)) return trimmed;
+  return getDefaultSubtipoForTipoGasto(tipoGasto);
 }

@@ -13,6 +13,13 @@ import {
   INVERSION_SUBTIPO_OPTIONS,
   normalizeInversionSubtipo,
 } from '../../utils/inversionSubtipo';
+import { normalizeFinancieroPrestamoSubtipo } from '../../utils/financieroPrestamoSubtipo';
+import { OPERATIVO_SUBTIPO_REQUIERE_REVISION } from './operativoOficialCatalog';
+import { normalizeAdministrativoSubtipo } from '../../utils/administrativoSubtipo';
+import {
+  normalizeOperativoSubtipo,
+  operativoSubtipoRequiresReview,
+} from '../../utils/operativoSubtipo';
 
 /** true si la fila coincide con el subtipo seleccionado (oficial, canónico, legacy o alias). */
 export function subtipoMatchesFilter(
@@ -24,6 +31,9 @@ export function subtipoMatchesFilter(
   if (!filter) return true;
 
   const cat = categoria?.trim() ?? '';
+  if (filter === OPERATIVO_SUBTIPO_REQUIERE_REVISION) {
+    return operativoSubtipoRequiresReview(rowSubtipo);
+  }
   if (!cat) return (rowSubtipo ?? '').trim() === filter;
 
   const rowKey = getCanonicalSubtipoDedupeKeyFull(cat, rowSubtipo ?? '');
@@ -73,7 +83,125 @@ export function getSubtipoFilterDbVariants(categoria: string, selectedSubtipo: s
     }
   }
 
+  if (cat === 'financiero_prestamo') {
+    const norm = normalizeFinancieroPrestamoSubtipo(filter);
+    if (norm) variants.add(norm);
+    for (const raw of collectHistoricosFromFinancieroAliases(targetKey)) {
+      variants.add(raw);
+    }
+  }
+
+  if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
+    const norm = normalizeOperativoSubtipo(filter);
+    if (norm) variants.add(norm);
+    for (const raw of collectHistoricosFromOperativoAliases(targetKey)) {
+      variants.add(raw);
+    }
+  }
+
   return [...variants].filter((v) => v.length > 0);
+}
+
+function collectHistoricosFromOperativoAliases(targetKey: string): string[] {
+  const seeds = [
+    'motor',
+    'bateria',
+    'combustible',
+    'documentos',
+    'gnv',
+    'gps_chips',
+    'llantas',
+    'frenos',
+    'accesorios',
+    'multas_tramites',
+    'multas_callao',
+    'revision_tecnica_taxi',
+    'soat',
+    'afocat',
+    'interior',
+    'mantenimiento',
+    'electricidad',
+    'suspension',
+    'planchado_pintura',
+    'otros_operativo',
+    'movilidad',
+    'autopartes',
+  ];
+  const out: string[] = [];
+  for (const s of seeds) {
+    if (getCanonicalSubtipoDedupeKeyFull('operativo_vehiculo', s) === targetKey) {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+function collectHistoricosFromFinancieroAliases(targetKey: string): string[] {
+  const seeds = [
+    'prestamo',
+    'prestamos',
+    'cuota',
+    'cuotas',
+    'interes',
+    'intereses',
+    'membresias',
+    'alquileres',
+    'prestamo_interes_banca',
+    'tarjeta_banco',
+    'tarjeta banco',
+    'cuota compra de activos',
+    'cuota de mantenimiento',
+  ];
+  const out: string[] = [];
+  for (const s of seeds) {
+    if (getCanonicalSubtipoDedupeKeyFull('financiero_prestamo', s) === targetKey) {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+function collectHistoricosFromAdministrativoAliases(targetKey: string): string[] {
+  const seeds = [
+    'oficina_documentos',
+    'oficina',
+    'papeleria',
+    'PAPELERÍA',
+    'papeletria',
+    'sunarp',
+    'suanrp',
+    'sunat',
+    'sutran',
+    'tramite_notarial',
+    'tramites_notariales',
+    'vigencia_poder',
+    'vigencia_de_poder',
+    'administrativo',
+    'tributario',
+    'tributarios',
+    'atu',
+    'taxi',
+    'alquileres',
+    'membresias',
+    'delivery',
+    'inmueble',
+    'intereses',
+    'municipales',
+    'permisos_varios',
+    'representacion',
+    'trabajos_eventuales',
+    'seguros_vehicular',
+    'seguro_vehicular',
+    'otros_especificar',
+    'administrativo_general',
+  ];
+  const out: string[] = [];
+  for (const s of seeds) {
+    if (getCanonicalSubtipoDedupeKeyFull('administrativo_empresa', s) === targetKey) {
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 function collectHistoricosFromInversionAliases(targetKey: string): string[] {

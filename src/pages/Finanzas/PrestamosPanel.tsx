@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ChevronDown, History, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import Card from '../../components/Common/Card';
@@ -14,7 +15,7 @@ import type {
   PrestamoFinancieroTramo,
 } from '../../data/types';
 import { calcularPrestamoFinancieroInfo, interesMensualEfectivoTramo } from '../../utils/prestamosFinancierosCalc';
-import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -32,8 +33,12 @@ import {
 } from '../../utils/prestamoLocalMutations';
 import { undoDeletePrestamoFinanciero, undoUpdatePrestamoFinanciero } from '../../undo/factories';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(
+  amount: number,
+  moneda: Moneda,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
 function timelinePeriodLabel(desde: string, hasta: string | null): string {
@@ -194,6 +199,7 @@ function PrestamoEjecutivoCard({
   onToggleHistorial,
   deleting,
 }: PrestamoCardProps) {
+  const { formatGlobalAmount } = useAmountDisplay();
   const { prestamo: p, tramos } = detalle;
   const calc = useMemo(() => calcularPrestamoFinancieroInfo(p, tramos), [p, tramos]);
   const tramosOrdenados = useMemo(
@@ -296,7 +302,7 @@ function PrestamoEjecutivoCard({
             <div className="flex flex-col items-start sm:items-end gap-0 rounded-md bg-white/10 px-2 py-1.5 ring-1 ring-white/12 sm:min-w-[140px]">
             <span className="text-[8px] font-medium uppercase tracking-wide text-white/50 leading-none">Valor cuota</span>
             <span className="text-lg sm:text-xl font-bold tabular-nums tracking-tight text-white leading-none mt-0.5">
-              {montoFmt(p.interesMensualActual, p.monedaPago)}
+              {montoFmt(p.interesMensualActual, p.monedaPago, formatGlobalAmount)}
             </span>
             {p.modalidadPago === 'cuota_fija' ? (
               <span className="text-[8px] text-white/45 leading-none mt-0.5">Cuota fija</span>
@@ -308,11 +314,11 @@ function PrestamoEjecutivoCard({
 
       <div className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-slate-50/80">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-1.5">
-          <KpiTile label="Capital original" value={montoFmt(p.montoOriginal, p.monedaCapital)} accent />
-          <KpiTile label="Capital actual" value={montoFmt(calc.capitalActualEstimado, p.monedaCapital)} accent />
+          <KpiTile label="Capital original" value={montoFmt(p.montoOriginal, p.monedaCapital, formatGlobalAmount)} accent />
+          <KpiTile label="Capital actual" value={montoFmt(calc.capitalActualEstimado, p.monedaCapital, formatGlobalAmount)} accent />
           <KpiTile
             label="Cuota / interés actual"
-            value={montoFmt(p.interesMensualActual, p.monedaPago)}
+            value={montoFmt(p.interesMensualActual, p.monedaPago, formatGlobalAmount)}
             accent
           />
           <KpiTile
@@ -330,8 +336,8 @@ function PrestamoEjecutivoCard({
               label="Importe mensual (cuota fija)"
               value={
                 p.cuotaFijaMensual != null && Number.isFinite(p.cuotaFijaMensual)
-                  ? montoFmt(p.cuotaFijaMensual, p.monedaPago)
-                  : montoFmt(p.interesMensualActual, p.monedaPago)
+                  ? montoFmt(p.cuotaFijaMensual, p.monedaPago, formatGlobalAmount)
+                  : montoFmt(p.interesMensualActual, p.monedaPago, formatGlobalAmount)
               }
             />
           ) : (
@@ -347,7 +353,7 @@ function PrestamoEjecutivoCard({
           <KpiTile label="Meses estimados" value={String(calc.mesesPagadosEstimados)} />
           <KpiTile
             label="Total pagado estimado"
-            value={montoFmt(calc.totalInteresPagadoEstimado, p.monedaPago)}
+            value={montoFmt(calc.totalInteresPagadoEstimado, p.monedaPago, formatGlobalAmount)}
             highlight
           />
         </div>
@@ -455,6 +461,7 @@ function TramosTimeline({
   montoOriginal: number;
   monedaCapitalPrestamo: Moneda;
 }) {
+  const { formatGlobalAmount } = useAmountDisplay();
   return (
     <div className="relative pl-0 sm:pl-0.5">
       <div
@@ -470,13 +477,13 @@ function TramosTimeline({
             linea != null
               ? linea.interesMensualEfectivo
               : interesMensualEfectivoTramo(t, calc.capitalActualEstimado);
-          const cuota = montoFmt(imEfectivo, monedaCuota);
+          const cuota = montoFmt(imEfectivo, monedaCuota, formatGlobalAmount);
           const periodo = timelinePeriodLabel(t.desde, t.hasta);
           const siguiente = tramos[idx + 1];
           const mostrarPuente = idx < tramos.length - 1;
           const refCap =
             t.capitalReferencial != null && Number.isFinite(t.capitalReferencial)
-              ? montoFmt(t.capitalReferencial, t.monedaCapital)
+              ? montoFmt(t.capitalReferencial, t.monedaCapital, formatGlobalAmount)
               : null;
           const mesesTxt =
             linea != null && linea.meses > 0 ? `~${linea.meses} meses` : null;
@@ -499,7 +506,7 @@ function TramosTimeline({
                   </p>
                   {menosOriginal ? (
                     <p className="mt-0.5 text-[9px] font-semibold tabular-nums text-red-600 leading-tight">
-                      −{montoFmt(menosOriginal.monto, menosOriginal.moneda)} vs capital original
+                      −{montoFmt(menosOriginal.monto, menosOriginal.moneda, formatGlobalAmount)} vs capital original
                     </p>
                   ) : null}
                 </div>
@@ -511,7 +518,7 @@ function TramosTimeline({
                     <ArrowDown className="h-2.5 w-2.5 shrink-0 text-slate-300" strokeWidth={2.5} aria-hidden />
                     {reduccionPuente ? (
                       <span className="text-[10px] font-bold tabular-nums text-red-600 tracking-tight">
-                        −{montoFmt(reduccionPuente.monto, reduccionPuente.moneda)} menos capital
+                        −{montoFmt(reduccionPuente.monto, reduccionPuente.moneda, formatGlobalAmount)} menos capital
                       </span>
                     ) : null}
                     {(() => {
@@ -536,6 +543,7 @@ function TramosTimeline({
 type ReloadOpts = { background?: boolean };
 
 const PrestamosPanel: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const { canEditFinances, profile, user } = useAuth();
   const { toast, showUndoToast } = useRegistrosContext();
   const canLoadFinanciamiento = useMemo(
@@ -862,22 +870,22 @@ const PrestamosPanel: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-2 shadow-sm">
           <KpiTile
             label="Capital total (USD)"
-            value={montoFmt(kpiTotals.capital.usd, 'USD')}
+            value={montoFmt(kpiTotals.capital.usd, 'USD', formatGlobalAmount)}
             accent
           />
           <KpiTile
             label="Capital total (PEN)"
-            value={montoFmt(kpiTotals.capital.pen, 'PEN')}
+            value={montoFmt(kpiTotals.capital.pen, 'PEN', formatGlobalAmount)}
             accent
           />
           <KpiTile
             label="Cuota mensual (USD)"
-            value={montoFmt(kpiTotals.cuota.usd, 'USD')}
+            value={montoFmt(kpiTotals.cuota.usd, 'USD', formatGlobalAmount)}
             highlight
           />
           <KpiTile
             label="Cuota mensual (PEN)"
-            value={montoFmt(kpiTotals.cuota.pen, 'PEN')}
+            value={montoFmt(kpiTotals.cuota.pen, 'PEN', formatGlobalAmount)}
             highlight
           />
         </div>

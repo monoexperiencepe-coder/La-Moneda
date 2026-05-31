@@ -1,8 +1,9 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, History, Layers, Sparkles, Zap } from 'lucide-react';
 import type { Gasto, Vehicle } from '../../data/types';
-import { formatCurrency } from '../../utils/formatting';
+;
 import { sugerirClasificacionGasto } from '../../utils/gastoClasificacionSugerencia';
 import { moveGastoCategoria } from '../../utils/gastoCategoriaMove';
 import {
@@ -23,7 +24,6 @@ import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
 import { getOperativoSubtipoLabel } from '../../utils/operativoSubtipo';
 import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
-import { inversionSubtipoRequiereVehiculo } from '../../utils/inversionSubtipo';
 import { getRepresentacionInternaSubtipoLabel } from '../../utils/representacionInternaSubtipoLabel';
 import Select from '../Common/Select';
 import Button from '../Common/Button';
@@ -103,6 +103,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   showUndoToast,
   getVehicleLabel,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const { profile } = useAuth();
   const tenantEmpresaId = profile?.empresa_id;
 
@@ -232,10 +233,8 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
         gasto,
         toTipoGasto: tipo,
         toSubtipoGasto: subtipo,
-        vehicleId: (
-          tipo === 'operativo_vehiculo' ||
-          (tipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(subtipo || 'adquisicion_vehiculo'))
-        ) ? vehicleId : null,
+        vehicleId:
+          tipo === 'operativo_vehiculo' || tipo === 'inversion_compra' ? vehicleId : null,
         motivo,
         vehicles,
         tenantEmpresaId,
@@ -341,9 +340,8 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
   };
 
   const selectedRows = sortedPendientes.filter((g) => selectedIds.has(g.id));
-  const bulkNeedsVehicle =
-    bulkTipo === 'operativo_vehiculo' ||
-    (bulkTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(bulkSubtipo || 'adquisicion_vehiculo'));
+  const bulkNeedsVehicle = bulkTipo === 'operativo_vehiculo';
+  const bulkShowsVehicle = bulkTipo === 'operativo_vehiculo' || bulkTipo === 'inversion_compra';
 
   const handleBulkConfirm = async () => {
     if (!canEdit || selectedRows.length === 0) return;
@@ -390,7 +388,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
             <p className="text-sm font-bold text-amber-950">Conciliación financiera</p>
             <p className="mt-1 text-sm tabular-nums text-amber-900">
               <span className="font-semibold">{pendingCount}</span> registros pendientes ·{' '}
-              <span className="font-semibold">{formatCurrency(pendingMonto)}</span>
+              <span className="font-semibold">{formatGlobalAmount(pendingMonto)}</span>
               {showHistoricoPercent && totalGastosFlota > 0 ? (
                 <span className="text-amber-800/90">
                   {' '}
@@ -476,7 +474,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
             <ul className="space-y-1.5 text-[11px] text-slate-700">
               {concState.history.slice(0, 30).map((h) => (
                 <li key={h.id} className="border-b border-slate-50 pb-1">
-                  <span className="font-semibold">{h.userLabel}</span> · {formatCurrency(h.monto)} ·{' '}
+                  <span className="font-semibold">{h.userLabel}</span> · {formatGlobalAmount(h.monto)} ·{' '}
                   {labelTipoGastoFinanciero(h.from_tipo_gasto)} →{' '}
                   <span className="text-emerald-800">{labelTipoGastoFinanciero(h.to_tipo_gasto)}</span> ·{' '}
                   {new Date(h.at).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
@@ -497,7 +495,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                 <span>
                   Registro {quickIndex + 1} de {sortedPendientes.length}
                 </span>
-                <span className="tabular-nums font-semibold text-slate-700">{formatCurrency(quickGasto.monto)}</span>
+                <span className="tabular-nums font-semibold text-slate-700">{formatRecordAmount(quickGasto.monto, quickGasto)}</span>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 space-y-2 text-sm">
                 <p>
@@ -548,10 +546,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                     const defaultSub = getDefaultSubtipoForTipoGasto(v);
                     setMoveTipo(v);
                     setMoveSubtipo(defaultSub);
-                    const needsVehicle =
-                      v === 'operativo_vehiculo' ||
-                      (v === 'inversion_compra' && inversionSubtipoRequiereVehiculo(defaultSub || 'adquisicion_vehiculo'));
-                    if (!needsVehicle) setMoveVehicleId('');
+                    if (v !== 'operativo_vehiculo' && v !== 'inversion_compra') setMoveVehicleId('');
                   }}
                 />
                 <Select
@@ -560,14 +555,17 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                   value={moveSubtipo}
                   onChange={setMoveSubtipo}
                 />
-                {(moveTipo === 'operativo_vehiculo' ||
-                  (moveTipo === 'inversion_compra' && inversionSubtipoRequiereVehiculo(moveSubtipo || 'adquisicion_vehiculo'))
-                ) ? (
+                {moveTipo === 'operativo_vehiculo' || moveTipo === 'inversion_compra' ? (
                   <Select
-                    label={moveTipo === 'inversion_compra' ? 'Vehículo (inversión vehicular)' : 'Vehículo'}
+                    label={
+                      moveTipo === 'inversion_compra'
+                        ? 'Vehículo (opcional)'
+                        : 'Vehículo (obligatorio)'
+                    }
                     options={vehicleOptions}
                     value={moveVehicleId || (quickGasto.vehicleId != null ? String(quickGasto.vehicleId) : '')}
                     onChange={setMoveVehicleId}
+                    placeholder={moveTipo === 'inversion_compra' ? 'Sin vehículo' : undefined}
                   />
                 ) : null}
               </div>
@@ -640,7 +638,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
                   <span className="min-w-0 flex-1">
                     <span className="font-semibold text-slate-800">{g.fecha}</span>
                     {' · '}
-                    <span className="tabular-nums">{formatCurrency(g.monto)}</span>
+                    <span className="tabular-nums">{formatRecordAmount(g.monto, g)}</span>
                     <br />
                     <span className="text-slate-700 line-clamp-1">{g.motivo}</span>
                     {(() => {
@@ -680,13 +678,19 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
       >
         <p className="text-sm text-slate-700 mb-3">
           Se clasificarán <strong>{selectedRows.length}</strong> gastos. Monto total:{' '}
-          <strong>{formatCurrency(selectedRows.reduce((s, g) => s + g.monto, 0))}</strong>.
+          <strong>{formatGlobalAmount(selectedRows.reduce((s, g) => s + g.monto, 0))}</strong>.
         </p>
         <div className="space-y-3">
           <Select label="Nueva categoría" options={categoriaOptions} value={bulkTipo} onChange={setBulkTipo} />
           <Select label="Subtipo" options={bulkSubtipoOpts} value={bulkSubtipo} onChange={setBulkSubtipo} />
-          {bulkNeedsVehicle ? (
-            <Select label="Vehículo (si aplica a todos)" options={vehicleOptions} value={bulkVehicleId} onChange={setBulkVehicleId} />
+          {bulkShowsVehicle ? (
+            <Select
+              label={bulkNeedsVehicle ? 'Vehículo (obligatorio)' : 'Vehículo (opcional)'}
+              options={vehicleOptions}
+              value={bulkVehicleId}
+              onChange={setBulkVehicleId}
+              placeholder={bulkNeedsVehicle ? undefined : 'Sin vehículo'}
+            />
           ) : null}
         </div>
       </Modal>

@@ -1,4 +1,5 @@
 import type { KPIData, VehicleRentability } from '../data/types';
+import type { GlobalAmountFormatter } from './displayAmount';
 import { formatCurrency } from './formatting';
 
 export interface MetasGuiaInput {
@@ -42,7 +43,10 @@ function ordenarPorMargenDesc(r: VehicleRentability[]) {
  * Guía en lenguaje natural armada solo con reglas sobre tus datos cargados.
  * No llama a APIs externas (listo para enlazar un LLM más adelante).
  */
-export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
+export function buildMetasGuia(
+  inp: MetasGuiaInput,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
+): MetasGuiaResult {
   const k = inp.kpis;
   const bloques: MetasGuiaBloque[] = [];
 
@@ -69,7 +73,7 @@ export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
   }
   if (k) {
     diagnostico.push(
-      `Margen neto acumulado (ingresos − gastos operativos + rebajes) en los datos cargados: ${formatCurrency(k.margenNeto)}${
+      `Margen neto acumulado (ingresos − gastos operativos + rebajes) en los datos cargados: ${formatAmount(k.margenNeto)}${
         margenPositivoEmpresa ? ' — la operación agrega caja a nivel conjunto.' : ' — conviene revisar gastos o precios antes de acelerar compras.'
       }`,
     );
@@ -82,7 +86,7 @@ export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
   }
   if (inp.margenMedianoVehiculo != null && inp.activos > 0) {
     diagnostico.push(
-      `El vehículo «de en medio» por rentabilidad histórica muestra ${formatCurrency(inp.margenMedianoVehiculo)} de margen: las nuevas unidades deberían apuntar al menos a no quedar por debajo del tercil inferior si quieres sostener la mediana.`,
+      `El vehículo «de en medio» por rentabilidad histórica muestra ${formatAmount(inp.margenMedianoVehiculo)} de margen: las nuevas unidades deberían apuntar al menos a no quedar por debajo del tercil inferior si quieres sostener la mediana.`,
     );
   }
   if (bajoCero > 0) {
@@ -117,7 +121,7 @@ export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
     );
     if (inp.capitalIncrementalEstimado != null && inp.medianaInversionPen != null) {
       planMeta.push(
-        `Orden de magnitud de caja para esas ${br} altas: ~${formatCurrency(inp.capitalIncrementalEstimado)} (${br} × mediana inversión ${formatCurrency(inp.medianaInversionPen)} por unidad en tabla de inversiones).`,
+        `Orden de magnitud de caja para esas ${br} altas: ~${formatAmount(inp.capitalIncrementalEstimado)} (${br} × mediana inversión ${formatAmount(inp.medianaInversionPen)} por unidad en tabla de inversiones).`,
       );
       planMeta.push(
         'Si financias parte del lote, divide por plazos y tasas en tu hoja de caja externa; esta app no modela deuda de compra.',
@@ -135,7 +139,7 @@ export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
     if (inp.ingresoMensualPromedioPorActivo != null && inp.activos > 0) {
       const extraMes = inp.ingresoMensualPromedioPorActivo * br;
       planMeta.push(
-        `Si las ${br} nuevas se parecieren al ritmo YTD medio por activo (${formatCurrency(inp.ingresoMensualPromedioPorActivo)}/mes/unidad), el ingreso incremental mensual estabilizado sería ~${formatCurrency(extraMes)}... cuando todas estén activas y facturando; hasta entonces será parcial.`,
+        `Si las ${br} nuevas se parecieren al ritmo YTD medio por activo (${formatAmount(inp.ingresoMensualPromedioPorActivo)}/mes/unidad), el ingreso incremental mensual estabilizado sería ~${formatAmount(extraMes)}... cuando todas estén activas y facturando; hasta entonces será parcial.`,
       );
     }
   }
@@ -164,13 +168,13 @@ export function buildMetasGuia(inp: MetasGuiaInput): MetasGuiaResult {
   if (mejores.length > 0) {
     tactico.push(
       `Referentes: ${mejores
-        .map((x) => `${x.vehicle.placa} (${formatCurrency(x.margen)})`)
+        .map((x) => `${x.vehicle.placa} (${formatAmount(x.margen)})`)
         .join(' · ')} — replica tipo de contrato, frecuencia de cobro y control de gasto.`,
     );
   }
   if (peores.length > 0) {
     tactico.push(
-      `Review urgente: ${peores.map((x) => `${x.vehicle.placa} (${formatCurrency(x.margen)})`).join(' · ')}.`,
+      `Review urgente: ${peores.map((x) => `${x.vehicle.placa} (${formatAmount(x.margen)})`).join(' · ')}.`,
     );
     tactico.push('Por cada uno: ¿sube tarifa, baja tiempo parado o baja gasto mecánico? Sin corregir, sumar más unidades empeora el promedio.');
   }

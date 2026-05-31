@@ -285,6 +285,32 @@ export function kmMantenimientoStatusLabel(status: KmMantenimientoStatus): strin
   }
 }
 
+/** Metadatos del flujo QA/E2E de kilometraje (solo lectura). */
+export function auditKmQaFlowMeta(): {
+  route: string;
+  table: string;
+  requiredFields: string[];
+  supportsUndo: boolean;
+  alertThresholdKm: number;
+  cleanupStrategy: string;
+} {
+  return {
+    route: '/operaciones/mantenimiento',
+    table: 'kilometrajes',
+    requiredFields: [
+      'vehicle_id (vehículo activo)',
+      'fecha',
+      'kilometraje (odómetro; requerido)',
+      'km_mantenimiento (opcional; Simple/Completo)',
+      'descripcion (notas; usar prefijo [QA_AUTO])',
+    ],
+    supportsUndo: true,
+    alertThresholdKm: KM_ALERTA_VARIACION_DESDE_MANT,
+    cleanupStrategy:
+      'DELETE API en kilometrajes con descripcion [QA_AUTO]; luego DELETE vehículos con placa QA*',
+  };
+}
+
 /** Detalle para alertas operativas (incluye fechas). */
 export function kmMantenimientoAlertDetail(r: KmDesdeUltimoMantenimientoResult): string {
   if (r.status === 'sin_mantenimiento') return r.warningMessage ?? 'Sin mantenimiento registrado';

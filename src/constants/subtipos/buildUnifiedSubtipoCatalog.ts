@@ -12,8 +12,10 @@ import {
   resolveCanonicalSubtipoValueFull,
 } from './subtipoCanonicalResolve';
 import { resolveLegacyAliasNormKey } from './legacySubtipoAliases';
+import { subtipoBelongsToCategoria } from './subtipoBelongsToCategoria';
 import { resolveCategoriaFinanzaParaSubtipos } from './subtipoCategoria';
 import { subtipoDedupeKey } from './subtipoDedupeKey';
+import { isVerboseDebug } from '../../config/verboseDebug';
 
 export interface UnifiedSubtipoOption {
   value: string;
@@ -34,36 +36,16 @@ export interface UnifiedSubtipoCatalogResult {
 
 /** Label preferido cuando varias filas Excel comparten el mismo valor canónico. */
 const PREFERRED_OFFICIAL_LABEL: Partial<Record<OfficialSubtipoCategoria, Record<string, string>>> = {
-  operativo_vehiculo: {
-    documentos: 'Documentos',
-    mantenimiento: 'Mantenimiento',
-    gps_chips: 'GPS equipos',
-    otros_operativo: 'Otros / especificar',
-    multas_tramites: 'Permisos varios',
-    accesorios: 'Accesorios',
-    revision_tecnica_taxi: 'REVISIÓN TÉCNICA TAXI',
-    revision_tecnica_particular: 'REVISIÓN TÉCNICA PARTICULAR',
-  },
-  operativo_flota_general: {
-    documentos: 'Documentos',
-    mantenimiento: 'Mantenimiento',
-    gps_chips: 'GPS equipos',
-    otros_operativo: 'Otros / especificar',
-    multas_tramites: 'Permisos varios',
-    accesorios: 'Accesorios',
-    revision_tecnica_taxi: 'REVISIÓN TÉCNICA TAXI',
-    revision_tecnica_particular: 'REVISIÓN TÉCNICA PARTICULAR',
-  },
-  financiero_prestamo: {
-    cuota: 'Cuota compra de activos',
-  },
-  representacion_interna: {
-    gasto_representacion: 'Gasto representación',
-  },
+  financiero_prestamo: {},
   administrativo_empresa: {
-    revision_tecnica_taxi: 'REVISIÓN TÉCNICA TAXI',
+    TAXI: 'Taxi',
   },
 };
+
+const OPERATIVO_CATEGORIAS = new Set<OfficialSubtipoCategoria>([
+  'operativo_vehiculo',
+  'operativo_flota_general',
+]);
 
 function resolveOfficialCategoria(tipoGasto: string): OfficialSubtipoCategoria | null {
   const cat = resolveCategoriaFinanzaParaSubtipos(tipoGasto);
@@ -145,13 +127,19 @@ export function buildUnifiedSubtipoCatalog(
     });
   }
 
-  const histSorted = [...historicos]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, 'es'));
+  const histSorted = OPERATIVO_CATEGORIAS.has(categoria)
+    ? []
+    : [...historicos]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'es'));
 
   let legacyCount = 0;
   for (const raw of histSorted) {
+    if (!subtipoBelongsToCategoria(categoria, raw)) {
+      duplicatesRemoved += 1;
+      continue;
+    }
     const aliasBefore = resolveLegacyAliasNormKey(raw);
     const canon = resolveCanonicalSubtipoValueFull(categoria, raw);
     if (aliasBefore) aliasesResolved += 1;
@@ -181,7 +169,7 @@ export function buildUnifiedSubtipoCatalog(
     },
   };
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && isVerboseDebug()) {
     console.log('[subtipos:catalog]', {
       categoria,
       ...result.stats,

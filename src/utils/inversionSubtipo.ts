@@ -3,6 +3,7 @@
  * Solo define catálogo visible, labels, aliases y normalización (no altera BD).
  */
 import { resolveLegacyAliasNormKey } from '../constants/subtipos/legacySubtipoAliases';
+import { subtipoDedupeKey } from '../constants/subtipos/subtipoDedupeKey';
 import { normKey } from './normKey';
 
 export type InversionSubtipoCanon =
@@ -15,7 +16,8 @@ export type InversionSubtipoCanon =
   | 'equipamiento_taller'
   | 'compra_software_gestion'
   | 'muebles_enseres'
-  | 'equipamiento_oficina';
+  | 'equipamiento_oficina'
+  | 'otros_especificar';
 
 export interface InversionSubtipoOption {
   value: InversionSubtipoCanon;
@@ -34,6 +36,7 @@ export const INVERSION_SUBTIPO_OPTIONS: InversionSubtipoOption[] = [
   { value: 'compra_software_gestion', label: 'Compra de software de gestión', icon: '📱' },
   { value: 'muebles_enseres', label: 'Muebles y enseres', icon: '🪑' },
   { value: 'equipamiento_oficina', label: 'Equipamiento oficina', icon: '🖨️' },
+  { value: 'otros_especificar', label: 'Otros / especificar', icon: '📋' },
 ];
 
 export const INVERSION_SUBTIPO_LABELS: Record<InversionSubtipoCanon, string> = {
@@ -47,6 +50,7 @@ export const INVERSION_SUBTIPO_LABELS: Record<InversionSubtipoCanon, string> = {
   compra_software_gestion: 'Compra de software de gestión',
   muebles_enseres: 'Muebles y enseres',
   equipamiento_oficina: 'Equipamiento oficina',
+  otros_especificar: 'Otros / especificar',
 };
 
 const OFFICIAL_SET = new Set<string>(INVERSION_SUBTIPO_OPTIONS.map((o) => o.value));
@@ -75,6 +79,7 @@ export const FACT_DEFAULT_BY_INVERSION_CANON: Record<InversionSubtipoCanon, { ti
   compra_software_gestion: { tipo: 'COMPRA ACTIVO', subTipo: 'MAQUINARIA' },
   muebles_enseres: { tipo: 'COMPRA ACTIVO', subTipo: 'OFICINA' },
   equipamiento_oficina: { tipo: 'COMPRA ACTIVO', subTipo: 'OFICINA' },
+  otros_especificar: { tipo: 'COMPRA ACTIVO', subTipo: 'OTROS' },
 };
 
 /** Alias / legacy → canónico oficial (dedupe en selects; no reescribe BD). */
@@ -136,6 +141,9 @@ const LEGACY_TO_CANON: Record<string, InversionSubtipoCanon> = {
   equipamiento_oficina: 'equipamiento_oficina',
   equipamiento_oficinas: 'equipamiento_oficina',
   impresora: 'equipamiento_oficina',
+  otros_especificar: 'otros_especificar',
+  otros: 'otros_especificar',
+  otros_especificar_inversion: 'otros_especificar',
 };
 
 function invNormKey(s: string): string {
@@ -156,6 +164,9 @@ export function normalizeInversionSubtipo(raw: string): InversionSubtipoCanon | 
   if (!trimmed) return 'adquisicion_vehiculo';
   const globalAlias = resolveLegacyAliasNormKey(trimmed);
   const nk = invNormKey(globalAlias ?? trimmed);
+  if (subtipoDedupeKey(trimmed) === subtipoDedupeKey('otros_especificar')) {
+    return 'otros_especificar';
+  }
   if (OFFICIAL_SET.has(nk)) return nk as InversionSubtipoCanon;
   if (nk === 'inversion_compra') return 'adquisicion_vehiculo';
   const mapped = LEGACY_TO_CANON[nk];
@@ -200,10 +211,9 @@ export function getDefaultFactTipoSubtipoForInversionCanon(
   return FACT_DEFAULT_BY_INVERSION_CANON[canon];
 }
 
-/** Solo adquisición de vehículo (y aliases legacy vehiculares) requieren N° unidad. */
-export function inversionSubtipoRequiereVehiculo(canon: InversionSubtipoCanon | string): boolean {
-  const norm = normalizeInversionSubtipo(canon);
-  return norm === 'adquisicion_vehiculo';
+/** Ningún subtipo de inversión exige N° unidad (adquisición puede ser parcial o sin asignar). */
+export function inversionSubtipoRequiereVehiculo(_canon: InversionSubtipoCanon | string): boolean {
+  return false;
 }
 
 /** Subtipos almacenados que se consideran inversión vehicular (excluir de «no vehicular»). */

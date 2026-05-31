@@ -2,7 +2,7 @@ import React from 'react';
 import { Award, Car } from 'lucide-react';
 import Card from '../Common/Card';
 import { VehicleRentability } from '../../data/types';
-import { formatCurrency } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 interface TopVehiclesProps {
   vehicles: VehicleRentability[];
@@ -17,6 +17,7 @@ const rankColors = [
 ];
 
 const TopVehicles: React.FC<TopVehiclesProps> = ({ vehicles }) => {
+  const { formatGlobalAmount } = useAmountDisplay();
   const top5 = vehicles.slice(0, 5);
 
   return (
@@ -51,7 +52,7 @@ const TopVehicles: React.FC<TopVehiclesProps> = ({ vehicles }) => {
                       </span>
                     </div>
                     <span className={`text-sm font-bold flex-shrink-0 ml-2 ${item.margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {formatCurrency(item.margen)}
+                      {formatGlobalAmount(item.margen)}
                     </span>
                   </div>
                   <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">

@@ -1,273 +1,352 @@
 import { normKey } from './normKey';
+import { subtipoDedupeKey } from '../constants/subtipos/subtipoDedupeKey';
+import { resolveLegacyAliasNormKey } from '../constants/subtipos/legacySubtipoAliases';
+import {
+  OFFICIAL_OPERATIVO_SUBTIPO_VALUES,
+  getOfficialOperativoSubtipoEntries,
+} from '../constants/subtipos/operativoOficialCatalog';
 import { normalizeTramitesMovilidadSubtipo } from './tramitesMovilidadSubtipo';
+import { isVerboseDebug } from '../config/verboseDebug';
 
-export const OPERATIVO_SUBTIPO_OPTIONS: readonly { value: string; label: string }[] = [
-  { value: 'motor', label: 'Motor' },
-  { value: 'bateria', label: 'Batería' },
-  { value: 'gps_chips', label: 'GPS / chips' },
-  { value: 'combustible', label: 'Combustible' },
-  { value: 'documentos', label: 'Documentos / SOAT' },
-  { value: 'multas_tramites', label: 'Multas y trámites' },
-  { value: 'movilidad', label: 'Movilidad' },
-  { value: 'multas_callao', label: 'Multas Callao' },
-  { value: 'atu', label: 'ATU' },
-  { value: 'sat', label: 'SAT' },
-  { value: 'sunarp', label: 'SUNARP' },
-  { value: 'sunat', label: 'SUNAT' },
-  { value: 'sutran', label: 'SUTRAN' },
-  { value: 'revision_tecnica_taxi', label: 'REVISIÓN TÉCNICA TAXI' },
-  { value: 'revision_tecnica_particular', label: 'REVISIÓN TÉCNICA PARTICULAR' },
-  { value: 'mantenimiento', label: 'Mantenimiento' },
-  { value: 'accesorios', label: 'Accesorios' },
-  { value: 'arreglo_linea_escape', label: 'Arreglo línea de escape' },
-  { value: 'autopartes', label: 'Autopartes' },
-  { value: 'llantas', label: 'Llantas' },
-  { value: 'frenos', label: 'Frenos' },
-  { value: 'suspension', label: 'Suspensión' },
-  { value: 'electricidad', label: 'Electricidad' },
-  { value: 'gnv', label: 'GNV' },
-  { value: 'aire_acondicionado', label: 'Aire acondicionado' },
-  { value: 'interior', label: 'Interior' },
-  { value: 'impuesto_vehicular', label: 'Impuesto vehicular' },
-  { value: 'planchado_pintura', label: 'Planchado / pintura' },
-  { value: 'otros_operativo', label: 'Otros operativo' },
-] as const;
+export const OPERATIVO_SUBTIPO_OPTIONS = getOfficialOperativoSubtipoEntries();
 
-const CANON_SET = new Set(OPERATIVO_SUBTIPO_OPTIONS.map((o) => o.value));
+const OFFICIAL_SET = new Set<string>(OFFICIAL_OPERATIVO_SUBTIPO_VALUES);
 
-/** Tipo Fact + subtipo Fact por defecto para KPI / importación (metadata operativa). */
-const FACT_DEFAULT_BY_CANON: Record<string, { tipo: string; subTipo: string }> = {
-  motor: { tipo: 'MECÁNICOS', subTipo: 'ARREGLO MOTOR' },
-  bateria: { tipo: 'MECÁNICOS', subTipo: 'Batería' },
-  gps_chips: { tipo: 'ACCESORIOS', subTipo: 'CHIPS TELEFONÍA' },
-  combustible: { tipo: 'MECÁNICOS', subTipo: 'COMBUSTIBLE' },
-  documentos: { tipo: 'DOCUMENTOS', subTipo: 'SOAT' },
-  multas_tramites: { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
-  movilidad: { tipo: 'OTROS GASTOS', subTipo: 'VIATICOS' },
-  multas_callao: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'PAPELETAS /MULTAS' },
-  atu: { tipo: 'SEGUROS /DOCUMENTOS', subTipo: 'AUTORIZACIÓN ATU' },
-  sat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SAT' },
-  sunarp: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNARP' },
-  sunat: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNAT' },
-  sutran: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUTRAN' },
-  revision_tecnica_taxi: { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA TAXI' },
-  revision_tecnica_particular: { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA PARTICULAR' },
-  mantenimiento: { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
-  accesorios: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
-  arreglo_linea_escape: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
-  autopartes: { tipo: 'ACCESORIOS', subTipo: 'AUTOPARTE' },
-  llantas: { tipo: 'ACCESORIOS', subTipo: 'LLANTAS' },
-  frenos: { tipo: 'MECÁNICOS', subTipo: 'FRENOS' },
-  suspension: { tipo: 'MECÁNICOS', subTipo: 'DIRECCIÓN Y SUSPENSIÓN' },
-  electricidad: { tipo: 'MECÁNICOS', subTipo: 'ARREGLO ELECTRINICO' },
-  gnv: { tipo: 'GNV', subTipo: 'MANTENIKIENTO' },
-  aire_acondicionado: { tipo: 'MECÁNICOS', subTipo: 'AIRE CONDICIONADO' },
-  interior: { tipo: 'IMPLEMENTACIÓN', subTipo: 'FORROS Y FUNDAS' },
-  impuesto_vehicular: { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
-  planchado_pintura: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
-  otros_operativo: { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
+function devLogOperativoNormalize(input: string, norm: string, resolved: string | null): void {
+  try {
+    if (import.meta.env?.DEV && isVerboseDebug()) {
+      console.log('[operativo:normalize]', { input, norm, resolved });
+    }
+  } catch {
+    /* fuera de Vite (tests node) */
+  }
+}
+
+const NORMALIZE_CACHE_MAX = 8_000;
+const normalizeOperativoCache = new Map<string, string | null>();
+
+/** Normalización con caché por string (filtros/historial masivo). */
+export function normalizeOperativoSubtipoCached(raw: string | null | undefined): string | null {
+  const s0 = (raw ?? '').trim();
+  if (!s0) return null;
+  if (normalizeOperativoCache.has(s0)) return normalizeOperativoCache.get(s0)!;
+  const r = normalizeOperativoSubtipo(s0);
+  if (normalizeOperativoCache.size >= NORMALIZE_CACHE_MAX) normalizeOperativoCache.clear();
+  normalizeOperativoCache.set(s0, r);
+  return r;
+}
+const OFFICIAL_DEDUPE = new Map(
+  OFFICIAL_OPERATIVO_SUBTIPO_VALUES.map((v) => [subtipoDedupeKey(v), v]),
+);
+
+/** Tipo Fact + subtipo Fact por subtipo oficial (metadata / KPI). */
+const FACT_DEFAULT_BY_OFFICIAL: Record<string, { tipo: string; subTipo: string }> = {
+  AFOCAT: { tipo: 'DOCUMENTOS', subTipo: 'AFOCAT' },
+  ATU: { tipo: 'SEGUROS /DOCUMENTOS', subTipo: 'AUTORIZACIÓN ATU' },
+  'GARANTÍAS': { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
+  MUNICIPALES: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'PAPELETAS /MULTAS' },
+  OFICINA: { tipo: 'OTROS GASTOS', subTipo: 'OTROS /ESPECIFICAR' },
+  'OTROS / ESPECIFICAR': { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
+  'PERMISOS VARIOS': { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
+  'FARO / ARREGLOS': { tipo: 'ACCESORIOS', subTipo: 'AUTOPARTE' },
+  'REVISIÓN TÉCNICA PARTICULAR': { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA PARTICULAR' },
+  'REVISIÓN TÉCNICA TAXI': { tipo: 'DOCUMENTOS', subTipo: 'REVISIÓN TÉCNICA TAXI' },
+  SAT: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SAT' },
+  SEGUROS: { tipo: 'DOCUMENTOS', subTipo: 'CIA DE SEGUROS' },
+  SOAT: { tipo: 'DOCUMENTOS', subTipo: 'SOAT' },
+  SUNARP: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNARP' },
+  SUNAT: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUNAT' },
+  SUTRAN: { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'SUTRAN' },
+  'TAXI O DELIVERY': { tipo: 'OTROS GASTOS', subTipo: 'VIATICOS' },
+  'TRABAJOS EVENTUALES': { tipo: 'GASTOS FIJOS', subTipo: 'TRABAJOS EVENTUALES' },
+  'TRÁMITES NOTARIALES': { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'TRÁMITES NOTARIALES' },
+  'ÚTILES DE OFICINA': { tipo: 'OTROS GASTOS', subTipo: 'OTROS /ESPECIFICAR' },
+  ACCESORIOS: { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
+  'AIRE ACONDICIONADO': { tipo: 'MECÁNICOS', subTipo: 'AIRE CONDICIONADO' },
+  BATERÍA: { tipo: 'MECÁNICOS', subTipo: 'Batería' },
+  COMBUSTIBLE: { tipo: 'MECÁNICOS', subTipo: 'COMBUSTIBLE' },
+  DOCUMENTOS: { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
+  ELECTRICISTA: { tipo: 'MECÁNICOS', subTipo: 'ARREGLO ELECTRINICO' },
+  FRENOS: { tipo: 'MECÁNICOS', subTipo: 'FRENOS' },
+  'GNV TALLER': { tipo: 'GNV', subTipo: 'MANTENIKIENTO' },
+  'GPS EQUIPOS': { tipo: 'ACCESORIOS', subTipo: 'CHIPS TELEFONÍA' },
+  'IMPUESTO VEHICULAR': { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
+  'FUNDAS O FORROS AUTO': { tipo: 'IMPLEMENTACIÓN', subTipo: 'FORROS Y FUNDAS' },
+  'MANTENIMIENTO SIMPLE': { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO SIMPLE' },
+  'MANTENIMIENTO COMPLETO': { tipo: 'MECÁNICOS', subTipo: 'MANTENIMIENTO COMPLETO' },
+  'MOTOR TALLER': { tipo: 'MECÁNICOS', subTipo: 'ARREGLO MOTOR' },
+  SUSPENSIÓN: { tipo: 'MECÁNICOS', subTipo: 'DIRECCIÓN Y SUSPENSIÓN' },
+  LLANTAS: { tipo: 'ACCESORIOS', subTipo: 'LLANTAS' },
+  'PLANCHADO / PINTURA': { tipo: 'MECÁNICOS', subTipo: 'OTROS /ESPECIFICAR' },
+  'GPS RECARGA CHIPS': { tipo: 'ACCESORIOS', subTipo: 'CHIPS TELEFONÍA' },
+  'CANASTA O REGALO': { tipo: 'ACCESORIOS', subTipo: 'OTROS /ESPECIFICAR' },
+  'MULTA CALLE': { tipo: 'TRIBUTARIOS / NOTARIALES', subTipo: 'PAPELETAS /MULTAS' },
+  'DEVOLUCIÓN GARANTÍA': { tipo: 'DOCUMENTOS', subTipo: 'PERMISOS VARIOS' },
 };
 
-/** normKey(Fact subtipo string) → canónico */
-const NORM_FACT_SUBTIPO_TO_CANON: Record<string, string> = (() => {
+/** Códigos históricos snake_case / aliases → subtipo oficial dueño. */
+const LEGACY_TO_OFFICIAL: Record<string, string> = {
+  accesorios: 'ACCESORIOS',
+  aire_acondicionado: 'AIRE ACONDICIONADO',
+  bateria: 'BATERÍA',
+  combustible: 'COMBUSTIBLE',
+  documentos: 'DOCUMENTOS',
+  electricidad: 'ELECTRICISTA',
+  frenos: 'FRENOS',
+  gnv: 'GNV TALLER',
+  gps_chips: 'GPS RECARGA CHIPS',
+  llantas: 'LLANTAS',
+  mantenimiento: 'MANTENIMIENTO SIMPLE',
+  mantenimiento_simple: 'MANTENIMIENTO SIMPLE',
+  mantenimiento_completo: 'MANTENIMIENTO COMPLETO',
+  motor: 'MOTOR TALLER',
+  motor_taller: 'MOTOR TALLER',
+  multas_tramites: 'MULTA CALLE',
+  multas_callao: 'MULTA CALLE',
+  multa_calle: 'MULTA CALLE',
+  multa_callao: 'MULTA CALLE',
+  planchado_pintura: 'PLANCHADO / PINTURA',
+  suspension: 'SUSPENSIÓN',
+  interior: 'FUNDAS O FORROS AUTO',
+  movilidad: 'TAXI O DELIVERY',
+  autopartes: 'FARO / ARREGLOS',
+  arreglo_linea_escape: 'FARO / ARREGLOS',
+  otros_operativo: 'OTROS / ESPECIFICAR',
+  impuesto_vehicular: 'IMPUESTO VEHICULAR',
+  atu: 'ATU',
+  sat: 'SAT',
+  sunarp: 'SUNARP',
+  suanrp: 'SUNARP',
+  sunat: 'SUNAT',
+  sutran: 'SUTRAN',
+  revision_tecnica_taxi: 'REVISIÓN TÉCNICA TAXI',
+  revision_tecnica_particular: 'REVISIÓN TÉCNICA PARTICULAR',
+  taxi: 'REVISIÓN TÉCNICA TAXI',
+  delivery: 'TAXI O DELIVERY',
+  taxi_o_delivery: 'TAXI O DELIVERY',
+  oficina: 'OFICINA',
+  oficina_documentos: 'OFICINA',
+  utiles_de_oficina: 'ÚTILES DE OFICINA',
+  utilies_de_oficina: 'ÚTILES DE OFICINA',
+  permisos: 'PERMISOS VARIOS',
+  permisos_varios: 'PERMISOS VARIOS',
+  seguro: 'SEGUROS',
+  seguros: 'SEGUROS',
+  garantia: 'GARANTÍAS',
+  garantias: 'GARANTÍAS',
+  faro: 'FARO / ARREGLOS',
+  arreglo: 'FARO / ARREGLOS',
+  arreglos: 'FARO / ARREGLOS',
+  gps: 'GPS EQUIPOS',
+  gps_equipos: 'GPS EQUIPOS',
+  gps_equipo: 'GPS EQUIPOS',
+  gps_recarga_chips: 'GPS RECARGA CHIPS',
+  canasta: 'CANASTA O REGALO',
+  regalo: 'CANASTA O REGALO',
+  devolucion_garantia: 'DEVOLUCIÓN GARANTÍA',
+  devolucion_de_garantia: 'DEVOLUCIÓN GARANTÍA',
+  soat: 'SOAT',
+  afocat: 'AFOCAT',
+  municipal: 'MUNICIPALES',
+  municipales: 'MUNICIPALES',
+  tramites_notariales: 'TRÁMITES NOTARIALES',
+  trabajos_eventuales: 'TRABAJOS EVENTUALES',
+  tributario: 'MULTA CALLE',
+  multas_permisos_tramites: 'MULTA CALLE',
+};
+
+const NORM_FACT_SUBTIPO_TO_OFFICIAL: Record<string, string> = (() => {
   const m: Record<string, string> = {};
-  const add = (factSub: string, canon: string) => {
-    m[normKey(factSub)] = canon;
+  const add = (factSub: string, official: string) => {
+    m[normKey(factSub)] = official;
   };
-  add('ARREGLO MOTOR', 'motor');
-  add('MOTOR', 'motor');
-  add('Batería', 'bateria');
-  add('CHIPS TELEFONÍA', 'gps_chips');
-  add('GPS', 'gps_chips');
-  add('COMBUSTIBLE', 'combustible');
-  add('GASOLINA', 'combustible');
-  add('GLP', 'combustible');
-  add('GNV', 'gnv');
-  add('SOAT', 'documentos');
-  add('AFOCAT', 'documentos');
-  add('RT-PARTICULAR', 'revision_tecnica_particular');
-  add('RT PARTICULAR', 'revision_tecnica_particular');
-  add('RT-TAXI', 'revision_tecnica_taxi');
-  add('RT TAXI', 'revision_tecnica_taxi');
-  add('PERMISOS VARIOS', 'multas_tramites');
-  add('VIGENCIA DE PODER', 'documentos');
-  add('MANTENIMIENTO COMPLETO', 'mantenimiento');
-  add('MANTENIMIENTO SIMPLE', 'mantenimiento');
-  add('MANTENIKIENTO', 'mantenimiento');
-  add('ALINEAMIENTO Y BALANCEO', 'mantenimiento');
-  add('LLANTAS', 'llantas');
-  add('FRENOS', 'frenos');
-  add('DIRECCIÓN Y SUSPENSIÓN', 'suspension');
-  add('ARREGLO ELECTRINICO', 'electricidad');
-  add('AIRE CONDICIONADO', 'aire_acondicionado');
-  add('BOTIQUÍN', 'accesorios');
-  add('EQUIPOS DE SONIDO', 'accesorios');
-  add('EXTINTORES', 'accesorios');
-  add('RECARGAS', 'accesorios');
-  add('AUTOPARTE', 'autopartes');
-  add('AUTOPARTES', 'autopartes');
-  add('REPUESTOS', 'autopartes');
-  add('REPUESTO', 'autopartes');
-  add('FORROS Y FUNDAS', 'interior');
-  add('OTROS /ESPECIFICAR', 'otros_operativo');
-  add('CIA DE SEGUROS', 'documentos');
-  add('REVISIÓN TÉCNICA PARTICULAR', 'revision_tecnica_particular');
-  add('REVISION TECNICA PARTICULAR', 'revision_tecnica_particular');
-  add('REVISIÓN TÉCNICA TAXI', 'revision_tecnica_taxi');
-  add('REVISION TECNICA TAXI', 'revision_tecnica_taxi');
-  add('PAPELETAS /MULTAS', 'multas_tramites');
-  add('AUTORIZACIÓN ATU', 'atu');
-  add('PERMISO POLARIZADO', 'multas_tramites');
-  add('SAT', 'sat');
-  add('SUNARP', 'sunarp');
-  add('SUNAT', 'sunat');
-  add('SUTRAN', 'sutran');
-  add('TAXI', 'revision_tecnica_taxi');
-  add('VIATICOS', 'movilidad');
-  add('DELIVERY', 'movilidad');
+  for (const [official, fact] of Object.entries(FACT_DEFAULT_BY_OFFICIAL)) {
+    add(fact.subTipo, official);
+    add(fact.tipo, official);
+  }
+  add('ARREGLO MOTOR', 'MOTOR TALLER');
+  add('MOTOR', 'MOTOR TALLER');
+  add('Batería', 'BATERÍA');
+  add('CHIPS TELEFONÍA', 'GPS RECARGA CHIPS');
+  add('GPS', 'GPS EQUIPOS');
+  add('GASOLINA', 'COMBUSTIBLE');
+  add('GLP', 'COMBUSTIBLE');
+  add('GNV', 'GNV TALLER');
+  add('AFOCAT', 'AFOCAT');
+  add('RT-PARTICULAR', 'REVISIÓN TÉCNICA PARTICULAR');
+  add('RT-TAXI', 'REVISIÓN TÉCNICA TAXI');
+  add('MANTENIKIENTO', 'GNV TALLER');
+  add('ALINEAMIENTO Y BALANCEO', 'MANTENIMIENTO SIMPLE');
+  add('AUTOPARTE', 'FARO / ARREGLOS');
+  add('AUTOPARTES', 'FARO / ARREGLOS');
+  add('REPUESTOS', 'FARO / ARREGLOS');
+  add('FORROS Y FUNDAS', 'FUNDAS O FORROS AUTO');
+  add('VIATICOS', 'TAXI O DELIVERY');
+  add('DELIVERY', 'TAXI O DELIVERY');
+  add('CIA DE SEGUROS', 'SEGUROS');
+  add('AUTORIZACIÓN ATU', 'ATU');
+  add('PAPELETAS /MULTAS', 'MULTA CALLE');
   return m;
 })();
+
+/** Resuelve un texto (alias o label) a subtipo oficial sin recursión. */
+function resolveOfficialFromAliasTarget(target: string): string | null {
+  const t = target.trim();
+  if (!t) return null;
+  if (OFFICIAL_SET.has(t)) return t;
+  const dk = subtipoDedupeKey(t);
+  if (OFFICIAL_DEDUPE.has(dk)) return OFFICIAL_DEDUPE.get(dk)!;
+  const nk = normKey(t);
+  const legacy = LEGACY_TO_OFFICIAL[nk] ?? LEGACY_TO_OFFICIAL[nk.replace(/\s+/g, '_')];
+  if (legacy && OFFICIAL_SET.has(legacy)) return legacy;
+  return NORM_FACT_SUBTIPO_TO_OFFICIAL[nk] ?? null;
+}
+
+function resolveOfficialByNormKey(nk: string, visited = new Set<string>()): string | null {
+  if (visited.has(nk)) return null;
+  visited.add(nk);
+
+  if (OFFICIAL_DEDUPE.has(nk)) return OFFICIAL_DEDUPE.get(nk)!;
+  const legacy = LEGACY_TO_OFFICIAL[nk] ?? LEGACY_TO_OFFICIAL[nk.replace(/\s+/g, '_')];
+  if (legacy && OFFICIAL_SET.has(legacy)) return legacy;
+
+  const globalAlias = resolveLegacyAliasNormKey(nk);
+  if (globalAlias) {
+    if (OFFICIAL_SET.has(globalAlias)) return globalAlias;
+    const aliasNk = normKey(globalAlias);
+    if (aliasNk === nk) {
+      const dk = subtipoDedupeKey(globalAlias);
+      if (OFFICIAL_DEDUPE.has(dk)) return OFFICIAL_DEDUPE.get(dk)!;
+    }
+    const resolved = resolveOfficialFromAliasTarget(globalAlias);
+    if (resolved) return resolved;
+    const chained =
+      resolveOfficialByNormKey(aliasNk, visited)
+      ?? resolveOfficialByNormKey(subtipoDedupeKey(globalAlias), visited);
+    if (chained) return chained;
+  }
+
+  return NORM_FACT_SUBTIPO_TO_OFFICIAL[nk] ?? null;
+}
 
 function squash(s: string): string {
   return normKey(s).replace(/[\s\-_/]+/g, '_').replace(/_+/g, '_');
 }
 
 /**
- * Devuelve el código canónico si el texto encaja en el universo operativo; si no, null.
- * No agrupa “desconocido” aquí (eso lo hace `resolveOperativoSubtipoGastoCanon` en UI).
+ * Devuelve el subtipo oficial del dueño si hay mapping; si no, null (requiere revisión).
  */
 export function normalizeOperativoSubtipo(raw: string | null | undefined): string | null {
   const s0 = (raw ?? '').trim();
   if (!s0) return null;
+
+  if (OFFICIAL_SET.has(s0)) {
+    devLogOperativoNormalize(s0, normKey(s0), s0);
+    return s0;
+  }
+  const dk = subtipoDedupeKey(s0);
+  if (OFFICIAL_DEDUPE.has(dk)) {
+    const resolved = OFFICIAL_DEDUPE.get(dk)!;
+    devLogOperativoNormalize(s0, normKey(s0), resolved);
+    return resolved;
+  }
+
   const squ = squash(s0);
-  if (CANON_SET.has(squ)) return squ;
-  const k = normKey(s0);
-  if (CANON_SET.has(k)) return k;
+  const fromSqu = resolveOfficialByNormKey(squ);
+  if (fromSqu) {
+    devLogOperativoNormalize(s0, squ, fromSqu);
+    return fromSqu;
+  }
+
+  const nk = normKey(s0);
+  const fromNk = resolveOfficialByNormKey(nk);
+  if (fromNk) {
+    devLogOperativoNormalize(s0, nk, fromNk);
+    return fromNk;
+  }
 
   const tram = normalizeTramitesMovilidadSubtipo(s0);
-  if (tram === 'taxi') return 'revision_tecnica_taxi';
-  if (tram) return tram;
-
-  const nkEarly = normKey(s0.replace(/_/g, ' '));
-  if (
-    nkEarly.includes('revision tecnica taxi')
-    || nkEarly.includes('rt taxi')
-    || nkEarly.includes('rtv taxi')
-    || nkEarly === 'taxi'
-    || nkEarly.includes('detaxi')
-  ) {
-    return 'revision_tecnica_taxi';
-  }
-  if (
-    nkEarly.includes('revision tecnica particular')
-    || nkEarly.includes('rt particular')
-    || nkEarly.includes('rtv particular')
-  ) {
-    return 'revision_tecnica_particular';
+  if (tram === 'taxi') return 'REVISIÓN TÉCNICA TAXI';
+  if (tram) {
+    const mapped = LEGACY_TO_OFFICIAL[tram] ?? resolveOfficialByNormKey(normKey(tram));
+    if (mapped) return mapped;
   }
 
-  const fromFact = NORM_FACT_SUBTIPO_TO_CANON[k];
-  if (fromFact) return fromFact;
+  const nkSpaced = normKey(s0.replace(/_/g, ' '));
+  if (nkSpaced.includes('revision tecnica taxi') || nkSpaced.includes('rt taxi') || nkSpaced === 'taxi') {
+    return 'REVISIÓN TÉCNICA TAXI';
+  }
+  if (nkSpaced.includes('revision tecnica particular') || nkSpaced.includes('rt particular')) {
+    return 'REVISIÓN TÉCNICA PARTICULAR';
+  }
+  if (nkSpaced.includes('bater')) return 'BATERÍA';
+  if (nkSpaced.includes('chip') || (nkSpaced.includes('gps') && nkSpaced.includes('recarga'))) {
+    return 'GPS RECARGA CHIPS';
+  }
+  if (nkSpaced.includes('gps')) return 'GPS EQUIPOS';
+  if (nkSpaced.includes('combust') || nkSpaced.includes('gasolin') || nkSpaced.includes('diesel')) {
+    return 'COMBUSTIBLE';
+  }
+  if (nkSpaced.includes('soat') || nkSpaced === 'afocat') return nkSpaced.includes('soat') ? 'SOAT' : 'AFOCAT';
+  if (nkSpaced.includes('mantenimiento completo')) return 'MANTENIMIENTO COMPLETO';
+  if (nkSpaced.includes('manten')) return 'MANTENIMIENTO SIMPLE';
+  if (nkSpaced.includes('llant')) return 'LLANTAS';
+  if (nkSpaced.includes('fren')) return 'FRENOS';
+  if (nkSpaced.includes('suspens') || nkSpaced.includes('direccion')) return 'SUSPENSIÓN';
+  if (nkSpaced.includes('electr')) return 'ELECTRICISTA';
+  if (nkSpaced.includes('gnv')) return 'GNV TALLER';
+  if (nkSpaced.includes('aire') && nkSpaced.includes('acond')) return 'AIRE ACONDICIONADO';
+  if (nkSpaced.includes('motor')) return 'MOTOR TALLER';
+  if (nkSpaced.includes('impuesto') && nkSpaced.includes('vehicular')) return 'IMPUESTO VEHICULAR';
+  if (nkSpaced.includes('planchad') || nkSpaced.includes('pintur')) return 'PLANCHADO / PINTURA';
+  if (nkSpaced.includes('faro') || nkSpaced.includes('autoparte') || nkSpaced.includes('repuesto')) {
+    return 'FARO / ARREGLOS';
+  }
+  if (nkSpaced.includes('forro') || nkSpaced.includes('funda')) return 'FUNDAS O FORROS AUTO';
+  if (nkSpaced.includes('accesor')) return 'ACCESORIOS';
+  if (nkSpaced.includes('multa') || nkSpaced.includes('papeleta')) return 'MULTA CALLE';
+  if (nkSpaced.includes('notarial') || nkSpaced.includes('tramite')) return 'TRÁMITES NOTARIALES';
+  if (nkSpaced.includes('delivery') || nkSpaced.includes('viatico')) return 'TAXI O DELIVERY';
+  if (nkSpaced.includes('sunat')) return 'SUNAT';
+  if (nkSpaced.includes('sunarp') || nkSpaced.includes('suanrp')) return 'SUNARP';
+  if (nkSpaced.includes('sutran')) return 'SUTRAN';
+  if (nkSpaced.includes('seguro')) return 'SEGUROS';
+  if (nkSpaced.includes('garant')) return 'GARANTÍAS';
+  if (nkSpaced.includes('oficina') || nkSpaced.includes('papeler') || nkSpaced.includes('utiles')) {
+    const resolved =
+      nkSpaced.includes('utiles') || nkSpaced.includes('papeler') ? 'ÚTILES DE OFICINA' : 'OFICINA';
+    devLogOperativoNormalize(s0, nkSpaced, resolved);
+    return resolved;
+  }
 
-  const nk = normKey(s0.replace(/_/g, ' '));
-  if (nk.includes('bater')) return 'bateria';
-  if (nk.includes('chip') || nk.includes('gps') || nk === 'chips') return 'gps_chips';
-  if (nk.includes('combust') || nk.includes('gasolin') || nk.includes('diesel') || nk.includes('abastec')) {
-    return 'combustible';
-  }
-  /* Multas, papeletas, SUNAT/SAT, trámites y permisos (antes de documentos SOAT e impuesto vehicular). */
-  if (
-    squ === 'multas_permisos_tramites'
-    || nk.includes('multas_permisos_tramites')
-    || nk.includes('multas permisos tramites')
-    || nk.includes('documentos vehiculares')
-    || nk.includes('tramites vehiculares')
-    || nk.includes('tramite vehicular')
-    || nk.includes('tramites legales')
-    || nk.includes('tramite legal')
-    || nk.includes('permiso municipal')
-    || nk.includes('permisos municipales')
-    || (nk.includes('multa') && !nk.includes('callao'))
-    || nk.includes('papeleta')
-    || nk.includes('brevete')
-    || nk === 'licencia'
-    || nk.startsWith('licencia ')
-    || nk.includes(' licencia ')
-    || nk.includes('licencia de conducir')
-    || (nk.includes('permiso') && nk.includes('vehicular'))
-    || (nk.includes('tramite') && nk.includes('vehicular'))
-    || nk === 'permisos'
-    || nk === 'permiso'
-    || nk === 'tramites'
-    || nk === 'tramite'
-    || (nk.includes('tramite') && nk.includes('legal'))
-  ) {
-    return 'multas_tramites';
-  }
-  if (nk.includes('soat') || nk.includes('afocat')) {
-    return 'documentos';
-  }
-  if (nk.includes('manten')) return 'mantenimiento';
-  if (nk.includes('llant')) return 'llantas';
-  if (nk.includes('fren')) return 'frenos';
-  if (nk.includes('suspens') || nk.includes('direccion')) return 'suspension';
-  if (nk.includes('electr')) return 'electricidad';
-  if (nk.includes('gnv') || nk.includes('glp')) return nk.includes('gnv') ? 'gnv' : 'combustible';
-  if (nk.includes('aire') && nk.includes('acond')) return 'aire_acondicionado';
-  if (nk.includes('motor') || nk.includes('arreglo motor')) return 'motor';
-  if (nk.includes('impuesto') || nk.includes('vehicular')) return 'impuesto_vehicular';
-  if (nk.includes('planchad') || nk.includes('pintur')) return 'planchado_pintura';
-  if (
-    nk.includes('linea escape')
-    || nk.includes('linea de escape')
-    || nk.includes('tubo escape')
-    || nk.includes('silenciador')
-    || nk.includes('mofle')
-    || (nk.includes('escape') && !nk.includes('escapar'))
-  ) {
-    return 'arreglo_linea_escape';
-  }
-  if (
-    nk.includes('autoparte')
-    || nk.includes('repuesto')
-    || nk.includes('pieza')
-    || nk.includes('faro')
-    || nk.includes('parachoque')
-    || nk.includes('espejo')
-  ) {
-    return 'autopartes';
-  }
-  if (nk.includes('forro') || nk.includes('funda') || nk.includes('interior')) return 'interior';
-  if (nk.includes('accesor') || nk.includes('sonido')) {
-    return 'accesorios';
-  }
-  if (nk.includes('seguro') && nk.includes('document')) return 'documentos';
-
-  const legacy = normKey(s0);
-  if (legacy === 'interior') return 'interior';
-  if (legacy === 'gnv') return 'gnv';
-
+  devLogOperativoNormalize(s0, nk, null);
   return null;
 }
 
-/** Para UI/filtros en pestaña operativos: siempre devuelve un bucket (otros si no hay match). */
+export function isOperativoSubtipoOficialValue(value: string | null | undefined): boolean {
+  const n = normalizeOperativoSubtipo(value);
+  return n != null && n === (value ?? '').trim();
+}
+
+export function operativoSubtipoRequiresReview(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim();
+  if (!t) return false;
+  return normalizeOperativoSubtipo(t) === null;
+}
+
+/** Fallback al guardar cuando no hay match (no usar en selectores). */
 export function resolveOperativoSubtipoGastoCanon(raw: string | null | undefined): string | null {
   const t = (raw ?? '').trim();
   if (!t) return null;
-  return normalizeOperativoSubtipo(t) ?? 'otros_operativo';
+  return normalizeOperativoSubtipoCached(t) ?? 'OTROS / ESPECIFICAR';
 }
 
 export function getOperativoSubtipoLabel(value: string | null | undefined): string {
   const v = (value ?? '').trim();
   if (!v) return '—';
-  const row = OPERATIVO_SUBTIPO_OPTIONS.find((o) => o.value === v);
-  if (row) return row.label;
-  const n = normalizeOperativoSubtipo(v);
-  if (n) {
-    const r2 = OPERATIVO_SUBTIPO_OPTIONS.find((o) => o.value === n);
-    if (r2) return r2.label;
-  }
-  return v;
+  const official = normalizeOperativoSubtipoCached(v);
+  if (official) return official;
+  return `${v} (requiere revisión)`;
 }
 
 export function getOperativoSubtipoOptions(): { value: string; label: string }[] {
@@ -275,9 +354,16 @@ export function getOperativoSubtipoOptions(): { value: string; label: string }[]
 }
 
 export function getDefaultFactTipoSubtipoForOperativoCanon(canon: string): { tipo: string; subTipo: string } {
-  return FACT_DEFAULT_BY_CANON[canon] ?? FACT_DEFAULT_BY_CANON.otros_operativo;
+  return (
+    FACT_DEFAULT_BY_OFFICIAL[canon]
+    ?? FACT_DEFAULT_BY_OFFICIAL['OTROS / ESPECIFICAR']
+  );
 }
 
 export function getOperativoCanonSet(): Set<string> {
-  return new Set(CANON_SET);
+  return new Set(OFFICIAL_SET);
+}
+
+export function getOfficialOperativoSubtipoValues(): readonly string[] {
+  return OFFICIAL_OPERATIVO_SUBTIPO_VALUES;
 }

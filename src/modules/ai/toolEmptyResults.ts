@@ -16,6 +16,12 @@ const EMPTY_MESSAGES: Partial<Record<AiToolName, string>> = {
   getRankingInversionVehiculos: 'No encontré registros de inversión vehicular registrados.',
   getDetalleInversionVehiculo: 'No encontré inversión registrada para ese vehículo.',
   getInversionesNoVehiculares: 'No encontré inversiones no vehiculares registradas para ese subtipo o periodo.',
+  getFlotaResumen: 'No hay vehículos registrados en la flota.',
+  getVehiculosDisponibles: 'No hay vehículos activos disponibles (todos tienen conductor asignado o están inactivos).',
+  getVehiculosSinConductor: 'No hay vehículos activos sin conductor asignado.',
+  getConductoresAsignados: 'No hay conductores vigentes con vehículo asignado.',
+  getVehiculoPorPlaca: 'No encontré un vehículo con esa placa.',
+  getConductorPorVehiculo: 'No encontré conductor ni vehículo con ese criterio.',
 };
 
 export function emptyResultMessageForTool(tool: AiToolName): string {
@@ -33,6 +39,8 @@ function countFromData(data: Record<string, unknown>): number | null {
   if (Array.isArray(data.categorias)) return data.categorias.length;
   if (Array.isArray(data.sugerencias)) return data.sugerencias.length;
   if (Array.isArray(data.items)) return data.items.length;
+  if (Array.isArray(data.vehiculos)) return data.vehiculos.length;
+  if (Array.isArray(data.asignados)) return data.asignados.length;
   return null;
 }
 
@@ -52,6 +60,14 @@ export function isAiToolResultEmpty(tool: AiToolName, data: unknown): boolean {
 
   if (tool === 'suggestCategoriaGasto') {
     return d.tipo_gasto_sugerido == null && d.categoriaSugerida == null;
+  }
+
+  if (tool === 'getFlotaResumen') {
+    return (d.total as number | undefined) === 0;
+  }
+
+  if (tool === 'getVehiculoPorPlaca' || tool === 'getConductorPorVehiculo') {
+    return d.encontrado === false && !Array.isArray(d.coincidencias_nombre);
   }
 
   const c = countFromData(d);

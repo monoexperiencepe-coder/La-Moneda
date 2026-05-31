@@ -45,6 +45,7 @@ import type {
   ClasificacionFeedbackResumen,
   ClasificacionFeedbackRow,
 } from '../../modules/ai/clasificacionFeedbackTypes';
+import { excludePendienteRevisionFromUiTipos } from '../../config/gastosUiVisibility';
 import { FINANZA_MOVE_TARGET_TIPO_GASTO } from '../../utils/permissions';
 import type { ClasificacionSugerenciaFuente } from '../../modules/ai/clasificacionMemoriaTypes';
 import type {
@@ -393,7 +394,7 @@ const IAClasificacionPage: React.FC = () => {
 
   const tipoDestinoOptions = useMemo(
     () =>
-      FINANZA_MOVE_TARGET_TIPO_GASTO.map((t) => ({
+      excludePendienteRevisionFromUiTipos(FINANZA_MOVE_TARGET_TIPO_GASTO).map((t) => ({
         value: t,
         label: labelTipoGastoFinanciero(t),
       })),

@@ -1,6 +1,20 @@
 import type { Gasto, Ingreso } from '../data/types';
+import { canViewAmountsGlobal } from './amountPermissions';
 import { ingresoMontoPEN } from './moneda';
 import { isIngresoExtraordinario } from './ingresoAlcance';
+
+export class AmountExportBlockedError extends Error {
+  constructor() {
+    super('AMOUNT_EXPORT_BLOCKED');
+    this.name = 'AmountExportBlockedError';
+  }
+}
+
+function assertCanExportAmounts(role: string | null | undefined): void {
+  if (!canViewAmountsGlobal(role)) {
+    throw new AmountExportBlockedError();
+  }
+}
 
 function escapeCell(v: string | number | null | undefined): string {
   if (v == null) return '';
@@ -22,7 +36,8 @@ export function downloadCsv(filename: string, header: string[], rows: (string | 
   URL.revokeObjectURL(a.href);
 }
 
-export function exportGastosCsv(gastos: Gasto[], suffix = ''): void {
+export function exportGastosCsv(gastos: Gasto[], suffix = '', role?: string | null): void {
+  assertCanExportAmounts(role);
   const header = ['id', 'fecha', 'vehicle_id', 'tipo_gasto', 'subtipo_gasto', 'tipo', 'subtipo', 'monto', 'pagado_a', 'comentarios'];
   const rows = gastos.map((g) => [
     g.id,
@@ -39,7 +54,8 @@ export function exportGastosCsv(gastos: Gasto[], suffix = ''): void {
   downloadCsv(`gastos${suffix}.csv`, header, rows);
 }
 
-export function exportIngresosCsv(ingresos: Ingreso[], suffix = ''): void {
+export function exportIngresosCsv(ingresos: Ingreso[], suffix = '', role?: string | null): void {
+  assertCanExportAmounts(role);
   const header = ['id', 'fecha', 'vehicle_id', 'es_extraordinario', 'tipo', 'subtipo', 'monto_pen', 'comentarios'];
   const rows = ingresos.map((i) => [
     i.id,
@@ -61,7 +77,8 @@ export interface MensualExportRow {
   utilidad: number;
 }
 
-export function exportMensualCsv(year: string, rows: MensualExportRow[]): void {
+export function exportMensualCsv(year: string, rows: MensualExportRow[], role?: string | null): void {
+  assertCanExportAmounts(role);
   const header = ['mes', 'ingresos', 'gastos_operativos', 'utilidad'];
   const data = rows.map((r) => [r.mes, r.ingresos.toFixed(2), r.gastos.toFixed(2), r.utilidad.toFixed(2)]);
   downloadCsv(`reporte_mensual_${year}.csv`, header, data);

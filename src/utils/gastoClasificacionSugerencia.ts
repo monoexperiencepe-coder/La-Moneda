@@ -91,15 +91,15 @@ const REGLAS: Regla[] = [
   // Trámites / movilidad específicos ANTES del catch-all multas_tramites
   {
     test: (t) => /\b(pasaje|pasajes|traslado|traslados|movilidad)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'movilidad', razon: 'Texto tipo movilidad / pasaje / traslado' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'TAXI O DELIVERY', razon: 'Texto tipo movilidad / pasaje / traslado' },
   },
   {
     test: (t) => /\b(multa(s)?\s+callao|callao\s+multa)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_callao', razon: 'Texto multa Callao' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'MULTA CALLE', razon: 'Texto multa Callao' },
   },
   {
     test: (t) => /\batu\b/.test(t) || /\bpermiso\s+atu\b/.test(t) || /\bautorizacion\s+atu\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'atu', razon: 'Texto tipo ATU / permiso ATU' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'ATU', razon: 'Texto tipo ATU / permiso ATU' },
   },
   {
     test: (t) => /\bsat\b/.test(t) && !/\bsatellite\b/.test(t),
@@ -122,39 +122,39 @@ const REGLAS: Regla[] = [
       /\btaxi\b/.test(t)
       || /\brt[\s-]*taxi\b/.test(t)
       || /\brevision\s+tecnica\s+taxi\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'revision_tecnica_taxi', razon: 'Texto tipo taxi / RT taxi' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'REVISIÓN TÉCNICA TAXI', razon: 'Texto tipo taxi / RT taxi' },
   },
   {
     test: (t) => /\brt\s+particular\b/.test(t) || /\brevision\s+tecnica\s+particular\b/.test(t),
     sug: {
       tipo_gasto: 'operativo_vehiculo',
-      subtipo_gasto: 'revision_tecnica_particular',
+      subtipo_gasto: 'REVISIÓN TÉCNICA PARTICULAR',
       razon: 'Texto tipo RT particular / revisión técnica particular',
     },
   },
   {
     test: (t) => /\b(multa|tramite|tramites|papeleta|infraccion)\b/.test(t) && !/\b(sat|sunat|sunarp|suanrp|sutran|callao)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'multas_tramites', razon: 'Texto tipo multas / trámites' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'MULTA CALLE', razon: 'Texto tipo multas / trámites' },
   },
   {
     test: (t) => /\b(soat|afocat|seguro\s+vehicular|poliza)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'documentos', razon: 'Texto tipo SOAT / documentos vehículo' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'SOAT', razon: 'Texto tipo SOAT / documentos vehículo' },
   },
   {
     test: (t) => /\b(aceite|lubricante|filtro\s+aceite|cambio\s+aceite)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'motor', razon: 'Texto tipo aceite / motor' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'MOTOR TALLER', razon: 'Texto tipo aceite / motor' },
   },
   {
     test: (t) => /\b(llanta|llantas|rodaje|neumatico|goma)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'llantas', razon: 'Texto tipo llantas' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'LLANTAS', razon: 'Texto tipo llantas' },
   },
   {
     test: (t) => /\b(freno|frenos|pastilla|disco\s+freno)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'frenos', razon: 'Texto tipo frenos' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'FRENOS', razon: 'Texto tipo frenos' },
   },
   {
     test: (t) => /\b(gasolina|grifo|petroleo|diesel|combustible)\b/.test(t) && !/\b(gnv|glp)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'combustible', razon: 'Texto tipo gasolina / combustible' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'COMBUSTIBLE', razon: 'Texto tipo gasolina / combustible' },
   },
   {
     test: (t) =>
@@ -278,27 +278,27 @@ const REGLAS: Regla[] = [
   },
   {
     test: (t) => /\b(bateria|baterias|acumulador)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'motor', razon: 'Texto tipo batería' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'BATERÍA', razon: 'Texto tipo batería' },
   },
   {
     test: (t) => /\b(gnv|gas\s+natural|certificado\s+gnv|quinquenal)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'combustible', razon: 'Texto tipo GNV' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'GNV TALLER', razon: 'Texto tipo GNV' },
   },
   {
     test: (t) => /\b(glp|gas\s+licuado)\b/.test(t) && !/\bgnv\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'combustible', razon: 'Texto tipo GLP' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'COMBUSTIBLE', razon: 'Texto tipo GLP' },
   },
   {
     test: (t) => /\b(soat|afocat|brevete|licencia\s+conducir)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'documentos', razon: 'Texto tipo SOAT / documentos vehículo' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'SOAT', razon: 'Texto tipo SOAT / documentos vehículo' },
   },
   {
     test: (t) => /\b(gps|rastreo|chip|telemetria)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'gps', razon: 'Texto tipo GPS / chip' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'GPS EQUIPOS', razon: 'Texto tipo GPS / chip' },
   },
   {
     test: (t) => /\b(mantenimiento|service|reparacion|taller|mecanico)\b/.test(t) && !/\b(repuesto|autoparte|pieza)\b/.test(t),
-    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'motor', razon: 'Texto tipo mantenimiento / reparación' },
+    sug: { tipo_gasto: 'operativo_vehiculo', subtipo_gasto: 'MANTENIMIENTO SIMPLE', razon: 'Texto tipo mantenimiento / reparación' },
   },
   {
     test: (t) => /\b(global|flota\s+general|sin\s+vehiculo)\b/.test(t) && !/\bvehiculo\s+\d+\b/.test(t),

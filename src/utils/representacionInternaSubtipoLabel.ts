@@ -1,4 +1,9 @@
-import { SUBTIPOS_REPRESENTACION_INTERNA } from '../data/representacionInterna';
+import {
+  getOfficialSubtipoLabel,
+  getOfficialSubtiposForCategoria,
+} from '../constants/subtipos/officialSubtiposCatalog';
+import { resolveLegacyAliasNormKey } from '../constants/subtipos/legacySubtipoAliases';
+import { subtipoDedupeKey } from '../constants/subtipos/subtipoDedupeKey';
 
 function normKey(s: string): string {
   return s
@@ -8,64 +13,102 @@ function normKey(s: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-const LABELS: Record<string, string> = {
-  movilidad_socios: 'Movilidad socios',
-  almuerzo_socios: 'Almuerzo socios',
-  reunion_socios: 'Reunión socios',
-  gasto_representacion: 'Gasto de representación',
-  regalos: 'Regalos',
-  alojamientos: 'Alojamientos',
+const OFFICIAL_ENTRIES = getOfficialSubtiposForCategoria('representacion_interna');
+
+const DEDUPE_TO_OFFICIAL = new Map<string, string>();
+for (const entry of OFFICIAL_ENTRIES) {
+  const dk = subtipoDedupeKey(entry.value);
+  if (!DEDUPE_TO_OFFICIAL.has(dk)) DEDUPE_TO_OFFICIAL.set(dk, entry.value);
+}
+
+/** Legacy snake_case / frases → valor oficial Excel. */
+const ALIAS_TO_OFFICIAL: Record<string, string> = {
+  almuerzo_socios: 'ALMUERZOS SOCIOS',
+  almuerzos_socios: 'ALMUERZOS SOCIOS',
+  regalos: 'REGALOS EMPRESARIALES',
+  regalos_empresariales: 'REGALOS EMPRESARIALES',
+  gasto_representacion: 'INVITACIONES A EVENTOS PARA CLIENTES',
+  gasto_de_representacion: 'INVITACIONES A EVENTOS PARA CLIENTES',
+  invitaciones_eventos_clientes: 'INVITACIONES A EVENTOS PARA CLIENTES',
+  alojamientos: 'ALOJAMIENTOS',
+  alojameintos: 'ALOJAMIENTOS',
+  movilidad_socios: 'TRASLADO EJECUTIVOS',
+  traslado_ejecutivos: 'TRASLADO EJECUTIVOS',
+  reunion_socios: 'REUNIONES CORPORATIVOS INTERNOS',
+  reuniones_corporativos_internos: 'REUNIONES CORPORATIVOS INTERNOS',
+  reconocimientos: 'RECONOCIMIENTOS',
+  capacitacion: 'CAPACITACION',
+  mobiliario: 'MOBILIARIO',
+  cena_familiar: 'INVITACIONES A EVENTOS PARA CLIENTES',
+  otros_representacion_interna: 'INVITACIONES A EVENTOS PARA CLIENTES',
 };
 
-const CODE_SET = new Set<string>(SUBTIPOS_REPRESENTACION_INTERNA);
-
-/** Legacy retirado del formulario; se muestra como gasto de representación. */
-const LEGACY_OTROS_CODE = 'otros_representacion_interna';
-
-/** Subtipo retirado (v4); filas históricas se agrupan en gasto de representación en UI. */
-const LEGACY_CENA_CODE = 'cena_familiar';
-
-/** Frases legacy del formulario anterior (texto legible guardado en `subtipo_gasto`). */
-const LEGACY_PHRASE_TO_CODE: Record<string, string> = {
-  'almuerzo socios': 'almuerzo_socios',
-  'cena familiar': LEGACY_CENA_CODE,
-  'reunion socios': 'reunion_socios',
-  'reunión socios': 'reunion_socios',
-  'gasto de representación': 'gasto_representacion',
-  'gasto de representacion': 'gasto_representacion',
-  'otros representación interna': LEGACY_OTROS_CODE,
-  'otros representacion interna': LEGACY_OTROS_CODE,
+const LEGACY_PHRASE_TO_OFFICIAL: Record<string, string> = {
+  'almuerzo socios': 'ALMUERZOS SOCIOS',
+  'almuerzos socios': 'ALMUERZOS SOCIOS',
+  'regalos empresariales': 'REGALOS EMPRESARIALES',
+  'gasto de representación': 'INVITACIONES A EVENTOS PARA CLIENTES',
+  'gasto de representacion': 'INVITACIONES A EVENTOS PARA CLIENTES',
+  'invitaciones a eventos para clientes': 'INVITACIONES A EVENTOS PARA CLIENTES',
+  'cena familiar': 'INVITACIONES A EVENTOS PARA CLIENTES',
+  'reunion socios': 'REUNIONES CORPORATIVOS INTERNOS',
+  'reunión socios': 'REUNIONES CORPORATIVOS INTERNOS',
+  'reuniones corporativos internos': 'REUNIONES CORPORATIVOS INTERNOS',
+  'traslado ejecutivos': 'TRASLADO EJECUTIVOS',
+  'movilidad socios': 'TRASLADO EJECUTIVOS',
+  reconocimientos: 'RECONOCIMIENTOS',
+  capacitacion: 'CAPACITACION',
+  mobiliario: 'MOBILIARIO',
 };
+
+function resolveToOfficialValue(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const candidates = [trimmed];
+  const globalAlias = resolveLegacyAliasNormKey(trimmed);
+  if (globalAlias && globalAlias !== trimmed) candidates.push(globalAlias);
+
+  for (const c of candidates) {
+    const hit = DEDUPE_TO_OFFICIAL.get(subtipoDedupeKey(c));
+    if (hit) return hit;
+  }
+
+  for (const c of candidates) {
+    const kFlat = normKey(c).replace(/\s+/g, '_');
+    const fromAlias = ALIAS_TO_OFFICIAL[kFlat];
+    if (fromAlias) return fromAlias;
+    const kSpaced = normKey(c);
+    const fromPhrase = LEGACY_PHRASE_TO_OFFICIAL[kSpaced];
+    if (fromPhrase) return fromPhrase;
+  }
+
+  return null;
+}
 
 /**
- * Normaliza cualquier valor guardado en `subtipo_gasto` para la pestaña representación interna.
- * Códigos legacy `otros_representacion_interna` y `cena_familiar` se tratan como `gasto_representacion` en UI/filtros.
+ * Normaliza `subtipo_gasto` de representación interna al valor oficial cuando hay alias conocido.
+ * Valores históricos no mapeados se devuelven tal cual (sin borrar BD).
  */
 export function normalizeRepresentacionInternaSubtipo(raw: string | null | undefined): string {
   const s = (raw ?? '').trim();
   if (!s) return '';
   const kFlat = normKey(s).replace(/\s+/g, '_');
   if (kFlat === 'representacion_interna') return '';
-  if (kFlat === LEGACY_OTROS_CODE || kFlat === LEGACY_CENA_CODE) return 'gasto_representacion';
-  if (CODE_SET.has(kFlat)) return kFlat;
-
-  const kSpaced = normKey(s);
-  const fromPhrase = LEGACY_PHRASE_TO_CODE[kSpaced];
-  if (fromPhrase === LEGACY_OTROS_CODE || fromPhrase === LEGACY_CENA_CODE) return 'gasto_representacion';
-  if (fromPhrase && CODE_SET.has(fromPhrase)) return fromPhrase;
-
-  if (kFlat === 'gasto_de_representacion' || kFlat === 'gasto_de_representación') return 'gasto_representacion';
-
-  return '';
+  const official = resolveToOfficialValue(s);
+  if (official) return official;
+  return s;
 }
 
-/**
- * Etiqueta amigable para códigos `subtipo_gasto` de representación interna (y valores legacy equivalentes).
- */
 export function getRepresentacionInternaSubtipoLabel(subtipo: string | null | undefined): string {
-  const code = normalizeRepresentacionInternaSubtipo(subtipo);
-  if (code && LABELS[code]) return LABELS[code];
   const t = (subtipo ?? '').trim();
   if (!t) return '—';
+  const officialLabel = getOfficialSubtipoLabel('representacion_interna', t);
+  if (officialLabel) return officialLabel;
+  const canon = normalizeRepresentacionInternaSubtipo(t);
+  if (canon) {
+    const label = getOfficialSubtipoLabel('representacion_interna', canon);
+    if (label) return label;
+  }
   return t;
 }

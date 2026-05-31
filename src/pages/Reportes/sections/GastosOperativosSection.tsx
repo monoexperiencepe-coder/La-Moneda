@@ -1,7 +1,8 @@
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Gasto, Vehicle } from '../../../data/types';
-import { formatCurrency } from '../../../utils/formatting';
+;
 import { vehicleIdKey } from '../../../utils/vehicleId';
 import { getOperativoSubtipoLabel, resolveOperativoSubtipoGastoCanon } from '../../../utils/operativoSubtipo';
 import {
@@ -24,6 +25,7 @@ interface GastosOperativosSectionProps {
 }
 
 const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gastos, vehicles, yearOptions }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
@@ -51,7 +53,7 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
   const topSubtipos = useMemo(() => {
     const totals: Record<string, number> = {};
     for (const g of operativos) {
-      const canon = resolveOperativoSubtipoGastoCanon(g.subtipo_gasto ?? '') ?? 'otros_operativo';
+      const canon = resolveOperativoSubtipoGastoCanon(g.subtipo_gasto ?? '') ?? 'OTROS / ESPECIFICAR';
       totals[canon] = (totals[canon] ?? 0) + g.monto;
     }
     return topEntries(totals, (k) => getOperativoSubtipoLabel(k), 5);
@@ -95,7 +97,7 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
       <div>
         <h2 className="text-lg font-bold text-slate-900">Gastos operativos</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Dónde se concentra el gasto operativo de flota en el período ({formatCurrency(totalOp)} total).
+          Dónde se concentra el gasto operativo de flota en el período ({formatGlobalAmount(totalOp)} total).
         </p>
       </div>
 
@@ -138,7 +140,7 @@ const GastosOperativosSection: React.FC<GastosOperativosSectionProps> = ({ gasto
                         {x.label}
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums text-slate-800">
-                        {formatCurrency(x.monto)}
+                        {formatGlobalAmount(x.monto)}
                       </span>
                     </button>
                   </li>
@@ -161,6 +163,7 @@ function TopBlock({
   items: { label: string; monto: number }[];
   updating?: boolean;
 }) {
+  const { formatGlobalAmount } = useAmountDisplay();
   return (
     <div className="glass-panel p-4">
       <h3 className="text-sm font-bold text-slate-900">{title}</h3>
@@ -174,7 +177,7 @@ function TopBlock({
                 <span className="mr-2 font-bold text-violet-600">{idx + 1}.</span>
                 {x.label}
               </span>
-              <span className="shrink-0 font-semibold tabular-nums">{formatCurrency(x.monto)}</span>
+              <span className="shrink-0 font-semibold tabular-nums">{formatGlobalAmount(x.monto)}</span>
             </li>
           ))}
         </ul>

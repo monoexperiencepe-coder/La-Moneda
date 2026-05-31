@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.qa
+e2e/.auth/
+e2e/.qa-artifacts/
+playwright-report/
+test-results/
+playwright/.cache/

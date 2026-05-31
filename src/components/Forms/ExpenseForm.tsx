@@ -34,12 +34,25 @@ import {
 import {
   getDefaultFactTipoSubtipoForInversionCanon,
   getInversionSubtipoLabel,
-  inversionSubtipoRequiereVehiculo,
   normalizeInversionSubtipo,
   type InversionSubtipoCanon,
 } from '../../utils/inversionSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
-import { tipoGastoUsaSubtipoOperativo } from '../../utils/gastoMoveCategoriaDefaults';
+import {
+  tipoGastoUsaSubtipoAdministrativoCanon,
+  tipoGastoUsaSubtipoFinancieroCanon,
+  tipoGastoUsaSubtipoOperativo,
+} from '../../utils/gastoMoveCategoriaDefaults';
+import {
+  getDefaultFactTipoSubtipoForFinancieroSubtipo,
+  getFinancieroPrestamoSubtipoLabel,
+  normalizeFinancieroPrestamoSubtipo,
+} from '../../utils/financieroPrestamoSubtipo';
+import {
+  getDefaultFactTipoSubtipoForAdministrativoSubtipo,
+  getAdministrativoSubtipoLabel,
+  normalizeAdministrativoSubtipo,
+} from '../../utils/administrativoSubtipo';
 import {
   buildSubtipoFormSelectOptions,
   formatSubtipoOptionLabel,
@@ -57,6 +70,8 @@ const EXPENSE_VALIDATION_SCROLL_ORDER: (keyof FormState)[] = [
   'subtipoInversionCanon',
   'subtipoOperativoCanon',
   'subtipoRepresentacion',
+  'subtipoFinancieroCanon',
+  'subtipoAdministrativoCanon',
   'tipo',
   'subTipo',
   'metodoPagoDetalle',
@@ -70,6 +85,8 @@ const EXPENSE_FIELD_SCROLL_IDS: Partial<Record<keyof FormState, string>> = {
   subtipoInversionCanon: 'expense-field-subtipo-inversion',
   subtipoOperativoCanon: 'expense-field-subtipo-operativo',
   subtipoRepresentacion: 'expense-field-subtipo-representacion',
+  subtipoFinancieroCanon: 'expense-field-subtipo-financiero',
+  subtipoAdministrativoCanon: 'expense-field-subtipo-administrativo',
   tipo: 'expense-field-tipo-fact',
   subTipo: 'expense-field-subtipo',
   metodoPagoDetalle: 'expense-field-metodo-cuenta',
@@ -119,6 +136,10 @@ interface FormState {
   subtipoOperativoCanon: string;
   /** Solo `inversion_compra`: subtipo canónico (vehicular / terreno / inmueble / general / otros). */
   subtipoInversionCanon: string;
+  /** Solo `financiero_prestamo`: subtipo oficial (Tipo Fact inferido). */
+  subtipoFinancieroCanon: string;
+  /** Solo `administrativo_empresa`: subtipo oficial (Tipo Fact inferido). */
+  subtipoAdministrativoCanon: string;
   fechaDesde: string;
   fechaHasta: string;
   metodoPago: string;
@@ -146,6 +167,8 @@ function emptyForm(): FormState {
     subTipo: getSubtiposGasto(tipo0)[0] ?? '',
     subtipoRepresentacion: '',
     subtipoOperativoCanon: '',
+    subtipoFinancieroCanon: '',
+    subtipoAdministrativoCanon: '',
     fechaDesde: '',
     fechaHasta: '',
     metodoPago: 'Yape',
@@ -171,6 +194,8 @@ function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState
       subtipoRepresentacion: '',
       subtipoOperativoCanon: '',
       subtipoInversionCanon: defaultCanon,
+      subtipoFinancieroCanon: '',
+      subtipoAdministrativoCanon: '',
       fechaDesde: '',
       fechaHasta: '',
       metodoPago: 'Yape',
@@ -215,6 +240,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
   useEffect(() => {
     if (!form.categoriaFinanciera) return;
+    if (
+      form.categoriaFinanciera === 'representacion_interna'
+      || tipoGastoUsaSubtipoOperativo(form.categoriaFinanciera)
+      || form.categoriaFinanciera === 'inversion_compra'
+      || tipoGastoUsaSubtipoFinancieroCanon(form.categoriaFinanciera)
+      || tipoGastoUsaSubtipoAdministrativoCanon(form.categoriaFinanciera)
+    ) {
+      return;
+    }
     const allowed = getFactTiposForFinanza(form.categoriaFinanciera);
     if (allowed.length === 0 || allowed.includes(form.tipo)) return;
     const t0 = allowed[0];
@@ -235,15 +269,43 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const subtiposOperativoMerged = useMemo(() => {
     const cat = form.categoriaFinanciera;
     if (!cat || !tipoGastoUsaSubtipoOperativo(cat)) return [];
+    return buildSubtipoSelectOptions(cat, gastos);
+  }, [form.categoriaFinanciera, gastos]);
+
+  const subtiposFinancieroMerged = useMemo(() => {
+    if (form.categoriaFinanciera !== 'financiero_prestamo') return [];
     return mergeSubtiposHistoricosConOficiales(
-      cat,
-      (gastos ?? []).filter((g) => g.tipo_gasto === cat).map((g) => g.subtipo_gasto ?? '').filter(Boolean),
+      'financiero_prestamo',
+      (gastos ?? [])
+        .filter((g) => g.tipo_gasto === 'financiero_prestamo' || g.tipo_gasto === 'financiero')
+        .map((g) => g.subtipo_gasto ?? '')
+        .filter(Boolean),
+    );
+  }, [form.categoriaFinanciera, gastos]);
+
+  const subtiposAdministrativoMerged = useMemo(() => {
+    if (form.categoriaFinanciera !== 'administrativo_empresa') return [];
+    return mergeSubtiposHistoricosConOficiales(
+      'administrativo_empresa',
+      (gastos ?? [])
+        .filter((g) => g.tipo_gasto === 'administrativo_empresa')
+        .map((g) => g.subtipo_gasto ?? '')
+        .filter(Boolean),
     );
   }, [form.categoriaFinanciera, gastos]);
 
   const subtiposFactMerged = useMemo(() => {
     const cat = form.categoriaFinanciera;
-    if (!cat || cat === 'representacion_interna' || tipoGastoUsaSubtipoOperativo(cat)) return [];
+    if (
+      !cat
+      || cat === 'representacion_interna'
+      || tipoGastoUsaSubtipoOperativo(cat)
+      || cat === 'financiero_prestamo'
+      || cat === 'administrativo_empresa'
+      || cat === 'inversion_compra'
+    ) {
+      return [];
+    }
     return buildSubtipoFormSelectOptions(cat, gastos, form.tipo);
   }, [form.categoriaFinanciera, form.tipo, gastos]);
 
@@ -273,17 +335,31 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     const newErrors: Partial<Record<keyof FormState, string>> = {};
     if (!form.categoriaFinanciera) newErrors.categoriaFinanciera = 'Elige categoría financiera';
     if (!form.fecha) newErrors.fecha = 'La fecha de movimiento es requerida';
-    if (!form.tipo) {
-      newErrors.tipo = 'Selecciona el tipo de gasto';
-    } else if (form.categoriaFinanciera && form.categoriaFinanciera !== 'representacion_interna') {
-      const permitidos = getFactTiposForFinanza(form.categoriaFinanciera);
-      if (!permitidos.includes(form.tipo)) {
-        newErrors.tipo = 'Elige un tipo Fact válido para esta categoría';
+    const esFinancieroCanon =
+      form.categoriaFinanciera && tipoGastoUsaSubtipoFinancieroCanon(form.categoriaFinanciera);
+    const esAdministrativoCanon =
+      form.categoriaFinanciera && tipoGastoUsaSubtipoAdministrativoCanon(form.categoriaFinanciera);
+    if (!esFinancieroCanon && !esAdministrativoCanon) {
+      if (!form.tipo) {
+        newErrors.tipo = 'Selecciona el tipo de gasto';
+      } else if (form.categoriaFinanciera && form.categoriaFinanciera !== 'representacion_interna') {
+        const permitidos = getFactTiposForFinanza(form.categoriaFinanciera);
+        if (!permitidos.includes(form.tipo)) {
+          newErrors.tipo = 'Elige un tipo Fact válido para esta categoría';
+        }
       }
     }
     if (form.categoriaFinanciera === 'representacion_interna') {
       if (!form.subtipoRepresentacion.trim()) {
         newErrors.subtipoRepresentacion = 'Elige subtipo de representación interna';
+      }
+    } else if (esFinancieroCanon) {
+      if (!form.subtipoFinancieroCanon.trim()) {
+        newErrors.subtipoFinancieroCanon = 'Elige subtipo financiero';
+      }
+    } else if (esAdministrativoCanon) {
+      if (!form.subtipoAdministrativoCanon.trim()) {
+        newErrors.subtipoAdministrativoCanon = 'Elige subtipo administrativo';
       }
     } else if (
       form.categoriaFinanciera &&
@@ -300,17 +376,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       newErrors.monto = 'Ingresa un monto válido';
     }
     if (!form.metodoPagoDetalle.trim()) newErrors.metodoPagoDetalle = 'Selecciona la cuenta de pago';
-    const inversionNecesitaVehiculo =
-      form.categoriaFinanciera === 'inversion_compra' &&
-      inversionSubtipoRequiereVehiculo(form.subtipoInversionCanon || 'adquisicion_vehiculo');
-    if (
-      (form.categoriaFinanciera === 'operativo_vehiculo' || inversionNecesitaVehiculo)
-      && !form.vehicleId.trim()
-    ) {
-      newErrors.vehicleId =
-        inversionNecesitaVehiculo
-          ? 'Indica el vehículo (la inversión vehicular va por unidad).'
-          : 'Operativo por vehículo: indica el N° de unidad.';
+    if (form.categoriaFinanciera === 'operativo_vehiculo' && !form.vehicleId.trim()) {
+      newErrors.vehicleId = 'Operativo por vehículo: indica el N° de unidad.';
     }
     return newErrors;
   };
@@ -332,25 +399,52 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
       const esGlobal = catFin === 'gastos_globales' || catFin === 'operativo_flota_general';
       const esRep = catFin === 'representacion_interna';
-      const factTipo = esRep ? REPRESENTACION_INTERNA_FACT_TIPO : form.tipo;
-      const factSub = esRep ? REPRESENTACION_INTERNA_FACT_SUBTIPO : form.subTipo || null;
+      const esFinanciero = tipoGastoUsaSubtipoFinancieroCanon(catFin);
+      const esAdministrativo = tipoGastoUsaSubtipoAdministrativoCanon(catFin);
+      const subtipoFinCanon = esFinanciero
+        ? (normalizeFinancieroPrestamoSubtipo(form.subtipoFinancieroCanon)
+          ?? form.subtipoFinancieroCanon.trim())
+        : '';
+      const subtipoAdminCanon = esAdministrativo
+        ? (normalizeAdministrativoSubtipo(form.subtipoAdministrativoCanon)
+          ?? form.subtipoAdministrativoCanon.trim())
+        : '';
+      const factDerived = esFinanciero
+        ? getDefaultFactTipoSubtipoForFinancieroSubtipo(subtipoFinCanon)
+        : esAdministrativo
+          ? getDefaultFactTipoSubtipoForAdministrativoSubtipo(subtipoAdminCanon)
+          : null;
+      const factTipo = esRep
+        ? REPRESENTACION_INTERNA_FACT_TIPO
+        : factDerived?.tipo ?? form.tipo;
+      const factSub = esRep
+        ? REPRESENTACION_INTERNA_FACT_SUBTIPO
+        : (factDerived?.subTipo ?? form.subTipo) || null;
       const esInversion = catFin === 'inversion_compra';
       const subtipoFin = esRep
         ? form.subtipoRepresentacion.trim()
-        : tipoGastoUsaSubtipoOperativo(catFin)
-          ? form.subtipoOperativoCanon.trim()
-          : esInversion
-            ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
-            : (form.subTipo || null)
-              ? form.subTipo.trim()
-              : null;
+        : esFinanciero
+          ? subtipoFinCanon
+          : esAdministrativo
+            ? subtipoAdminCanon
+            : tipoGastoUsaSubtipoOperativo(catFin)
+            ? form.subtipoOperativoCanon.trim()
+            : esInversion
+              ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
+              : (form.subTipo || null)
+                ? form.subTipo.trim()
+                : null;
       const motivoFin = esRep
         ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
-        : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
-          ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
-          : esInversion && form.subtipoInversionCanon.trim()
-            ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
-            : (form.subTipo || form.tipo);
+        : esFinanciero
+          ? getFinancieroPrestamoSubtipoLabel(subtipoFin)
+          : esAdministrativo
+            ? getAdministrativoSubtipoLabel(subtipoFin)
+            : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
+            ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
+            : esInversion && form.subtipoInversionCanon.trim()
+              ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
+              : (form.subTipo || form.tipo);
       const rawM = Number(Number(form.monto).toFixed(2));
       await Promise.resolve(
         onSubmit({
@@ -401,8 +495,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         <div className="rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2.5">
           <p className="text-xs font-bold text-violet-900">Inversión con utilidad</p>
           <p className="mt-0.5 text-[11px] leading-snug text-violet-800/95">
-            Se guarda en la tabla de gastos con <span className="font-mono">tipo_gasto = inversion_compra</span>. Debes
-            elegir la unidad (N° vehículo).
+            Se guarda en la tabla de gastos con <span className="font-mono">tipo_gasto = inversion_compra</span>. El N°
+            de vehículo es opcional (cuotas parciales o compra sin unidad asignada).
           </p>
         </div>
       ) : (
@@ -455,7 +549,54 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   subTipo: sOp,
                   subtipoOperativoCanon: canon,
                   subtipoRepresentacion: '',
+                  subtipoFinancieroCanon: '',
                   vehicleId: cat === 'operativo_flota_general' ? '' : p.vehicleId,
+                };
+              }
+              if (cat === 'financiero_prestamo') {
+                const canon = 'PRÉSTAMO';
+                const { tipo: tFin, subTipo: sFin } = getDefaultFactTipoSubtipoForFinancieroSubtipo(canon);
+                return {
+                  ...p,
+                  categoriaFinanciera: cat,
+                  tipo: tFin,
+                  subTipo: sFin,
+                  subtipoFinancieroCanon: canon,
+                  subtipoAdministrativoCanon: '',
+                  subtipoRepresentacion: '',
+                  subtipoOperativoCanon: '',
+                  subtipoInversionCanon: '',
+                };
+              }
+              if (cat === 'administrativo_empresa') {
+                const canon = 'administrativo_general';
+                const { tipo: tAdm, subTipo: sAdm } =
+                  getDefaultFactTipoSubtipoForAdministrativoSubtipo(canon);
+                return {
+                  ...p,
+                  categoriaFinanciera: cat,
+                  tipo: tAdm,
+                  subTipo: sAdm,
+                  subtipoAdministrativoCanon: canon,
+                  subtipoFinancieroCanon: '',
+                  subtipoRepresentacion: '',
+                  subtipoOperativoCanon: '',
+                  subtipoInversionCanon: '',
+                };
+              }
+              if (cat === 'inversion_compra') {
+                const canon: InversionSubtipoCanon = 'adquisicion_vehiculo';
+                const { tipo: tInv, subTipo: sInv } = getDefaultFactTipoSubtipoForInversionCanon(canon);
+                return {
+                  ...p,
+                  categoriaFinanciera: cat,
+                  tipo: tInv,
+                  subTipo: sInv,
+                  subtipoInversionCanon: canon,
+                  subtipoRepresentacion: '',
+                  subtipoOperativoCanon: '',
+                  subtipoFinancieroCanon: '',
+                  subtipoAdministrativoCanon: '',
                 };
               }
               const tipo0 = firstFactTipoForFinanza(cat);
@@ -465,8 +606,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 tipo: tipo0,
                 subTipo: getSubtiposGasto(tipo0)[0] ?? '',
                 subtipoRepresentacion: '',
-                subtipoOperativoCanon: '',
-                vehicleId: cat === 'gastos_globales' ? '' : p.vehicleId,
+              subtipoOperativoCanon: '',
+              subtipoFinancieroCanon: '',
+              subtipoAdministrativoCanon: '',
+              vehicleId: cat === 'gastos_globales' ? '' : p.vehicleId,
               };
             });
             setErrors((e) => ({
@@ -476,6 +619,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               vehicleId: '',
               subtipoRepresentacion: '',
               subtipoOperativoCanon: '',
+              subtipoFinancieroCanon: '',
+              subtipoAdministrativoCanon: '',
               tipo: '',
               subTipo: '',
               monto: '',
@@ -535,8 +680,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 <Select
                   id="expense-field-vehicle"
                   label={
-                    form.categoriaFinanciera === 'operativo_vehiculo' ||
-                    form.categoriaFinanciera === 'inversion_compra'
+                    form.categoriaFinanciera === 'operativo_vehiculo'
                       ? 'N° Vehículo (obligatorio)'
                       : 'N° Vehículo (opcional)'
                   }
@@ -551,7 +695,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     form.categoriaFinanciera === 'operativo_vehiculo'
                       ? 'Operativo: debe estar ligado a una unidad.'
                       : form.categoriaFinanciera === 'inversion_compra'
-                        ? 'Inversión con utilidad: asigna la unidad donde aplica la compra o inversión.'
+                        ? 'Opcional: úsalo si ya conoces la unidad; vacío para cuotas o compras sin asignar.'
                         : 'Opcional si el gasto aplica a una unidad concreta.'
                   }
                   error={errors.vehicleId}
@@ -640,6 +784,78 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   disabled={seleccionesBloqueadas}
                   helper="Tipo Fact fijo (OTROS GASTOS · REPRESENTACIÓN) para no duplicar selección."
                 />
+              ) : form.categoriaFinanciera === 'administrativo_empresa' ? (
+                <>
+                  <Select
+                    id="expense-field-subtipo-administrativo"
+                    label="Subtipo administrativo"
+                    options={subtiposAdministrativoMerged.map((o) => ({
+                      value: o.value,
+                      label: formatSubtipoOptionLabel('administrativo_empresa', o),
+                    }))}
+                    value={form.subtipoAdministrativoCanon}
+                    placeholder="Seleccionar…"
+                    onChange={(v) => {
+                      if (!v) return;
+                      const canon = normalizeAdministrativoSubtipo(v) ?? v;
+                      const { tipo: tAdm, subTipo: sAdm } =
+                        getDefaultFactTipoSubtipoForAdministrativoSubtipo(canon);
+                      setForm((p) => ({
+                        ...p,
+                        subtipoAdministrativoCanon: canon,
+                        tipo: tAdm,
+                        subTipo: sAdm,
+                      }));
+                      setErrors((e) => ({ ...e, subtipoAdministrativoCanon: '' }));
+                    }}
+                    error={errors.subtipoAdministrativoCanon}
+                    required
+                    disabled={seleccionesBloqueadas}
+                    helper="Clasificación interna calculada automáticamente."
+                  />
+                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-600">
+                    <p className="font-semibold text-gray-600">Clasificación interna</p>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      Tipo Fact y subtipo Fact se asignan al guardar según el subtipo elegido.
+                    </p>
+                  </div>
+                </>
+              ) : form.categoriaFinanciera === 'financiero_prestamo' ? (
+                <>
+                  <Select
+                    id="expense-field-subtipo-financiero"
+                    label="Subtipo financiero"
+                    options={subtiposFinancieroMerged.map((o) => ({
+                      value: o.value,
+                      label: formatSubtipoOptionLabel('financiero_prestamo', o),
+                    }))}
+                    value={form.subtipoFinancieroCanon}
+                    placeholder="Seleccionar…"
+                    onChange={(v) => {
+                      if (!v) return;
+                      const canon = normalizeFinancieroPrestamoSubtipo(v) ?? v;
+                      const { tipo: tFin, subTipo: sFin } =
+                        getDefaultFactTipoSubtipoForFinancieroSubtipo(canon);
+                      setForm((p) => ({
+                        ...p,
+                        subtipoFinancieroCanon: canon,
+                        tipo: tFin,
+                        subTipo: sFin,
+                      }));
+                      setErrors((e) => ({ ...e, subtipoFinancieroCanon: '' }));
+                    }}
+                    error={errors.subtipoFinancieroCanon}
+                    required
+                    disabled={seleccionesBloqueadas}
+                    helper="Clasificación interna calculada automáticamente."
+                  />
+                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-600">
+                    <p className="font-semibold text-gray-600">Clasificación interna</p>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      Tipo Fact y subtipo Fact se asignan al guardar según el subtipo elegido.
+                    </p>
+                  </div>
+                </>
               ) : form.categoriaFinanciera && tipoGastoUsaSubtipoOperativo(form.categoriaFinanciera) ? (
                 <>
                   <Select
@@ -660,18 +876,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     error={errors.subtipoOperativoCanon}
                     required
                     disabled={seleccionesBloqueadas}
-                    helper="Se guarda como subtipo_gasto canónico (mismo valor en ranking, filtros e historial)."
+                    helper="Catálogo oficial operativo. Clasificación interna calculada automáticamente."
                   />
-                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-700">
-                    <p className="font-semibold text-gray-600">Tipo Fact (metadata)</p>
-                    <p className="mt-1">
-                      <span className="text-gray-500">Tipo:</span> {form.tipo || '—'}
-                    </p>
-                    <p>
-                      <span className="text-gray-500">Sub tipo:</span> {form.subTipo || '—'}
-                    </p>
-                    <p className="mt-1.5 text-[10px] text-gray-500">
-                      Ajustado automáticamente según el subtipo operativo; no altera el monto ni la categoría financiera.
+                  <div className="flex flex-col justify-center rounded-lg border border-gray-200 bg-white/80 px-3 py-2.5 text-[11px] leading-snug text-gray-600">
+                    <p className="font-semibold text-gray-600">Clasificación interna</p>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      Tipo Fact y subtipo Fact se asignan al guardar según el subtipo elegido.
                     </p>
                   </div>
                 </>

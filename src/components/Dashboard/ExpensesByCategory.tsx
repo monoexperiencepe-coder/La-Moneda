@@ -5,7 +5,7 @@ import {
 import Card from '../Common/Card';
 import { CategoriaGasto } from '../../data/types';
 import { CATEGORIAS_GASTO_LABELS, CATEGORIA_COLORS } from '../../data/catalogs';
-import { formatCurrency } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 interface ExpensesByCategoryProps {
   gastosPorCategoria: Record<string, number>;
@@ -13,21 +13,22 @@ interface ExpensesByCategoryProps {
 
 const COLORS = ['#4F46E5', '#8B5CF6', '#F59E0B', '#10B981'];
 
-const CustomTooltip = ({ active, payload }: Record<string, unknown>) => {
-  if (active && Array.isArray(payload) && payload.length) {
-    const item = payload[0] as { name: string; value: number; payload: { percentage: number } };
-    return (
-      <div className="bg-white border border-gray-100 rounded-xl shadow-soft-md p-3">
-        <p className="text-xs font-semibold text-gray-700 mb-1">{item.name}</p>
-        <p className="text-sm font-bold text-gray-900">{formatCurrency(item.value)}</p>
-        <p className="text-xs text-gray-400">{item.payload.percentage.toFixed(1)}% del total</p>
-      </div>
-    );
-  }
-  return null;
-};
-
 const ExpensesByCategory: React.FC<ExpensesByCategoryProps> = ({ gastosPorCategoria }) => {
+  const { formatGlobalAmount } = useAmountDisplay();
+
+  const CustomTooltip = ({ active, payload }: Record<string, unknown>) => {
+    if (active && Array.isArray(payload) && payload.length) {
+      const item = payload[0] as { name: string; value: number; payload: { percentage: number } };
+      return (
+        <div className="bg-white border border-gray-100 rounded-xl shadow-soft-md p-3">
+          <p className="text-xs font-semibold text-gray-700 mb-1">{item.name}</p>
+          <p className="text-sm font-bold text-gray-900">{formatGlobalAmount(item.value)}</p>
+          <p className="text-xs text-gray-400">{item.payload.percentage.toFixed(1)}% del total</p>
+        </div>
+      );
+    }
+    return null;
+  };
   const total = Object.values(gastosPorCategoria).reduce((s, v) => s + v, 0);
 
   const chartData = Object.entries(gastosPorCategoria)

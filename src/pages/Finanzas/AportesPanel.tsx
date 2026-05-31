@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Trash2, LogOut, History } from 'lucide-react';
 import Card from '../../components/Common/Card';
@@ -13,13 +14,17 @@ import {
   fetchAportesAccionistas,
 } from '../../services/aportesAccionistasService';
 import type { AporteAccionista, Moneda } from '../../data/types';
-import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
+import { formatDate, formatDateTimePe } from '../../utils/formatting';
 import { EMPRESA_ID } from '../../config/app';
 import { canUseFinanciamiento, permissionUserFromAuth } from '../../utils/permissions';
 import { undoCreateAporte, undoDeleteAporte } from '../../undo/factories';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(
+  amount: number,
+  moneda: Moneda,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
 function tipoAporteEtiqueta(tipo: string): string {
@@ -49,6 +54,7 @@ type HistorialFiltro = 'todos' | 'aportes' | 'retiros';
 type ReloadOpts = { background?: boolean };
 
 const AportesPanel: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const { canEditFinances, profile, user } = useAuth();
   const canLoadFinanciamiento = useMemo(
     () => canUseFinanciamiento(permissionUserFromAuth(user, profile?.email ?? null)),
@@ -152,7 +158,7 @@ const AportesPanel: React.FC = () => {
       setRows((prev) => mergeAporteRow(prev, row));
       toast.success(
         esRetiro ? 'Retiro registrado' : 'Aporte registrado',
-        `${row.accionista || 'Accionista'} · ${montoFmt(Math.abs(row.monto), row.moneda)}`,
+        `${row.accionista || 'Accionista'} · ${montoFmt(Math.abs(row.monto), row.moneda, formatGlobalAmount)}`,
       );
       showUndoToast({
         message: esRetiro ? 'Retiro registrado' : 'Aporte registrado',
@@ -220,7 +226,7 @@ const AportesPanel: React.FC = () => {
       if (!canEditFinances) return;
       const esRetiro = String(r.tipo ?? '').trim() === APORTE_TIPO_RETIRO;
       const tipoTxt = esRetiro ? 'retiro' : 'aporte';
-      const msg = `¿Eliminar este ${tipoTxt} de ${r.accionista || '(sin nombre)'} — ${montoFmt(Math.abs(r.monto), r.moneda)}? Podrás deshacerlo desde el aviso «Deshacer».`;
+      const msg = `¿Eliminar este ${tipoTxt} de ${r.accionista || '(sin nombre)'} — ${montoFmt(Math.abs(r.monto), r.moneda, formatGlobalAmount)}? Podrás deshacerlo desde el aviso «Deshacer».`;
       if (!window.confirm(msg)) return;
       const snapshot = r;
       setRows((prev) => prev.filter((x) => x.id !== r.id));
@@ -353,10 +359,10 @@ const AportesPanel: React.FC = () => {
           <Card title="Total neto aportado" subtitle="Suma por moneda: aportes menos retiros registrados (convención: US$).">
             <div className="flex flex-wrap gap-3 text-sm">
               {totalesPorMoneda.usd !== 0 ? (
-                <span className="font-semibold text-slate-900">{montoFmt(totalesPorMoneda.usd, 'USD')}</span>
+                <span className="font-semibold text-slate-900">{montoFmt(totalesPorMoneda.usd, 'USD', formatGlobalAmount)}</span>
               ) : null}
               {totalesPorMoneda.pen !== 0 ? (
-                <span className="font-semibold text-slate-700">{montoFmt(totalesPorMoneda.pen, 'PEN')}</span>
+                <span className="font-semibold text-slate-700">{montoFmt(totalesPorMoneda.pen, 'PEN', formatGlobalAmount)}</span>
               ) : null}
               {totalesPorMoneda.pen === 0 && totalesPorMoneda.usd === 0 ? (
                 <span className="text-slate-500">—</span>
@@ -370,8 +376,8 @@ const AportesPanel: React.FC = () => {
                 <li key={nombre} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                   <span className="font-medium text-slate-800">{nombre}</span>
                   <span className="text-slate-600 tabular-nums text-xs sm:text-sm">
-                    {t.usd !== 0 ? <span className="mr-2 font-semibold text-slate-900">{montoFmt(t.usd, 'USD')}</span> : null}
-                    {t.pen !== 0 ? <span>{montoFmt(t.pen, 'PEN')}</span> : null}
+                    {t.usd !== 0 ? <span className="mr-2 font-semibold text-slate-900">{montoFmt(t.usd, 'USD', formatGlobalAmount)}</span> : null}
+                    {t.pen !== 0 ? <span>{montoFmt(t.pen, 'PEN', formatGlobalAmount)}</span> : null}
                     {t.usd === 0 && t.pen === 0 ? <span className="text-slate-400">—</span> : null}
                   </span>
                 </li>
@@ -429,7 +435,7 @@ const AportesPanel: React.FC = () => {
                           className={`tabular-nums font-semibold whitespace-nowrap ${net < 0 ? 'text-amber-900' : 'text-slate-900'}`}
                         >
                           {net < 0 ? '−' : '+'}
-                          {montoFmt(Math.abs(r.monto), r.moneda)}
+                          {montoFmt(Math.abs(r.monto), r.moneda, formatGlobalAmount)}
                         </span>
                         <span className="text-slate-500">{r.moneda}</span>
                       </div>
@@ -484,7 +490,7 @@ const AportesPanel: React.FC = () => {
                           }`}
                         >
                           {esRetiro ? <span aria-hidden>− </span> : null}
-                          {montoFmt(Math.abs(r.monto), r.moneda)}
+                          {montoFmt(Math.abs(r.monto), r.moneda, formatGlobalAmount)}
                         </td>
                         <td className="py-2 pr-2 whitespace-nowrap text-slate-600">{r.moneda}</td>
                         <td className="py-2 pr-2 text-slate-500">{tipoAporteEtiqueta(r.tipo)}</td>

@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
@@ -6,7 +7,7 @@ import Badge from '../../components/Common/Badge';
 import Button from '../../components/Common/Button';
 import Select from '../../components/Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import {
   confianzaBadgeVariant,
   confianzaTier,
@@ -68,6 +69,7 @@ function formatRevisionAt(iso: string | null | undefined): string {
 type Draft = { tipo: string; subtipo: string };
 
 const RevisionClasificacion: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { gastosPendientesRevision, vehicles, toast, upsertGasto } =
     useRegistrosContext();
@@ -257,7 +259,7 @@ const RevisionClasificacion: React.FC = () => {
                     <tr key={`gasto-${g.id}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{formatDate(g.fecha)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-red-600 text-right tabular-nums">
-                        −{formatCurrency(g.monto)}
+                        −{formatRecordAmount(g.monto, g)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-700 max-w-[160px]">{labelVeh(g.vehicleId)}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 max-w-[240px]">

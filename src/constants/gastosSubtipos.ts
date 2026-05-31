@@ -14,17 +14,19 @@ import {
   getUnifiedSubtipoLabel,
   isSubtipoOficialEnCategoria as isOficialUnified,
 } from './subtipos/buildUnifiedSubtipoCatalog';
+import { LEGACY_SUBTIPO_ALIASES_NORM_KEY, resolveLegacyAliasNormKey } from './subtipos/legacySubtipoAliases';
 import {
-  getCanonicalSubtipoDedupeKey,
-  LEGACY_SUBTIPO_ALIASES_NORM_KEY,
-  resolveCanonicalSubtipoValue,
-  resolveLegacyAliasNormKey,
-} from './subtipos/legacySubtipoAliases';
+  getCanonicalSubtipoDedupeKeyFull,
+  resolveCanonicalSubtipoValueFull,
+} from './subtipos/subtipoCanonicalResolve';
 import {
   FINANZA_CATEGORIAS_CON_CATALOGO,
   resolveCategoriaFinanzaParaSubtipos,
   type GastoSubtipoCategoria,
 } from './subtipos/subtipoCategoria';
+import { subtipoBelongsToCategoria } from './subtipos/subtipoBelongsToCategoria';
+import { OPERATIVO_SUBTIPO_REQUIERE_REVISION } from './subtipos/operativoOficialCatalog';
+import { operativoSubtipoRequiresReview } from '../utils/operativoSubtipo';
 
 export type { GastoSubtipoCategoria };
 export { resolveCategoriaFinanzaParaSubtipos, FINANZA_CATEGORIAS_CON_CATALOGO };
@@ -52,11 +54,11 @@ export const EXCEL_CATEGORIA_A_TIPO_GASTO: Record<string, GastoSubtipoCategoria>
 };
 
 function getSubtipoOptionDedupeKeyForCat(cat: FinanzaGastoRegistroValue, value: string): string {
-  return getCanonicalSubtipoDedupeKey(cat, value);
+  return getCanonicalSubtipoDedupeKeyFull(cat, value);
 }
 
 function getSubtipoOptionCanonicalValueForCat(cat: FinanzaGastoRegistroValue, value: string): string {
-  return resolveCanonicalSubtipoValue(cat, value);
+  return resolveCanonicalSubtipoValueFull(cat, value);
 }
 
 export function getSubtipoOptionDedupeKey(tipoGasto: string, value: string): string {
@@ -122,16 +124,26 @@ export function mergeSubtiposHistoricosConOficiales(
   }));
 }
 
+function isOperativoTipoGasto(tipoGasto: string): boolean {
+  const cat = resolveCategoriaFinanzaParaSubtipos(tipoGasto);
+  return cat === 'operativo_vehiculo' || cat === 'operativo_flota_general';
+}
+
 export function buildSubtipoSelectOptions(
   tipoGasto: string,
   gastos: readonly Pick<Gasto, 'tipo_gasto' | 'subtipo_gasto'>[] | undefined,
   extraHistoricos: Iterable<string> = [],
   opts?: { showHistoricoBadge?: boolean },
 ): { value: string; label: string }[] {
-  const historicos = [
-    ...collectHistoricosSubtiposForTipoGasto(gastos ?? [], tipoGasto),
-    ...extraHistoricos,
-  ];
+  const extrasFiltered = [...extraHistoricos]
+    .map((s) => s.trim())
+    .filter((s) => s && subtipoBelongsToCategoria(tipoGasto, s));
+  const historicos = isOperativoTipoGasto(tipoGasto)
+    ? []
+    : [
+        ...collectHistoricosSubtiposForTipoGasto(gastos ?? [], tipoGasto),
+        ...extrasFiltered,
+      ];
   const merged = mergeSubtiposHistoricosConOficiales(tipoGasto, historicos);
   const showBadge = opts?.showHistoricoBadge ?? false;
   return merged.map((o) => ({
@@ -158,19 +170,34 @@ export function buildSubtipoFilterSelectOptions(
   gastos: readonly Pick<Gasto, 'tipo_gasto' | 'subtipo_gasto'>[],
   opts?: { todosLabel?: string; showHistoricoBadge?: boolean },
 ): { value: string; label: string }[] {
-  const historicos = collectHistoricosSubtiposForTipoGasto(gastos, tipoGasto);
+  const historicos = isOperativoTipoGasto(tipoGasto)
+    ? []
+    : collectHistoricosSubtiposForTipoGasto(gastos, tipoGasto);
   const merged = mergeSubtiposHistoricosConOficiales(tipoGasto, historicos);
   const showBadge = opts?.showHistoricoBadge ?? true;
   const options = merged.map((o) => ({
     value: o.value,
     label: formatSubtipoOptionLabel(tipoGasto, o, showBadge),
   }));
-  return [
+  const base = [
     { value: '', label: opts?.todosLabel ?? 'Todos subtipo' },
     ...dedupeOptionsByKey(options, (o) =>
       o.value ? getSubtipoOptionDedupeKey(tipoGasto, o.value) : '__todos__',
     ),
   ];
+  if (isOperativoTipoGasto(tipoGasto)) {
+    const needsReview = gastos.some(
+      (g) =>
+        g.tipo_gasto === tipoGasto && operativoSubtipoRequiresReview(g.subtipo_gasto),
+    );
+    if (needsReview) {
+      base.push({
+        value: OPERATIVO_SUBTIPO_REQUIERE_REVISION,
+        label: 'Requiere revisión (histórico sin mapping)',
+      });
+    }
+  }
+  return base;
 }
 
 export function buildSubtipoFormSelectOptions(
@@ -184,7 +211,13 @@ export function buildSubtipoFormSelectOptions(
     ...extraHistoricos,
   ];
   const merged = mergeSubtiposHistoricosConOficiales(tipoGasto, historicos);
-  if (tipoGasto === 'inversion_compra') return merged;
+  if (
+    tipoGasto === 'inversion_compra'
+    || tipoGasto === 'financiero_prestamo'
+    || tipoGasto === 'administrativo_empresa'
+  ) {
+    return merged;
+  }
   if (!factTipoSeleccionado?.trim()) return merged;
   const forTipo = new Set(getSubtiposGasto(factTipoSeleccionado).map((s) => normKey(s)));
   return merged.filter((o) => o.isHistorico || forTipo.has(normKey(o.value)));

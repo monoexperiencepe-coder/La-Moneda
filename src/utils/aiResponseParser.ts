@@ -109,6 +109,50 @@ export function sanitizeAiAssistantText(text: string): string {
   // Collapse 3+ blank lines into 2
   s = s.replace(/\n{3,}/g, '\n\n');
 
+  return normalizeFleetPresentation(s.trim());
+}
+
+/**
+ * Limpia ruido técnico de respuestas de flota (IDs, bullets inconsistentes).
+ */
+export function normalizeFleetPresentation(text: string): string {
+  if (!text) return text;
+  let s = text;
+
+  // Unificar bullets a •
+  s = s.replace(/^[\-\*]\s+/gm, '• ');
+  s = s.replace(/^•\s*[\-\*]\s+/gm, '• ');
+
+  const fleetStrips: [RegExp, string][] = [
+    [/\(?\s*Vehicle\s*ID\s*:\s*\d+\s*\)?/gi, ''],
+    [/\bVehicle\s*ID\s*:\s*\d+/gi, ''],
+    [/\bvehicle_id\s*[=:]\s*[\w-]+/gi, ''],
+    [/\bconductor_id\s*[=:]\s*[\w-]+/gi, ''],
+    [/\bID\s+interno\s*:\s*\d+/gi, ''],
+    [/\(ID\s*:\s*\d+\)/gi, ''],
+    [/\s*—\s*Vehicle\s*ID\s*:\s*\d+/gi, ''],
+    [/\s*-\s*Vehicle\s*ID\s*:\s*\d+/gi, ''],
+    [/\bUUID\s*:\s*[\da-f-]{8,}/gi, ''],
+    [/\bgetFlotaResumen\b/gi, ''],
+    [/\bgetVehiculosDisponibles\b/gi, ''],
+    [/\bgetVehiculosSinConductor\b/gi, ''],
+    [/\bgetConductoresAsignados\b/gi, ''],
+    [/\bgetVehiculoPorPlaca\b/gi, ''],
+    [/\bgetConductorPorVehiculo\b/gi, ''],
+    [/lineas_listado/gi, ''],
+    [/narrativa_sugerida/gi, ''],
+    [/_formato_respuesta/gi, ''],
+    [/_instruccion_interpretacion/gi, ''],
+  ];
+
+  for (const [pattern, replacement] of fleetStrips) {
+    s = s.replace(pattern, replacement);
+  }
+
+  s = s.replace(/•\s*•/g, '•');
+  s = s.replace(/[ \t]{2,}/g, ' ');
+  s = s.replace(/[ \t]+\n/g, '\n');
+  s = s.replace(/\n{3,}/g, '\n\n');
   return s.trim();
 }
 
@@ -148,6 +192,16 @@ export function sanitizeTechnicalLeakage(text: string): string {
     [/\bgetHistorialVehiculo\b/g, ''],
     [/\bgetIngresosHistoricosPorMes\b/g, ''],
     [/\bgetResumenFinanciero\b/g, ''],
+    [/\bgetFlotaResumen\b/g, ''],
+    [/\bgetVehiculosDisponibles\b/g, ''],
+    [/\bgetVehiculosSinConductor\b/g, ''],
+    [/\bgetConductoresAsignados\b/g, ''],
+    [/\bgetVehiculoPorPlaca\b/g, ''],
+    [/\bgetConductorPorVehiculo\b/g, ''],
+    [/\(?\s*Vehicle\s*ID\s*:\s*\d+\s*\)?/gi, ''],
+    [/\bVehicle\s*ID\s*:\s*\d+/gi, ''],
+    [/\bvehicle_id\b/gi, ''],
+    [/\bconductor_id\b/gi, ''],
     [/\banio=\d{4}\b/g, ''],
     [/\bperiodo=["']?[\w]+["']?/g, ''],
   ];

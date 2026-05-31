@@ -13,24 +13,21 @@ import {
   normalizeAdministrativoSubtipo,
   resolveAdministrativoSubtipoGastoCanon,
 } from './administrativoSubtipo';
-import { tipoGastoUsaSubtipoOperativo } from './gastoMoveCategoriaDefaults';
+import {
+  getFinancieroPrestamoSubtipoLabel,
+  normalizeFinancieroPrestamoSubtipo,
+  resolveFinancieroPrestamoSubtipoGastoCanon,
+} from './financieroPrestamoSubtipo';
+import {
+  tipoGastoUsaSubtipoFinancieroCanon,
+  tipoGastoUsaSubtipoOperativo,
+} from './gastoMoveCategoriaDefaults';
 import { normKey } from './normKey';
 
 export { normKey } from './normKey';
 
-/** Valor interno de filtro: agrupa cuota / préstamo / interés sin tocar BD. */
-export const SUBTIPO_FILTRO_PRESTAMO_FUSION = '__ui_prestamo_cuota_interes__';
-
-const PRESTAMO_KEYS = new Set(['cuota', 'prestamo', 'interes']);
-
-export function isPrestamoFinancieroFusionRaw(subtipo: string | null | undefined): boolean {
-  const k = normKey(subtipo ?? '');
-  return PRESTAMO_KEYS.has(k);
-}
-
 /**
  * Etiqueta visual para `subtipo_gasto` (financiero y similares). No altera el valor persistido.
- * Con `tipo_gasto` se unifica la pestaña operativos (canónico snake_case vs texto Fact legacy).
  */
 export function getSubtipoFinancieroLabel(
   subtipo: string | null | undefined,
@@ -54,17 +51,17 @@ export function getSubtipoFinancieroLabel(
   if (tg === 'inversion_compra') {
     return getInversionSubtipoLabel(s);
   }
+  if (tipoGastoUsaSubtipoFinancieroCanon(tg)) {
+    return getFinancieroPrestamoSubtipoLabel(s);
+  }
   const repCanon = normalizeRepresentacionInternaSubtipo(s);
   if (repCanon) return getRepresentacionInternaSubtipoLabel(repCanon);
   const k = normKey(s);
   if (k === 'bateria') return 'Batería';
-  if (PRESTAMO_KEYS.has(k)) return 'Préstamo';
-  if (k === 'tarjeta_banco') return 'Tarjeta banco';
-  if (k === 'prestamo_interes_banca') return 'Interés bancario';
   return s;
 }
 
-/** Valor usado en el filtro Select (fusiona cuota/prestamo/interés solo en pestaña financieros). */
+/** Valor usado en el filtro Select (canónico oficial cuando aplica). */
 export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string | undefined): string {
   const t = raw.trim();
   if (!t) return '';
@@ -80,8 +77,8 @@ export function subtipoFinancieroFilterValue(raw: string, tabTipoGasto: string |
   if (tabTipoGasto === 'inversion_compra') {
     return normalizeInversionSubtipo(t) ?? t;
   }
-  if (tabTipoGasto === 'financiero_prestamo' && isPrestamoFinancieroFusionRaw(t)) {
-    return SUBTIPO_FILTRO_PRESTAMO_FUSION;
+  if (tipoGastoUsaSubtipoFinancieroCanon(tabTipoGasto ?? '')) {
+    return resolveFinancieroPrestamoSubtipoGastoCanon(t) ?? t;
   }
   return t;
 }
@@ -92,17 +89,11 @@ export function gastoMatchesSubtipoFinancieroFilter(
   tabTipoGasto: string | undefined,
 ): boolean {
   if (!filterValue) return true;
-  if (filterValue === SUBTIPO_FILTRO_PRESTAMO_FUSION) {
-    return tabTipoGasto === 'financiero_prestamo' && isPrestamoFinancieroFusionRaw(subtipoGasto ?? '');
-  }
   if (tabTipoGasto === 'representacion_interna') {
     return normalizeRepresentacionInternaSubtipo(subtipoGasto) === filterValue;
   }
   if (tabTipoGasto && tipoGastoUsaSubtipoOperativo(tabTipoGasto)) {
-    return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
-  }
-  if (tabTipoGasto === 'administrativo_empresa') {
-    return resolveAdministrativoSubtipoGastoCanon(subtipoGasto ?? '') === filterValue;
+    return resolveOperativoSubtipoGastoCanon(subtipoGasto ?? '') === resolveOperativoSubtipoGastoCanon(filterValue);
   }
   if (tabTipoGasto) {
     return subtipoMatchesFilter(tabTipoGasto, subtipoGasto, filterValue);

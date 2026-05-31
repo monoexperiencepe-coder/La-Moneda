@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Info, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, todayStr, toDateOnlyString } from '../../utils/formatting';
+import { todayStr, toDateOnlyString } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import {
@@ -191,6 +192,7 @@ function buildComparisonLines(
   cur: PeriodTotals,
   prev: PeriodTotals,
   compareLabel: string,
+  formatAmount: (n: number) => string,
 ): CompareLine[] {
   if (!prev.hasMovement && !cur.hasMovement) return [];
   const lines: CompareLine[] = [];
@@ -212,12 +214,12 @@ function buildComparisonLines(
   if (Math.abs(diffGas) >= 1 && (cur.gastos > 0 || prev.gastos > 0)) {
     if (diffGas > 0) {
       lines.push({
-        text: `↓ Gastaste ${formatCurrency(diffGas)} más que en ${label}`,
+        text: `↓ Gastaste ${formatAmount(diffGas)} más que en ${label}`,
         tone: 'bad',
       });
     } else {
       lines.push({
-        text: `↑ Gastaste ${formatCurrency(Math.abs(diffGas))} menos que en ${label}`,
+        text: `↑ Gastaste ${formatAmount(Math.abs(diffGas))} menos que en ${label}`,
         tone: 'good',
       });
     }
@@ -227,12 +229,12 @@ function buildComparisonLines(
   if (Math.abs(diffRes) >= 1 && (cur.hasMovement || prev.hasMovement)) {
     if (diffRes > 0) {
       lines.push({
-        text: `↑ Resultado mejoró ${formatCurrency(diffRes)} vs ${label}`,
+        text: `↑ Resultado mejoró ${formatAmount(diffRes)} vs ${label}`,
         tone: 'good',
       });
     } else {
       lines.push({
-        text: `↓ Resultado bajó ${formatCurrency(Math.abs(diffRes))} vs ${label}`,
+        text: `↓ Resultado bajó ${formatAmount(Math.abs(diffRes))} vs ${label}`,
         tone: 'bad',
       });
     }
@@ -423,6 +425,7 @@ function KpiChip({
 
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
+  const { formatGlobalAmount } = useAmountDisplay();
   const { ingresos, gastos, vehicles, gastosFinancialSummary, isLoadingGastosSummary, gastosLoadScope } =
     useRegistrosContext();
   const [preset, setPreset] = useState<ResumenPreset>('mes_actual');
@@ -484,8 +487,8 @@ const Resumen: React.FC = () => {
     ? (gastosGlobalStateAllTime.total ?? 0)
     : totalGastosLocal;
   const totalGastosDisplay = useSummaryAllTime
-    ? formatGastosGlobalTotalDisplay(gastosGlobalStateAllTime)
-    : formatCurrency(totalGastosLocal);
+    ? formatGastosGlobalTotalDisplay(gastosGlobalStateAllTime, formatGlobalAmount)
+    : formatGlobalAmount(totalGastosLocal);
   const resultadoKpi = useMemo(
     () =>
       resolveResultadoNetoKpi(
@@ -493,8 +496,9 @@ const Resumen: React.FC = () => {
         gastosGlobalStateAllTime,
         useSummaryAllTime,
         totalGastosLocal,
+        formatGlobalAmount,
       ),
-    [totalIngresos, gastosGlobalStateAllTime, useSummaryAllTime, totalGastosLocal],
+    [totalIngresos, gastosGlobalStateAllTime, useSummaryAllTime, totalGastosLocal, formatGlobalAmount],
   );
   const resultadoNeto = resultadoKpi.value;
   const resultadoNetoDisplay = resultadoKpi.display;
@@ -528,7 +532,7 @@ const Resumen: React.FC = () => {
     ingresosP.length > 0 ||
     gastosP.length > 0 ||
     (useSummaryAllTime && gastosGlobalStateAllTime.source === 'rpc');
-  const fmt = (v: number) => (hasData || useSummaryAllTime ? formatCurrency(v) : '—');
+  const fmt = (v: number) => (hasData || useSummaryAllTime ? formatGlobalAmount(v) : '—');
 
   const distribucion = useMemo(() => {
     if (useSummaryAllTime && gastosFinancialSummary) {
@@ -578,8 +582,8 @@ const Resumen: React.FC = () => {
 
   const comparisonLines = useMemo(() => {
     if (!prevTotals || !previousRange) return [];
-    return buildComparisonLines(curTotals, prevTotals, previousRange.compareLabel);
-  }, [curTotals, prevTotals, previousRange]);
+    return buildComparisonLines(curTotals, prevTotals, previousRange.compareLabel, formatGlobalAmount);
+  }, [curTotals, prevTotals, previousRange, formatGlobalAmount]);
 
   const prevOperativoMonto = useMemo(() => {
     if (!previousRange) return 0;
@@ -787,13 +791,13 @@ const Resumen: React.FC = () => {
               <>{resultadoNetoDisplay}</>
             ) : resultadoKpi.value >= 0 ? (
               <>
-                Te quedaron <strong>{formatCurrency(resultadoKpi.value)}</strong> en {periodHuman}, después de registrar
+                Te quedaron <strong>{formatGlobalAmount(resultadoKpi.value)}</strong> en {periodHuman}, después de registrar
                 todos los gastos del período.
               </>
             ) : (
               <>
                 En {periodHuman} los gastos superan a los ingresos por{' '}
-                <strong>{formatCurrency(Math.abs(resultadoKpi.value))}</strong>.
+                <strong>{formatGlobalAmount(Math.abs(resultadoKpi.value))}</strong>.
               </>
             )
           ) : (
@@ -879,7 +883,7 @@ const Resumen: React.FC = () => {
                 <div className="mb-1 flex items-center justify-between gap-2 text-sm">
                   <span className="font-medium text-slate-800">{d.label}</span>
                   <span className="shrink-0 tabular-nums text-slate-600">
-                    {formatCurrency(d.monto)} · {d.pct.toFixed(0)}%
+                    {formatGlobalAmount(d.monto)} · {d.pct.toFixed(0)}%
                   </span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -906,7 +910,7 @@ const Resumen: React.FC = () => {
                     {d.label}
                   </span>
                   <span className="shrink-0 font-semibold tabular-nums text-slate-800">
-                    {formatCurrency(d.monto)}
+                    {formatGlobalAmount(d.monto)}
                     <span className="ml-1.5 font-normal text-slate-500">({d.pct.toFixed(0)}%)</span>
                   </span>
                 </li>
@@ -967,7 +971,7 @@ const Resumen: React.FC = () => {
                   </span>
                   <span className="truncate">{x.name}</span>
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-rose-700">{formatCurrency(x.monto)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-rose-700">{formatGlobalAmount(x.monto)}</span>
               </div>
             ))}
           </div>

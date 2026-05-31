@@ -4,6 +4,17 @@ import { fetchGastosByTipo, fetchGastosFinancialSummary, fetchGastosRecent } fro
 import { fetchIngresos } from '../../../services/ingresosService';
 import { fetchPrestamosFinancierosDetalle } from '../../../services/prestamosFinancierosService';
 import { fetchVehiculos } from '../../../services/vehiculosService';
+import { fetchConductores } from '../../../services/conductoresService';
+import {
+  buildFlotaResumen,
+  getConductoresAsignados,
+  getConductorPorVehiculo,
+  getVehiculoPorConductorNombre,
+  getVehiculoPorPlaca,
+  getVehiculosDisponibles,
+  getVehiculosSinConductor,
+  logFlotaTool,
+} from '../../fleet/fleetAnalytics';
 import { fetchInversionesGeneralesVehiculo } from '../../../services/inversionesGeneralesVehiculoService';
 import { filterGastosForUser, type PermissionUser } from '../../../utils/permissions';
 import type { Gasto } from '../../../data/types';
@@ -728,6 +739,118 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
         nota: 'Inversiones no vehiculares (terrenos, inmuebles, activos generales). NO incluye inversiones vehiculares. Separar PEN y USD.',
       };
       logToolResult(name, { count: finalFiltered.length }, { range: dateRange ?? undefined, source_table: 'gastos(inversion_compra)' });
+      return result;
+    }
+
+    case 'getFlotaResumen': {
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const resumen = buildFlotaResumen(vehicles, conductores);
+      const result = {
+        ...resumen,
+        nota_operativa:
+          'Disponibles = activos sin conductor vigente. Mantenimiento no aplica en esta fase (solo activo/inactivo).',
+      };
+      logFlotaTool(name, {}, resumen.total);
+      logToolResult(name, { count: resumen.total }, { source_table: 'vehiculos+conductores' });
+      return result;
+    }
+
+    case 'getVehiculosDisponibles': {
+      const limit = clampLimit(args.limit, 50, 100);
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const todos = getVehiculosDisponibles(vehicles, conductores);
+      const vehiculos = todos.slice(0, limit);
+      const result = {
+        count: todos.length,
+        vehiculos,
+        nota: 'Solo vehículos activos sin conductor vigente asignado.',
+      };
+      logFlotaTool(name, { limit }, vehiculos.length);
+      logToolResult(name, { count: todos.length }, { source_table: 'vehiculos' });
+      return result;
+    }
+
+    case 'getVehiculosSinConductor': {
+      const limit = clampLimit(args.limit, 50, 100);
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const todos = getVehiculosSinConductor(vehicles, conductores);
+      const vehiculos = todos.slice(0, limit);
+      const result = {
+        count: todos.length,
+        vehiculos,
+        nota: 'Vehículos activos sin conductor en estado VIGENTE.',
+      };
+      logFlotaTool(name, { limit }, vehiculos.length);
+      logToolResult(name, { count: todos.length }, { source_table: 'vehiculos' });
+      return result;
+    }
+
+    case 'getConductoresAsignados': {
+      const limit = clampLimit(args.limit, 80, 120);
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const todos = getConductoresAsignados(vehicles, conductores);
+      const asignados = todos.slice(0, limit);
+      const result = {
+        count: todos.length,
+        asignados,
+      };
+      logFlotaTool(name, { limit }, asignados.length);
+      logToolResult(name, { count: todos.length }, { source_table: 'conductores' });
+      return result;
+    }
+
+    case 'getVehiculoPorPlaca': {
+      const placa = typeof args.placa === 'string' ? args.placa.trim() : '';
+      if (!placa) throw new Error('Indica la placa del vehículo.');
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const lookup = getVehiculoPorPlaca(vehicles, conductores, placa);
+      const result = {
+        count: lookup.encontrado ? 1 : 0,
+        ...lookup,
+      };
+      logFlotaTool(name, { placa }, lookup.encontrado ? 1 : 0);
+      logToolResult(name, { count: lookup.encontrado ? 1 : 0 }, { source_table: 'vehiculos' });
+      return result;
+    }
+
+    case 'getConductorPorVehiculo': {
+      const placa = typeof args.placa === 'string' ? args.placa.trim() : '';
+      const vehicleId = typeof args.vehicle_id === 'string' ? args.vehicle_id.trim() : '';
+      const conductorQ = typeof args.conductor === 'string' ? args.conductor.trim() : '';
+      if (!placa && !vehicleId && !conductorQ) {
+        throw new Error('Indica placa, vehicle_id o nombre del conductor.');
+      }
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      let lookup;
+      if (conductorQ) {
+        lookup = getVehiculoPorConductorNombre(vehicles, conductores, conductorQ);
+      } else {
+        lookup = getConductorPorVehiculo(vehicles, conductores, vehicleId || placa);
+      }
+      const count =
+        lookup.coincidencias_nombre?.length ??
+        (lookup.encontrado && lookup.conductor ? 1 : 0);
+      const result = { count, ...lookup };
+      logFlotaTool(name, { placa: placa || undefined, vehicle_id: vehicleId || undefined, conductor: conductorQ || undefined }, count);
+      logToolResult(name, { count }, { source_table: 'conductores+vehiculos' });
       return result;
     }
 

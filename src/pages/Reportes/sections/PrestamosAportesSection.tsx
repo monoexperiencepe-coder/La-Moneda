@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
@@ -7,10 +8,11 @@ import { canUseFinanciamiento, permissionUserFromAuth } from '../../../utils/per
 import { fetchAportesAccionistas, aporteMontoNeto } from '../../../services/aportesAccionistasService';
 import { fetchPrestamosFinancierosDetalle } from '../../../services/prestamosFinancierosService';
 import { calcularPrestamoFinancieroInfo } from '../../../utils/prestamosFinancierosCalc';
-import { formatCurrency, formatDate } from '../../../utils/formatting';
+import { formatDate } from '../../../utils/formatting';
 import type { AporteAccionista, PrestamoFinancieroDetalle } from '../../../data/types';
 
 const PrestamosAportesSection: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const { prestamoAbonos } = useRegistrosContext();
   const { profile, user } = useAuth();
   const tenantEmpresaId = profile?.empresa_id;
@@ -103,13 +105,13 @@ const PrestamosAportesSection: React.FC = () => {
         <StatCard label="Préstamos registrados" value={String(resumen.totalPrestamos)} sub={`${resumen.activos} activos`} />
         <StatCard
           label="Cuota mensual estimada"
-          value={formatCurrency(resumen.cuotaMensualEst)}
+          value={formatGlobalAmount(resumen.cuotaMensualEst)}
           sub="Suma préstamos activos"
         />
-        <StatCard label="Capital referencial est." value={formatCurrency(resumen.capitalEst)} sub="Aproximado" />
+        <StatCard label="Capital referencial est." value={formatGlobalAmount(resumen.capitalEst)} sub="Aproximado" />
         <StatCard
           label="Aportes registrados"
-          value={formatCurrency(resumen.totalAportes)}
+          value={formatGlobalAmount(resumen.totalAportes)}
           sub={`${resumen.aportesCount} movimiento${resumen.aportesCount === 1 ? '' : 's'}`}
         />
       </div>
@@ -135,7 +137,7 @@ const PrestamosAportesSection: React.FC = () => {
                   <span className="block font-medium">{m.label}</span>
                   <span className="text-xs text-slate-400">{formatDate(m.fecha)}</span>
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{formatCurrency(m.monto)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{formatGlobalAmount(m.monto)}</span>
               </li>
             ))}
           </ul>

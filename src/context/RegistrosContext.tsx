@@ -23,6 +23,8 @@ import {
 } from '../data/types';
 import { ingresoMontoPEN } from '../utils/moneda';
 import type { ControlFechasHistoryFilters } from '../services/controlFechasService';
+import type { InsertVehiculoInput } from '../services/vehiculosService';
+import type { FleetAssignmentResult } from '../services/fleetAssignmentService';
 import { useAuth } from './AuthContext';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
@@ -80,11 +82,20 @@ interface RegistrosContextValue {
   addPrestamoAbono: (data: Omit<PrestamoAbono, 'id' | 'createdAt'>) => PrestamoAbono | null;
   addUnidad: (data: Omit<UnidadRegistro, 'id' | 'createdAt'>) => Promise<UnidadRegistro | null>;
   addConductor: (data: Omit<Conductor, 'id' | 'createdAt'>) => Promise<Conductor | null>;
+  addVehicle: (data: InsertVehiculoInput, opts?: { conductorId?: string | null }) => Promise<Vehicle | null>;
+  updateVehicle: (id: number, patch: Partial<Omit<Vehicle, 'id'>>) => Promise<Vehicle | null>;
+  deleteVehicle: (id: number) => Promise<void>;
+  assignConductorToVehicle: (conductorId: string, vehicleId: number | null) => Promise<FleetAssignmentResult>;
+  clearVehicleConductor: (vehicleId: number) => Promise<FleetAssignmentResult | null>;
   updateConductor: (
     id: string,
     patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>,
   ) => Promise<Conductor | null>;
   addControlFecha: (data: Omit<ControlFecha, 'id' | 'createdAt'>) => Promise<ControlFecha | null>;
+  updateControlFecha: (
+    id: number,
+    patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>,
+  ) => Promise<ControlFecha | null>;
   addKilometraje: (data: Omit<KilometrajeRegistro, 'id' | 'createdAt'>) => Promise<KilometrajeRegistro | null>;
   addPendiente: (data: Omit<Pendiente, 'id' | 'createdAt'>) => Promise<Pendiente | null>;
   updatePendiente: (
@@ -184,6 +195,13 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const toastHook = useToast();
   const { role, user, profile, isAuthenticated } = useAuth();
   const undoManager = useUndoManager();
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    void import('../audit/techAuditDiagnostics').then(({ setRealtimeAuditRole }) => {
+      setRealtimeAuditRole(profile?.role ?? user?.role ?? null);
+    });
+  }, [profile?.role, user]);
 
   const permissionUser = useMemo(
     () => permissionUserFromAuth(user, profile?.email ?? null),
@@ -419,6 +437,75 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
+  const handleAddVehicle = async (data: InsertVehiculoInput, opts?: { conductorId?: string | null }) => {
+    try {
+      const result = await registros.addVehicle(data, opts);
+      toastHook.success('Vehículo registrado', `${result?.placa ?? data.placa} · ${data.marca} ${data.modelo}`);
+      return result;
+    } catch (e) {
+      toastHook.error('No se pudo registrar el vehículo', e instanceof Error ? e.message : '');
+      return null;
+    }
+  };
+
+  const handleUpdateVehicle = async (id: number, patch: Partial<Omit<Vehicle, 'id'>>) => {
+    try {
+      const result = await registros.updateVehicle(id, patch);
+      if (!result) {
+        toastHook.error('No se pudo actualizar el vehículo');
+        return null;
+      }
+      toastHook.success('Vehículo actualizado', `${result.placa} · ${result.marca} ${result.modelo}`);
+      return result;
+    } catch (e) {
+      toastHook.error('No se pudo actualizar el vehículo', e instanceof Error ? e.message : '');
+      return null;
+    }
+  };
+
+  const handleDeleteVehicle = async (id: number) => {
+    try {
+      await registros.deleteVehicle(id);
+      toastHook.success('Vehículo eliminado');
+    } catch (e) {
+      toastHook.error('No se pudo eliminar el vehículo', e instanceof Error ? e.message : '');
+      throw e;
+    }
+  };
+
+  const handleAssignConductorToVehicle = async (conductorId: string, vehicleId: number | null) => {
+    try {
+      const result = await registros.assignConductorToVehicle(conductorId, vehicleId);
+      if (vehicleId == null) {
+        toastHook.success('Conductor desasignado', 'La unidad quedó sin conductor vigente.');
+      } else {
+        toastHook.success(
+          result.log.reassigned ? 'Conductor reasignado' : 'Conductor asignado',
+          'La flota se actualizó en esta sesión.',
+        );
+      }
+      return result;
+    } catch (e) {
+      toastHook.error('No se pudo asignar el conductor', e instanceof Error ? e.message : '');
+      throw e;
+    }
+  };
+
+  const handleClearVehicleConductor = async (vehicleId: number) => {
+    try {
+      const result = await registros.clearVehicleConductor(vehicleId);
+      if (!result) {
+        toastHook.info('Sin cambios', 'Este vehículo no tenía conductor vigente asignado.');
+        return null;
+      }
+      toastHook.success('Conductor desasignado', 'La unidad quedó disponible.');
+      return result;
+    } catch (e) {
+      toastHook.error('No se pudo desasignar', e instanceof Error ? e.message : '');
+      throw e;
+    }
+  };
+
   const handleUpdateConductor = async (id: string, patch: Partial<Omit<Conductor, 'id' | 'createdAt'>>) => {
     const before = registros.conductores.find((c) => c.id === id);
     try {
@@ -526,6 +613,24 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       return result;
     } catch (e) {
       toastHook.error('No se pudo registrar la fecha', e instanceof Error ? e.message : '');
+      return null;
+    }
+  };
+
+  const handleUpdateControlFecha = async (
+    id: number,
+    patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>,
+  ) => {
+    try {
+      const result = await registros.updateControlFecha(id, patch);
+      if (!result) {
+        toastHook.error('No se pudo actualizar el documento');
+        return null;
+      }
+      toastHook.success('Documento actualizado', `${result.tipo} · vence ${result.fechaVencimiento}`);
+      return result;
+    } catch (e) {
+      toastHook.error('No se pudo actualizar el documento', e instanceof Error ? e.message : '');
       return null;
     }
   };
@@ -710,8 +815,14 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       addPrestamoAbono: handleAddPrestamoAbono,
       addUnidad: handleAddUnidad,
       addConductor: handleAddConductor,
+      addVehicle: handleAddVehicle,
+      updateVehicle: handleUpdateVehicle,
+      deleteVehicle: handleDeleteVehicle,
+      assignConductorToVehicle: handleAssignConductorToVehicle,
+      clearVehicleConductor: handleClearVehicleConductor,
       updateConductor: handleUpdateConductor,
       addControlFecha: handleAddControlFecha,
+      updateControlFecha: handleUpdateControlFecha,
       addKilometraje: handleAddKilometraje,
       addPendiente: handleAddPendiente,
       updatePendiente: handleUpdatePendiente,

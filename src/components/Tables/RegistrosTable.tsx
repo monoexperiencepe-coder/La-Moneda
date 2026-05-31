@@ -8,12 +8,14 @@ import Badge from '../Common/Badge';
 import Button from '../Common/Button';
 import Select from '../Common/Select';
 import Modal from '../Common/Modal';
-import { Ingreso, Gasto, Vehicle, type CategoriaGasto } from '../../data/types';
-import { formatCurrency, formatDate, formatDateTimePe, formatUSD } from '../../utils/formatting';
+import { Ingreso, Gasto, Vehicle } from '../../data/types';
+import { formatDate, formatDateTimePe } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
-import { TIPOS_GASTO_FACT, getSubtiposGasto, getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
+import { getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
+import { mapSubtipoToFactTipo } from '../../constants/subtipos/mapSubtipoToFactTipo';
+import { subtipoBelongsToCategoria } from '../../constants/subtipos/subtipoBelongsToCategoria';
 import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
 import { undoUpdateGastoDetalle } from '../../undo/factories';
 import { isGastoRecentlyReclassified } from '../../utils/gastoHistorialOrder';
@@ -23,6 +25,7 @@ import {
   confianzaTier,
   confianzaBadgeVariant,
 } from '../../utils/clasificacionGasto';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { useAuth } from '../../context/AuthContext';
 import { canMutateIngresos, isAdminRole } from '../../utils/roles';
 import {
@@ -49,6 +52,14 @@ import {
 } from '../../utils/recordSearch';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 import { getSubtipoFinancieroLabel } from '../../utils/subtipoFinancieroLabel';
+import { buildSubtipoSelectOptions } from '../../constants/gastosSubtipos';
+import {
+  normalizeSubtipoCanonForGastoSave,
+  resolveSubtipoCanonForGastoEdit,
+  tipoGastoPermiteEdicionSubtipoOficial,
+} from '../../utils/gastoMoveCategoriaDefaults';
+import { motivoFromSubtipoCanon } from '../../utils/gastoEditSubtipoMotivo';
+import { tipoGastoUiCanonical } from '../../utils/gastosTipoGasto';
 import { sortRegistrosByLatestCreatedOrDate } from '../../utils/sortRegistrosByLatestCreatedOrDate';
 import { sumGastosHistorialPEN, sumIngresosHistorialPEN } from '../../utils/historialRegistroTotals';
 import { useBootstrapPending } from '../../hooks/useBootstrapPending';
@@ -103,6 +114,12 @@ const PAGE_SIZE_OPTIONS = [
   { value: 50, label: '50 por página' },
 ];
 
+const FULL_HISTORY_PAGE_SIZE_OPTIONS = [
+  { value: 100, label: '100 por página' },
+  { value: 200, label: '200 por página' },
+  { value: 500, label: '500 por página' },
+];
+
 /** Texto truncado con tooltip nativo si supera `maxLen` caracteres. */
 const TruncatedText: React.FC<{ text: string | null | undefined; maxLen?: number; className?: string }> = ({
   text,
@@ -151,10 +168,8 @@ type GastoEditDraft = {
   fecha: string;
   fechaRegistro: string;
   vehicleIdStr: string;
-  tipo: string;
-  subTipo: string;
-  categoria: CategoriaGasto;
-  motivo: string;
+  /** Subtipo oficial de la categoría financiera actual (Tipo Fact inferido al guardar). */
+  subtipoCanon: string;
   metodoPago: string;
   metodoPagoDetalle: string;
   montoStr: string;
@@ -162,14 +177,12 @@ type GastoEditDraft = {
 };
 
 function gastoToEditDraft(g: Gasto): GastoEditDraft {
+  const tg = tipoGastoUiCanonical(g) ?? (g.tipo_gasto ?? '').trim();
   return {
     fecha: g.fecha.slice(0, 10),
     fechaRegistro: g.fechaRegistro.slice(0, 10),
     vehicleIdStr: g.vehicleId != null ? String(g.vehicleId) : '',
-    tipo: g.tipo,
-    subTipo: g.subTipo ?? '',
-    categoria: g.categoria,
-    motivo: g.motivo,
+    subtipoCanon: resolveSubtipoCanonForGastoEdit(tg, g.subtipo_gasto),
     metodoPago: g.metodoPago,
     metodoPagoDetalle: g.metodoPagoDetalle,
     montoStr: String(g.monto),
@@ -198,21 +211,24 @@ function buildGastoDetallePatch(
   }
   if ((baseline.vehicleId ?? null) !== vid) patch.vehicleId = vid;
 
-  const tipoTrim = draft.tipo.trim();
-  if (!tipoTrim) return { patch: {}, error: 'Indica el tipo Fact.' };
-  if (tipoTrim !== baseline.tipo) patch.tipo = tipoTrim;
-  const subNorm = draft.subTipo.trim() === '' ? null : draft.subTipo.trim();
-  const baseSub = baseline.subTipo ?? null;
-  if (subNorm !== baseSub) patch.subTipo = subNorm;
+  const tg = tipoGastoUiCanonical(baseline) ?? (baseline.tipo_gasto ?? '').trim();
+  if (tipoGastoPermiteEdicionSubtipoOficial(tg)) {
+    const canonRaw = draft.subtipoCanon.trim();
+    if (!canonRaw) return { patch: {}, error: 'Elige subtipo.' };
+    const canon = normalizeSubtipoCanonForGastoSave(tg, canonRaw);
+    const fact = mapSubtipoToFactTipo(tg, canon);
+    if (!fact) return { patch: {}, error: 'Subtipo no válido para esta categoría.' };
 
-  const subs = getSubtiposGasto(tipoTrim);
-  const allowedSubtipos = new Set(subs);
-  if (subNorm != null && !allowedSubtipos.has(subNorm) && subNorm !== baseSub) {
-    return { patch: {}, error: 'Sub tipo Fact no es compatible con el tipo seleccionado.' };
+    const subtipoGasto = canon.trim() || null;
+    const baseSubtipo = (baseline.subtipo_gasto ?? '').trim() || null;
+    if (subtipoGasto !== baseSubtipo) patch.subtipo_gasto = subtipoGasto;
+    if (fact.tipo !== baseline.tipo) patch.tipo = fact.tipo;
+    if ((fact.subTipo ?? null) !== (baseline.subTipo ?? null)) patch.subTipo = fact.subTipo;
+    const catKpi = inferCategoriaFromTipoGasto(fact.tipo);
+    if (catKpi !== baseline.categoria) patch.categoria = catKpi;
+    const motivoLabel = motivoFromSubtipoCanon(tg, canon);
+    if (motivoLabel !== baseline.motivo.trim()) patch.motivo = motivoLabel;
   }
-
-  if (draft.categoria !== baseline.categoria) patch.categoria = draft.categoria;
-  if (draft.motivo.trim() !== baseline.motivo.trim()) patch.motivo = draft.motivo.trim();
 
   if (draft.metodoPago !== baseline.metodoPago || draft.metodoPagoDetalle.trim() !== baseline.metodoPagoDetalle.trim()) {
     patch.metodoPago = draft.metodoPago;
@@ -257,20 +273,34 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   fullHistoryView = false,
 }) => {
   const { role, isFinancialOperador, profile } = useAuth();
+  const {
+    formatGlobalAmount,
+    formatRecordAmount,
+    showContador24hHint,
+    contador24hHint,
+  } = useAmountDisplay();
   const { toast, showUndoToast } = useRegistrosContext();
   const showDeleteIngreso = mode !== 'ingresos' || canMutateIngresos(role);
   const showDeleteGasto = mode !== 'gastos' || !isFinancialOperador;
   const tenantEmpresaId = profile?.empresa_id;
   const colCount = 5;
   const [localQuery, setLocalQuery] = useState('');
-  const query = serverHistorialSearch?.serverSide ? serverHistorialSearch.query : localQuery;
-  const setQuery = serverHistorialSearch?.serverSide
+  /** Con búsqueda server del padre: siempre sincronizar input → padre para activar debounce y fetch. */
+  const query = serverHistorialSearch ? serverHistorialSearch.query : localQuery;
+  const setQuery = serverHistorialSearch
     ? serverHistorialSearch.onQueryChange
     : setLocalQuery;
   const [sortKey, setSortKey] = useState<string>('fecha');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const pageSizeSelectOptions = fullHistoryView ? FULL_HISTORY_PAGE_SIZE_OPTIONS : PAGE_SIZE_OPTIONS;
+
+  useEffect(() => {
+    if (!fullHistoryView) return;
+    setPageSize((prev) => (prev >= 100 ? prev : 200));
+    setPage(1);
+  }, [fullHistoryView]);
   const [showFullHistory, setShowFullHistory] = useState(false);
 
   useEffect(() => {
@@ -396,20 +426,6 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     });
   }, [mode, role, onGastoDetalleSaved, gastoDetailEditing, gastoEditDirty, gastoSaveBusy]);
 
-  const categoriaKpiOptions = useMemo(
-    () =>
-      (Object.keys(CATEGORIAS_GASTO_LABELS) as CategoriaGasto[]).map((k) => ({
-        value: k,
-        label: CATEGORIAS_GASTO_LABELS[k],
-      })),
-    [],
-  );
-
-  const tipoFactOptions = useMemo(
-    () => TIPOS_GASTO_FACT.map((t) => ({ value: t, label: t })),
-    [],
-  );
-
   const vehicleSelectOptions = useMemo(
     () => [
       { value: '', label: 'General / sin vehículo' },
@@ -439,16 +455,36 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     return rows;
   }, [gastoEditDraft]);
 
-  const subtipoFactOptions = useMemo(() => {
-    if (!gastoEditDraft) return [];
-    const subs = getSubtiposGasto(gastoEditDraft.tipo);
-    const cur = gastoEditDraft.subTipo.trim();
-    const out = subs.map((s) => ({ value: s, label: s }));
-    if (cur && !subs.includes(cur)) {
-      out.unshift({ value: cur, label: `${cur} (actual)` });
+  const gastoEditTipoGasto = useMemo(
+    () =>
+      gastoEditBaseline
+        ? (tipoGastoUiCanonical(gastoEditBaseline) ?? (gastoEditBaseline.tipo_gasto ?? '').trim())
+        : '',
+    [gastoEditBaseline],
+  );
+
+  const gastoEditPermiteSubtipoOficial = useMemo(
+    () => tipoGastoPermiteEdicionSubtipoOficial(gastoEditTipoGasto),
+    [gastoEditTipoGasto],
+  );
+
+  const subtipoCanonEditOptions = useMemo(() => {
+    if (!gastoEditDraft || !gastoEditBaseline || !gastoEditPermiteSubtipoOficial) return [];
+    const extra: string[] = [];
+    const current = gastoEditBaseline.subtipo_gasto?.trim();
+    if (current && subtipoBelongsToCategoria(gastoEditTipoGasto, current)) {
+      extra.push(current);
     }
-    return out;
-  }, [gastoEditDraft]);
+    return buildSubtipoSelectOptions(gastoEditTipoGasto, gastos, extra, {
+      showHistoricoBadge: false,
+    });
+  }, [
+    gastoEditDraft,
+    gastoEditBaseline,
+    gastoEditPermiteSubtipoOficial,
+    gastoEditTipoGasto,
+    gastos,
+  ]);
 
   const startGastoEdit = useCallback(() => {
     if (mode !== 'gastos' || !viewItem || !onGastoDetalleSaved || !('signo' in viewItem)) return;
@@ -598,17 +634,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
   const totalPages = serverMode
     ? Math.max(1, Math.ceil((serverPagination!.total || 0) / serverPagination!.pageSize))
-    : showFullHistory
-      ? 1
-      : Math.max(1, Math.ceil(sorted.length / pageSize));
+    : Math.max(1, Math.ceil(sorted.length / pageSize));
   const uiPage = serverMode ? serverPagination!.page + 1 : page;
   const goToPage = (p: number) => {
     const next = Math.max(1, Math.min(totalPages, p));
     if (serverMode) serverPagination!.onPageChange(next - 1);
     else setPage(next);
   };
-  const paginated =
-    serverMode || showFullHistory ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = serverMode
+    ? sorted
+    : sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const historialResumen = useMemo(() => {
     const filteredCount = serverMode ? serverPagination!.total : sorted.length;
@@ -625,18 +660,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     const effectivePageSize = serverMode ? serverPagination!.pageSize : pageSize;
     const isPaginated = serverMode
       ? filteredCount > effectivePageSize
-      : !showFullHistory && filteredCount > pageSize;
+      : filteredCount > pageSize;
     const rangeFrom =
-      filteredCount === 0
-        ? 0
-        : showFullHistory
-          ? 1
-          : (effectivePage - 1) * effectivePageSize + 1;
-    const rangeTo = showFullHistory
-      ? filteredCount
-      : Math.min(effectivePage * effectivePageSize, filteredCount);
+      filteredCount === 0 ? 0 : (effectivePage - 1) * effectivePageSize + 1;
+    const rangeTo = Math.min(effectivePage * effectivePageSize, filteredCount);
     return { filteredCount, filteredTotal, pageTotal, isPaginated, rangeFrom, rangeTo };
-  }, [sorted, paginated, mode, showFullHistory, page, pageSize, serverMode, serverPagination]);
+  }, [sorted, paginated, mode, page, pageSize, serverMode, serverPagination]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -761,7 +790,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           </button>
           <div className={`w-full sm:w-40 ${serverMode || fullHistoryView ? 'hidden' : ''}`}>
             <Select
-              options={PAGE_SIZE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              options={pageSizeSelectOptions.map(o => ({ value: o.value, label: o.label }))}
               value={pageSize}
               onChange={v => { setPageSize(Number(v)); setPage(1); }}
             />
@@ -848,17 +877,32 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 </div>
                 <div className="shrink-0 text-right">
                   {mode === 'ingresos' ? (
-                    <p className="text-sm font-bold text-emerald-600 tabular-nums">
-                      +{formatCurrency(ingresoMontoPEN(item as Ingreso))}
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-emerald-600 tabular-nums">
+                        {formatRecordAmount(ingresoMontoPEN(item as Ingreso), item as Ingreso, { signPrefix: '+' })}
+                      </p>
+                      {showContador24hHint(item as Ingreso) ? (
+                        <p className="text-[9px] text-amber-600 leading-tight">{contador24hHint}</p>
+                      ) : null}
+                    </div>
                   ) : (item as Gasto).monto < 0 ? (
-                    <p className="text-sm font-bold text-emerald-600 tabular-nums">
-                      −{formatCurrency(Math.abs((item as Gasto).monto))}
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-emerald-600 tabular-nums">
+                        {formatRecordAmount(Math.abs((item as Gasto).monto), item as Gasto, { signPrefix: '−' })}
+                      </p>
+                      {showContador24hHint(item as Gasto) ? (
+                        <p className="text-[9px] text-amber-600 leading-tight">{contador24hHint}</p>
+                      ) : null}
+                    </div>
                   ) : (
-                    <p className="text-sm font-bold text-red-500 tabular-nums">
-                      −{formatCurrency((item as Gasto).monto)}
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-red-500 tabular-nums">
+                        {formatRecordAmount((item as Gasto).monto, item as Gasto, { signPrefix: '−' })}
+                      </p>
+                      {showContador24hHint(item as Gasto) ? (
+                        <p className="text-[9px] text-amber-600 leading-tight">{contador24hHint}</p>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1156,23 +1200,33 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                       <div className="text-sm font-bold text-emerald-600">
                         {(item as Ingreso).moneda === 'USD' ? (
                           <>
-                            <span>+{formatUSD((item as Ingreso).monto)}</span>
+                            <span>
+                              {formatRecordAmount((item as Ingreso).monto, item as Ingreso, {
+                                currency: 'USD',
+                                signPrefix: '+',
+                              })}
+                            </span>
                             <span className="block text-[10px] font-normal text-gray-500">
-                              ≈ {formatCurrency(ingresoMontoPEN(item as Ingreso))}
+                              ≈ {formatRecordAmount(ingresoMontoPEN(item as Ingreso), item as Ingreso)}
                             </span>
                           </>
                         ) : (
-                          <span>+{formatCurrency((item as Ingreso).monto)}</span>
+                          <span>
+                            {formatRecordAmount((item as Ingreso).monto, item as Ingreso, { signPrefix: '+' })}
+                          </span>
                         )}
+                        {showContador24hHint(item as Ingreso) ? (
+                          <span className="block text-[9px] font-normal text-amber-600">{contador24hHint}</span>
+                        ) : null}
                       </div>
                     ) : (item as Gasto).monto < 0 ? (
                       <span className="text-sm font-bold text-emerald-600" title="Descuento / rebaja">
-                        −{formatCurrency(Math.abs((item as Gasto).monto))}
+                        {formatRecordAmount(Math.abs((item as Gasto).monto), item as Gasto, { signPrefix: '−' })}
                         <span className="block text-[10px] font-normal text-gray-500">rebaja</span>
                       </span>
                     ) : (
                       <span className="text-sm font-bold text-red-500">
-                        −{formatCurrency((item as Gasto).monto)}
+                          {formatRecordAmount((item as Gasto).monto, item as Gasto, { signPrefix: '−' })}
                       </span>
                     )}
                   </td>
@@ -1252,7 +1306,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       </div>
 
       {/* ── Paginación ── */}
-      {!showFullHistory && historialResumen.filteredCount > 0 ? (
+      {!serverMode && historialResumen.filteredCount > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-3 sm:px-5">
           <p className="text-xs text-gray-500">
             Página {uiPage} de {totalPages}
@@ -1311,7 +1365,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <span>
                   Esta página:{' '}
                   <span className="font-semibold tabular-nums text-slate-800">
-                    {formatCurrency(historialResumen.pageTotal)}
+                    {formatGlobalAmount(historialResumen.pageTotal)}
                   </span>
                 </span>
               </>
@@ -1320,7 +1374,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <span>
               Total filtrado:{' '}
               <span className="font-semibold tabular-nums text-slate-900">
-                {formatCurrency(historialResumen.filteredTotal)}
+                {formatGlobalAmount(historialResumen.filteredTotal)}
               </span>
             </span>
           </p>
@@ -1329,7 +1383,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <span
               className={`tabular-nums ${mode === 'ingresos' ? 'text-emerald-800' : 'text-rose-800'}`}
             >
-              {formatCurrency(historialResumen.filteredTotal)}
+              {formatGlobalAmount(historialResumen.filteredTotal)}
             </span>
           </p>
         </div>
@@ -1420,46 +1474,47 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               value={gastoEditDraft.vehicleIdStr}
               onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, vehicleIdStr: v } : d))}
             />
-            <Select
-              label="Tipo (Fact)"
-              options={tipoFactOptions}
-              value={gastoEditDraft.tipo}
-              onChange={(v) =>
-                setGastoEditDraft((d) => {
-                  if (!d) return d;
-                  const subs = getSubtiposGasto(v);
-                  const nextSub = subs.length > 0 ? (subs.includes(d.subTipo) ? d.subTipo : subs[0] ?? '') : d.subTipo;
-                  return { ...d, tipo: v, subTipo: nextSub, categoria: inferCategoriaFromTipoGasto(v) };
-                })
-              }
-            />
-            {subtipoFactOptions.length > 0 ? (
-              <Select
-                label="Sub tipo (Fact)"
-                options={subtipoFactOptions}
-                value={gastoEditDraft.subTipo}
-                onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, subTipo: v } : d))}
-              />
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[11px] font-semibold text-slate-700">Categoría financiera</p>
+              <p className="mt-0.5 text-sm text-slate-900">
+                {labelTipoGastoFinanciero(gastoEditTipoGasto)}
+              </p>
+              <p className="mt-1 text-[10px] text-slate-500 leading-snug">
+                Para cambiar de categoría usa «Mover categoría» en el listado.
+              </p>
+            </div>
+            {gastoEditPermiteSubtipoOficial ? (
+              <>
+                <Select
+                  label="Subtipo"
+                  options={subtipoCanonEditOptions}
+                  value={gastoEditDraft.subtipoCanon}
+                  onChange={(v) => {
+                    if (!v) return;
+                    const canon = resolveSubtipoCanonForGastoEdit(gastoEditTipoGasto, v);
+                    setGastoEditDraft((d) => (d ? { ...d, subtipoCanon: canon } : d));
+                  }}
+                  helper="Clasificación interna calculada automáticamente."
+                />
+                <p className="text-[10px] text-slate-500 leading-snug -mt-1">
+                  Tipo Fact, subtipo Fact y categoría KPI se actualizan al guardar según el subtipo elegido.
+                </p>
+              </>
             ) : (
-              <Input
-                label="Sub tipo (Fact)"
-                value={gastoEditDraft.subTipo}
-                onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, subTipo: e.target.value } : d))}
-              />
+              <div className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-[11px] text-amber-950 leading-snug">
+                <p className="font-medium">Subtipo no editable aquí</p>
+                <p className="mt-0.5">
+                  Valor actual:{' '}
+                  <span className="font-medium">
+                    {getSubtipoFinancieroLabel(
+                      gastoEditBaseline?.subtipo_gasto,
+                      gastoEditBaseline?.tipo_gasto,
+                    )}
+                  </span>
+                  . Usa «Mover categoría» si necesitas otra categoría financiera.
+                </p>
+              </div>
             )}
-            <Select
-              label="Categoría KPI"
-              options={categoriaKpiOptions}
-              value={gastoEditDraft.categoria}
-              onChange={(v) =>
-                setGastoEditDraft((d) => (d ? { ...d, categoria: v as CategoriaGasto } : d))
-              }
-            />
-            <Input
-              label="Motivo"
-              value={gastoEditDraft.motivo}
-              onChange={(e) => setGastoEditDraft((d) => (d ? { ...d, motivo: e.target.value } : d))}
-            />
             <Input
               label="Fecha registro"
               type="date"
@@ -1636,7 +1691,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 {(viewItem as Ingreso).moneda === 'USD' && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-xs text-gray-500 font-medium shrink-0">Equiv. ref. soles</dt>
-                    <dd className="text-sm text-gray-900 text-right">{formatCurrency(ingresoMontoPEN(viewItem as Ingreso))}</dd>
+                    <dd className="text-sm text-gray-900 text-right">
+                      {formatRecordAmount(ingresoMontoPEN(viewItem as Ingreso), viewItem as Ingreso)}
+                    </dd>
                   </div>
                 )}
 
@@ -1729,17 +1786,41 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 {mode === 'ingresos' && (
                   (viewItem as Ingreso).moneda === 'USD' ? (
                     <div className="text-right">
-                      <span className="block">{formatUSD((viewItem as Ingreso).monto)}</span>
-                      <span className="block text-xs font-normal text-gray-500">
-                        ≈ {formatCurrency(ingresoMontoPEN(viewItem as Ingreso))}
+                      <span className="block">
+                        {formatRecordAmount((viewItem as Ingreso).monto, viewItem as Ingreso, { currency: 'USD' })}
                       </span>
+                      <span className="block text-xs font-normal text-gray-500">
+                        ≈ {formatRecordAmount(ingresoMontoPEN(viewItem as Ingreso), viewItem as Ingreso)}
+                      </span>
+                      {showContador24hHint(viewItem as Ingreso) ? (
+                        <span className="block text-[10px] text-amber-600">{contador24hHint}</span>
+                      ) : null}
                     </div>
                   ) : (
-                    formatCurrency(viewItem.monto)
+                    <>
+                      {formatRecordAmount(viewItem.monto, viewItem as Ingreso)}
+                      {showContador24hHint(viewItem as Ingreso) ? (
+                        <span className="block text-[10px] text-amber-600">{contador24hHint}</span>
+                      ) : null}
+                    </>
                   )
                 )}
-                {mode === 'gastos' && viewItem.monto < 0 && <>−{formatCurrency(Math.abs(viewItem.monto))}</>}
-                {mode === 'gastos' && viewItem.monto >= 0 && <>−{formatCurrency(viewItem.monto)}</>}
+                {mode === 'gastos' && viewItem.monto < 0 && (
+                  <>
+                    {formatRecordAmount(Math.abs(viewItem.monto), viewItem as Gasto, { signPrefix: '−' })}
+                    {showContador24hHint(viewItem as Gasto) ? (
+                      <span className="block text-[10px] text-amber-600">{contador24hHint}</span>
+                    ) : null}
+                  </>
+                )}
+                {mode === 'gastos' && viewItem.monto >= 0 && (
+                  <>
+                    {formatRecordAmount(viewItem.monto, viewItem as Gasto, { signPrefix: '−' })}
+                    {showContador24hHint(viewItem as Gasto) ? (
+                      <span className="block text-[10px] text-amber-600">{contador24hHint}</span>
+                    ) : null}
+                  </>
+                )}
               </dd>
             </div>
 

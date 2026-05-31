@@ -1,9 +1,10 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React from 'react';
 import MaintenanceForm from '../Forms/MaintenanceForm';
 import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Mantenimiento, Vehicle } from '../../data/types';
-import { formatCurrency, formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import { Wrench, Car } from 'lucide-react';
 
 interface MantenimientoViewProps {
@@ -13,6 +14,7 @@ interface MantenimientoViewProps {
 }
 
 const MantenimientoView: React.FC<MantenimientoViewProps> = ({ vehicles, mantenimientos, onAdd }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const getVehicle = (id: number) => vehicles.find(v => v.id === id);
 
   return (
@@ -48,7 +50,7 @@ const MantenimientoView: React.FC<MantenimientoViewProps> = ({ vehicles, manteni
                         <p className="text-xs text-gray-400">{formatDate(m.fechaRegistro)}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-bold text-gray-900">{formatCurrency(m.costo)}</span>
+                    <span className="text-sm font-bold text-gray-900">{formatGlobalAmount(m.costo)}</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div>

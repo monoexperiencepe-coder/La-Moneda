@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { formatCurrency } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 export interface GastosMesChartProps {
   chartData: Array<{ mes: string; total: number }>;
@@ -17,8 +17,11 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
   barTo = '#B91C1C',
   bucket = 'month',
 }) => {
+  const { formatGlobalAmount, canViewGlobal } = useAmountDisplay();
   const gid = React.useId().replace(/:/g, '');
   const gradId = `gastoBar-${gid}`;
+  const yTickFormatter = (v: number) =>
+    canViewGlobal ? `S/${(v / 1000).toFixed(0)}k` : '•••';
 
   return (
     <div className="h-full w-full min-h-[1px] min-w-0">
@@ -49,12 +52,12 @@ const GastosMesChart: React.FC<GastosMesChartProps> = ({
           tick={{ fontSize: 10, fill: '#94A3B8' }}
           axisLine={false}
           tickLine={false}
-          tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`}
+          tickFormatter={yTickFormatter}
         />
         <Tooltip
           cursor={{ fill: 'rgba(248, 250, 252, 0.85)', radius: 8 }}
           formatter={(v) => [
-            formatCurrency(Number(v)),
+            formatGlobalAmount(Number(v)),
             bucket === 'day' ? 'Total del día' : 'Gastos del mes',
           ]}
           labelFormatter={(label) => (bucket === 'day' ? `Día ${label}` : `Mes: ${label}`)}

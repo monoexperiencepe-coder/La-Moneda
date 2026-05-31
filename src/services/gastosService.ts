@@ -6,6 +6,7 @@ import { fetchAllSupabasePages, fetchAllSupabasePagesDetailed } from './supabase
 import { devPerfAsync } from '../utils/devPerf';
 import { mapGastosFinancialSummaryRow, type GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
+import { REVISION_USER_LABEL } from '../config/app';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { logRlsDebugContext, fetchDebugCanUpdateGastoRow } from './rlsDebugService';
 import type { VehicleIdLike } from '../utils/vehicleId';
@@ -18,8 +19,12 @@ import {
   vehicleIdAuditScalar,
   cleanUuid,
 } from '../utils/uuidColumn';
+import { stampCreatedByExtra } from '../utils/amountPermissions';
 import { isOperadorVisibleTipoGasto } from '../utils/permissions';
-import { tipoGastoRequiereVehiculo } from '../utils/gastoMoveCategoriaDefaults';
+import {
+  tipoGastoAdmiteVehiculoOpcional,
+  tipoGastoRequiereVehiculo,
+} from '../utils/gastoMoveCategoriaDefaults';
 import { isValidGastoPrimaryKey } from '../utils/ingresoRecordId';
 import { splitGeneralSearchQuery } from '../utils/generalRecordSearch';
 
@@ -189,6 +194,7 @@ export type GastoDetalleManualPatch = Partial<{
   fecha: string;
   fechaRegistro: string;
   vehicleId: number | null;
+  subtipo_gasto: string | null;
   tipo: string;
   subTipo: string | null;
   categoria: Gasto['categoria'];
@@ -197,6 +203,9 @@ export type GastoDetalleManualPatch = Partial<{
   metodoPagoDetalle: string;
   monto: number;
   comentarios: string;
+  /** Solo undo: restaurar actividad previa. Si se omite, el servicio escribe revisado_at = now(). */
+  revisado_at?: string | null;
+  revisado_por?: string | null;
 }>;
 
 export type UpdateGastoDetalleManualResult =
@@ -216,6 +225,7 @@ function gastoDetalleManualPatchToRow(patch: GastoDetalleManualPatch): Record<st
     row.vehicle_id = patch.vehicleId;
     row.es_global_flota = patch.vehicleId == null;
   }
+  if (patch.subtipo_gasto !== undefined) row.subtipo_gasto = patch.subtipo_gasto;
   if (patch.tipo !== undefined) row.tipo = patch.tipo;
   if (patch.subTipo !== undefined) row.sub_tipo = patch.subTipo;
   if (patch.categoria !== undefined) row.categoria = patch.categoria;
@@ -228,6 +238,8 @@ function gastoDetalleManualPatchToRow(patch: GastoDetalleManualPatch): Record<st
   }
   if (patch.monto !== undefined) row.monto = patch.monto;
   if (patch.comentarios !== undefined) row.comentarios = patch.comentarios;
+  if (patch.revisado_at !== undefined) row.revisado_at = patch.revisado_at;
+  if (patch.revisado_por !== undefined) row.revisado_por = patch.revisado_por;
   return row;
 }
 
@@ -236,6 +248,7 @@ function gastoDetallePatchTouchesOnlyVehicle(patch: GastoDetalleManualPatch): bo
   const otherKeys: (keyof GastoDetalleManualPatch)[] = [
     'fecha',
     'fechaRegistro',
+    'subtipo_gasto',
     'tipo',
     'subTipo',
     'categoria',
@@ -317,11 +330,6 @@ export async function updateGastoDetalleManual(
     return fail('VITE_EMPRESA_ID no está configurado en el frontend.');
   }
 
-  const row = gastoDetalleManualPatchToRow(patch);
-  if (Object.keys(row).length === 0) {
-    return fail('No hay campos para actualizar (patch vacío).');
-  }
-
   const empresaIdRow = await fetchGastoEmpresaIdForDiagnostics(idNorm);
   if (empresaIdRow != null && empresaIdRow !== empresaIdFrontend) {
     return fail(
@@ -330,6 +338,19 @@ export async function updateGastoDetalleManual(
   }
 
   const before = await fetchGastoRawById(idNorm, empresaIdFrontend);
+  const oldRevisadoAt =
+    typeof before?.revisado_at === 'string' ? before.revisado_at : (before?.revisado_at as string | null) ?? null;
+
+  const row = gastoDetalleManualPatchToRow(patch);
+  if (Object.keys(row).length === 0) {
+    return fail('No hay campos para actualizar (patch vacío).');
+  }
+
+  const activityAt = new Date().toISOString();
+  if (patch.revisado_at === undefined) {
+    row.revisado_at = activityAt;
+    row.revisado_por = REVISION_USER_LABEL;
+  }
 
   const { data, error } = await supabase
     .from('gastos')
@@ -360,7 +381,25 @@ export async function updateGastoDetalleManual(
   const afterRow = data as Record<string, unknown>;
   void auditGastoDetalleManualAfterUpdate(idNorm, before, afterRow, patch);
 
-  return { ok: true, gasto: mapGastoRow(afterRow) };
+  const gasto = mapGastoRow(afterRow);
+  const newRevisadoAt = gasto.revisado_at ?? activityAt;
+
+  if (import.meta.env.DEV) {
+    console.log('[historial:edit-order]', {
+      gastoId: idNorm,
+      oldRevisadoAt,
+      newRevisadoAt,
+      appearsOnTop: true,
+      source: 'detail_edit',
+    });
+    console.log('[historial:updated-at]', {
+      gastoId: idNorm,
+      revisado_at: newRevisadoAt,
+      willSurviveRefresh: Boolean(newRevisadoAt),
+    });
+  }
+
+  return { ok: true, gasto };
 }
 
 function isInvalidVehicleSentinel(v: unknown): boolean {
@@ -370,18 +409,7 @@ function isInvalidVehicleSentinel(v: unknown): boolean {
   return false;
 }
 
-/**
- * Valor seguro para columna `vehicle_id` en `public.gastos`.
- * - Categorías sin vehículo: siempre `null` (no enviar 0 ni "0" a uuid/bigint).
- * - Operativo / inversión: entero > 0 o uuid válido; sentinels → `null`.
- */
-function normalizeVehicleIdForGastoRow(
-  tipoGasto: string | null | undefined,
-  raw: unknown,
-  subtipoGasto?: string | null,
-): string | number | null {
-  const t = tipoGasto == null ? '' : String(tipoGasto).trim();
-  if (!tipoGastoRequiereVehiculo(t, subtipoGasto)) return null;
+function parseVehicleIdRaw(raw: unknown): string | number | null {
   if (isInvalidVehicleSentinel(raw)) return null;
   if (typeof raw === 'string') {
     const s = raw.trim();
@@ -399,6 +427,23 @@ function normalizeVehicleIdForGastoRow(
 }
 
 /**
+ * Valor seguro para columna `vehicle_id` en `public.gastos`.
+ * - Sin vehículo obligatorio ni opcional: siempre `null`.
+ * - Operativo por vehículo: obligatorio (entero > 0 o uuid).
+ * - Inversión: opcional; sentinels → `null`.
+ */
+function normalizeVehicleIdForGastoRow(
+  tipoGasto: string | null | undefined,
+  raw: unknown,
+  subtipoGasto?: string | null,
+): string | number | null {
+  const t = tipoGasto == null ? '' : String(tipoGasto).trim();
+  if (tipoGastoRequiereVehiculo(t, subtipoGasto)) return parseVehicleIdRaw(raw);
+  if (tipoGastoAdmiteVehiculoOpcional(t)) return parseVehicleIdRaw(raw);
+  return null;
+}
+
+/**
  * Última pasada antes del UPDATE: anula `*_id` = 0/"0", fuerza flota global si el tipo no lleva vehículo,
  * normaliza `vehicle_id` string numérico → number, y limpia `excel_extra` anidado.
  */
@@ -408,8 +453,13 @@ function finalizeGastoCategoriaManualUpdateRow(row: Record<string, unknown>): vo
   const ts = tg == null || tg === '' ? '' : String(tg).trim();
   const sub = row.subtipo_gasto != null ? String(row.subtipo_gasto) : '';
   if (ts && !tipoGastoRequiereVehiculo(ts, sub)) {
-    row.vehicle_id = null;
-    row.es_global_flota = true;
+    if (tipoGastoAdmiteVehiculoOpcional(ts)) {
+      row.vehicle_id = normalizeVehicleIdForGastoRow(ts, row.vehicle_id, sub);
+      row.es_global_flota = false;
+    } else {
+      row.vehicle_id = null;
+      row.es_global_flota = true;
+    }
   }
   const vid = row.vehicle_id;
   if (vid != null && typeof vid === 'string') {
@@ -523,12 +573,15 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
     if (tipo !== undefined) {
       const t = tipo == null ? '' : String(tipo).trim();
       const sub = patch.subtipo_gasto != null ? String(patch.subtipo_gasto) : '';
-      if (!tipoGastoRequiereVehiculo(t, sub)) {
-        row.vehicle_id = null;
-        row.es_global_flota = true;
-      } else {
+      if (tipoGastoRequiereVehiculo(t, sub)) {
         row.vehicle_id = normalizeVehicleIdForGastoRow(t, patch.vehicle_id, sub);
         row.es_global_flota = patch.es_global_flota ?? false;
+      } else if (tipoGastoAdmiteVehiculoOpcional(t)) {
+        row.vehicle_id = normalizeVehicleIdForGastoRow(t, patch.vehicle_id, sub);
+        row.es_global_flota = false;
+      } else {
+        row.vehicle_id = null;
+        row.es_global_flota = true;
       }
     } else {
       if (patch.vehicle_id !== undefined) {
@@ -772,7 +825,7 @@ export async function updateGastoCategoriaManual(
       if (nv == null) {
         return fail({
           message:
-            'Operativo e inversión vehicular requieren un vehículo válido. Elige un N° de unidad (no uses 0 ni vacío).',
+            'Operativo por vehículo requiere un N° de unidad válido (no uses 0 ni vacío).',
           gastoId: idNorm,
           empresaIdFrontend,
           empresaIdRow: null,
@@ -1309,9 +1362,17 @@ export async function insertGasto(
 ): Promise<Gasto | null> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return null;
+  const uid = await getAuthenticatedUserIdForAudit();
+  const rowForInsert =
+    uid != null
+      ? {
+          ...row,
+          excelExtra: stampCreatedByExtra(row.excelExtra ?? null, uid),
+        }
+      : row;
   const { data, error } = await supabase
     .from('gastos')
-    .insert(gastoToInsert(empresaId, row))
+    .insert(gastoToInsert(empresaId, rowForInsert))
     .select('*')
     .single();
   if (error) {
@@ -1320,7 +1381,6 @@ export async function insertGasto(
   }
   if (data) {
     const raw = data as Record<string, unknown>;
-    const uid = await getAuthenticatedUserIdForAudit();
     if (uid) {
       await insertFinancialAuditLog({
         user_id: uid,

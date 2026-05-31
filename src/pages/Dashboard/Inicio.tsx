@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, ChevronLeft, ArrowRight, Zap, Command } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { formatCurrency, todayStr } from '../../utils/formatting';
+import { formatDate, todayStr } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { computeTodayReview, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
 import { KM_ALERTA_VARIACION_DESDE_MANT } from '../../utils/kmMantenimientoControl';
@@ -142,6 +143,7 @@ const Inicio: React.FC = () => {
   const viewAlertas = searchParams.get('view') === 'alertas';
 
   const { ingresos, gastos, vehicles, controlFechas, pendientes, getVehicleLabel, kilometrajes } = useRegistrosContext();
+  const { formatGlobalAmount } = useAmountDisplay();
 
   /* Búsqueda */
   const [query, setQuery] = useState('');
@@ -313,12 +315,12 @@ const Inicio: React.FC = () => {
         <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
           <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Hoy · Ing.</span>
-          <span className="text-xs font-bold text-emerald-900 tabular-nums">{formatCurrency(todayIngresos)}</span>
+          <span className="text-xs font-bold text-emerald-900 tabular-nums">{formatGlobalAmount(todayIngresos)}</span>
         </div>
         <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
           <span className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Hoy · Gas.</span>
-          <span className="text-xs font-bold text-rose-900 tabular-nums">{formatCurrency(todayGastos)}</span>
+          <span className="text-xs font-bold text-rose-900 tabular-nums">{formatGlobalAmount(todayGastos)}</span>
         </div>
       </div>
 

@@ -1,10 +1,11 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Info } from 'lucide-react';
 import Card from '../../components/Common/Card';
 import Select from '../../components/Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency } from '../../utils/formatting';
+;
 import {
   buildUtilidadHistoricaMensual,
   buildUtilidadHistoricaPorVehiculo,
@@ -21,6 +22,7 @@ import { vehicleIdSortRank } from '../../utils/sortByVehicle';
  * Ver UTILIDAD_CALCULO_AUTOMATICO_ACTIVO en utilidadOperativa.ts
  */
 const UtilidadOperativa: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { cajaNegocioVehiculo, vehicles } = useRegistrosContext();
   const [filterYear, setFilterYear] = useState<string>('ALL');
@@ -106,7 +108,7 @@ const UtilidadOperativa: React.FC = () => {
         <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
           Utilidad histórica importada
         </p>
-        <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-950">{formatCurrency(totalHistorico)}</p>
+        <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-950">{formatGlobalAmount(totalHistorico)}</p>
         <p className="mt-2 text-xs text-emerald-900/80">{UTILIDAD_HISTORICA_TOOLTIP}</p>
         <p className="mt-2 text-xs text-slate-600">
           {cajaNegocioVehiculo.length} registros ·{' '}
@@ -144,7 +146,7 @@ const UtilidadOperativa: React.FC = () => {
                   <tr key={m.mes} className="border-b border-slate-50">
                     <td className="py-2 pr-3 font-medium text-slate-800">{m.mesLabel}</td>
                     <td className="py-2 text-right font-semibold tabular-nums text-slate-900">
-                      {formatCurrency(m.monto)}
+                      {formatGlobalAmount(m.monto)}
                     </td>
                   </tr>
                 ))}
@@ -177,7 +179,7 @@ const UtilidadOperativa: React.FC = () => {
                         {vehicleLabel(row.vehicleId)}
                       </Link>
                     </td>
-                    <td className="py-2 text-right font-semibold tabular-nums">{formatCurrency(row.monto)}</td>
+                    <td className="py-2 text-right font-semibold tabular-nums">{formatGlobalAmount(row.monto)}</td>
                   </tr>
                 ))}
               </tbody>

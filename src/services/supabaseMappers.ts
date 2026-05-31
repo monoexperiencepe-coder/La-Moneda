@@ -1,4 +1,5 @@
 import { cleanConductorRecord } from '../utils/cleanMojibakeText';
+import { resolveRecordCreatedBy } from '../utils/amountPermissions';
 import { mapConductorId } from '../utils/conductorId';
 import { toDateOnlyString } from '../utils/formatting';
 import { UUID_REGEX_FLAT } from '../utils/uuidColumn';
@@ -101,6 +102,38 @@ export function mapVehiculoRow(r: Record<string, unknown>): Vehicle {
   };
 }
 
+export function vehiculoToInsert(
+  empresaId: string,
+  row: Omit<Vehicle, 'id'>,
+): Record<string, unknown> {
+  return {
+    empresa_id: empresaId,
+    marca: row.marca.trim(),
+    modelo: row.modelo.trim(),
+    placa: row.placa.trim(),
+    anio: row.anio != null && Number.isFinite(row.anio) ? row.anio : null,
+    color: row.color?.trim() ? row.color.trim() : null,
+    activo: row.activo,
+  };
+}
+
+export function vehiculoPatchToSnake(
+  patch: Partial<Omit<Vehicle, 'id'>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (patch.marca !== undefined) out.marca = patch.marca.trim();
+  if (patch.modelo !== undefined) out.modelo = patch.modelo.trim();
+  if (patch.placa !== undefined) out.placa = patch.placa.trim();
+  if (patch.anio !== undefined) {
+    out.anio = patch.anio != null && Number.isFinite(patch.anio) ? patch.anio : null;
+  }
+  if (patch.color !== undefined) {
+    out.color = patch.color?.trim() ? patch.color.trim() : null;
+  }
+  if (patch.activo !== undefined) out.activo = patch.activo;
+  return out;
+}
+
 export function mapUnidadRow(r: Record<string, unknown>): UnidadRegistro {
   return {
     id: mapRowId(r.id),
@@ -190,6 +223,10 @@ export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
       r.created_at != null && String(r.created_at).trim() !== ''
         ? String(r.created_at)
         : '',
+    createdBy: resolveRecordCreatedBy({
+      raw: r,
+      excelExtra: jsonRecordOrNull(r.excel_extra),
+    }),
   };
 }
 
@@ -332,6 +369,10 @@ export function mapGastoRow(r: Record<string, unknown>): Gasto {
     es_global_flota: r.es_global_flota == null ? null : bool(r.es_global_flota),
     origen_clasificacion: strOrNull(r.origen_clasificacion),
     createdAt: isoCreated(r.created_at),
+    createdBy: resolveRecordCreatedBy({
+      raw: r,
+      excelExtra: jsonRecordOrNull(r.excel_extra),
+    }),
   };
 }
 
@@ -484,6 +525,7 @@ export function gastoToInsert(empresaId: string, row: Omit<Gasto, 'id' | 'create
     requiere_revision: row.requiere_revision ?? false,
     clasificacion_manual: row.clasificacion_manual ?? false,
     clasificacion_confianza: row.clasificacion_confianza ?? null,
+    revisado_at: row.revisado_at ?? new Date().toISOString(),
   };
 }
 
@@ -511,6 +553,18 @@ export function controlFechaToInsert(
     fecha_registro: row.fechaRegistro,
     comentarios: row.comentarios,
   };
+}
+
+export function controlFechaPatchToSnake(
+  patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (patch.vehicleId !== undefined) out.vehicle_id = patch.vehicleId;
+  if (patch.tipo !== undefined) out.tipo = patch.tipo;
+  if (patch.fechaVencimiento !== undefined) out.fecha_vencimiento = patch.fechaVencimiento;
+  if (patch.fechaRegistro !== undefined) out.fecha_registro = patch.fechaRegistro;
+  if (patch.comentarios !== undefined) out.comentarios = patch.comentarios;
+  return out;
 }
 
 export function mapKilometrajeRow(r: Record<string, unknown>): KilometrajeRegistro {

@@ -2,6 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, User, Building2, Bell, Shield, HelpCircle, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import {
+  canViewDataQualityTools,
+  isDataQualityToolsEnabled,
+} from '../../config/dataQualityTools';
 
 const settingGroups = [
   {
@@ -28,7 +32,9 @@ const settingGroups = [
 
 const Configuracion: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, role } = useAuth();
+  const showDataQuality =
+    isDataQualityToolsEnabled() && canViewDataQualityTools(role);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -109,7 +115,7 @@ const Configuracion: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/admin/historial-sistema')}
-            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left border-b border-gray-50"
           >
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-indigo-600 bg-indigo-100">
               🧾
@@ -117,6 +123,46 @@ const Configuracion: React.FC = () => {
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900">Historial del sistema</p>
               <p className="text-xs text-gray-400">Auditoría financiera de cambios y correcciones.</p>
+            </div>
+            <ChevronRight size={16} className="text-gray-300" />
+          </button>
+          {showDataQuality && (
+            <button
+              type="button"
+              onClick={() => navigate('/admin/conciliacion-subtipos')}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+            >
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-violet-700 bg-violet-100">
+                🧩
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-900">Conciliación de subtipos</p>
+                <p className="text-xs text-gray-400">
+                  Limpieza segura de históricos hacia subtipos oficiales (sin tocar montos).
+                </p>
+              </div>
+              <ChevronRight size={16} className="text-gray-300" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {!isAdmin && showDataQuality && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-50">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Calidad de datos</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/conciliacion-subtipos')}
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-violet-700 bg-violet-100">
+              🧩
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Conciliación de subtipos</p>
+              <p className="text-xs text-gray-400">Revisión y corrección de clasificación histórica.</p>
             </div>
             <ChevronRight size={16} className="text-gray-300" />
           </button>

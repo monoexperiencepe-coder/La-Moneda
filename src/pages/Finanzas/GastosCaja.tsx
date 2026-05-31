@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarRange, ChevronDown, ChevronLeft, Download, ListFilter } from 'lucide-react';
@@ -5,7 +6,7 @@ import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatDate, todayStr, toDateOnlyString } from '../../utils/formatting';
+import { formatDate, todayStr, toDateOnlyString } from '../../utils/formatting';
 import { gastoCajaComentarioParaLista } from '../../utils/gastoCajaDisplay';
 import type { GastoCaja } from '../../data/types';
 
@@ -16,6 +17,7 @@ function inRange(fecha: string, desde: string, hasta: string): boolean {
 }
 
 const GastosCaja: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { gastosCaja } = useRegistrosContext();
 
@@ -132,12 +134,12 @@ const GastosCaja: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
           <p className="text-xs text-amber-900 font-medium mb-1">Total (filtros activos)</p>
-          <p className="text-2xl font-bold text-amber-950 tabular-nums">{formatCurrency(totalFiltrado)}</p>
+          <p className="text-2xl font-bold text-amber-950 tabular-nums">{formatGlobalAmount(totalFiltrado)}</p>
           <p className="text-[11px] text-amber-800 mt-1">{filtrados.length} movimiento{filtrados.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-soft">
           <p className="text-xs text-gray-500 font-medium mb-1">Total cargado (empresa)</p>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums">{formatCurrency(totalGlobal)}</p>
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">{formatGlobalAmount(totalGlobal)}</p>
           <p className="text-[11px] text-gray-500 mt-1">{gastosCaja.length} registro{gastosCaja.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
@@ -224,7 +226,7 @@ const GastosCaja: React.FC = () => {
                       <p className="text-[11px] text-gray-400 font-medium">{formatDate(g.fecha)}</p>
                       <p className="text-sm font-semibold text-gray-900 mt-0.5 line-clamp-2">{g.concepto}</p>
                     </div>
-                    <p className="text-sm font-bold text-amber-950 tabular-nums shrink-0">{formatCurrency(g.monto)}</p>
+                    <p className="text-sm font-bold text-amber-950 tabular-nums shrink-0">{formatGlobalAmount(g.monto)}</p>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="text-[11px] font-medium text-gray-600 bg-gray-50 border border-gray-100 rounded-md px-2 py-0.5 truncate">
@@ -273,7 +275,7 @@ const GastosCaja: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-2.5 px-4 text-gray-600 text-xs font-medium">{g.categoria}</td>
-                    <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-amber-950">{formatCurrency(g.monto)}</td>
+                    <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-amber-950">{formatGlobalAmount(g.monto)}</td>
                     <td className="py-2.5 px-4 text-gray-500 text-xs max-w-xs">
                       <span className="line-clamp-2" title={comentarioCrudo || undefined}>
                         {notaVisible ?? '—'}

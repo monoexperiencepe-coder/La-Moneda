@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
-import { controlFechaToInsert, mapControlFechaRow } from './supabaseMappers';
+import { controlFechaPatchToSnake, controlFechaToInsert, mapControlFechaRow } from './supabaseMappers';
 import type { ControlFecha } from '../data/types';
 import { devPerfAsync } from '../utils/devPerf';
 import { fetchAllSupabasePagesDetailed } from './supabaseRangeFetch';
@@ -188,6 +188,44 @@ export async function insertControlFecha(
     return null;
   }
   return data ? mapControlFechaRow(data as Record<string, unknown>) : null;
+}
+
+export async function patchControlFecha(
+  id: number,
+  patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>,
+  tenantEmpresaId?: string | null,
+): Promise<ControlFecha | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId || !Number.isFinite(id)) return null;
+
+  const snake = controlFechaPatchToSnake(patch);
+  if (Object.keys(snake).length === 0) {
+    const { data: cur, error: readErr } = await supabase
+      .from('control_fechas')
+      .select('*')
+      .eq('id', id)
+      .eq('empresa_id', empresaId)
+      .maybeSingle();
+    if (readErr) {
+      console.error('[control_fechas update] read empty patch failed', readErr.message);
+      return null;
+    }
+    return cur ? mapControlFechaRow(cur as Record<string, unknown>) : null;
+  }
+
+  const { data, error } = await supabase
+    .from('control_fechas')
+    .update(snake)
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .select('*');
+
+  if (error) {
+    console.error('[control_fechas update]', error.message);
+    return null;
+  }
+  const row = data?.[0];
+  return row ? mapControlFechaRow(row as Record<string, unknown>) : null;
 }
 
 export async function removeControlFecha(id: number, tenantEmpresaId?: string | null): Promise<boolean> {

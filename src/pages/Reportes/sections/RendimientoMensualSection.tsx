@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Descuento, Gasto, Ingreso } from '../../../data/types';
 import { MESES } from '../../../data/catalogs';
-import { formatCurrency } from '../../../utils/formatting';
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../../utils/moneda';
 import { gastosOperativosSolamente } from '../../../utils/cajaNegocio';
 import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
@@ -22,6 +22,7 @@ type MesRow = {
 };
 
 const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ ingresos, gastos, descuentos }) => {
+  const { formatGlobalAmount } = useAmountDisplay();
   const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
 
   const availableYears = useMemo(() => {
@@ -174,30 +175,30 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
                 resultadoPositivo ? 'text-emerald-900' : 'text-rose-900'
               }`}
             >
-              {formatCurrency(totalesAnio.resultado)}
+              {formatGlobalAmount(totalesAnio.resultado)}
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
               {resultadoPositivo ? (
                 <>
                   En {displayYear}, después de los gastos operativos de la flota, el negocio cerró con{' '}
-                  <strong>{formatCurrency(totalesAnio.resultado)}</strong> a favor.
+                  <strong>{formatGlobalAmount(totalesAnio.resultado)}</strong> a favor.
                 </>
               ) : (
                 <>
                   En {displayYear} los gastos operativos superaron lo que entró por{' '}
-                  <strong>{formatCurrency(Math.abs(totalesAnio.resultado))}</strong>.
+                  <strong>{formatGlobalAmount(Math.abs(totalesAnio.resultado))}</strong>.
                 </>
               )}
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <ResumenChip label="Total que entró" value={formatCurrency(totalesAnio.ingresos)} tone="emerald" />
-            <ResumenChip label="Total que salió (flota)" value={formatCurrency(totalesAnio.gastos)} tone="rose" />
+            <ResumenChip label="Total que entró" value={formatGlobalAmount(totalesAnio.ingresos)} tone="emerald" />
+            <ResumenChip label="Total que salió (flota)" value={formatGlobalAmount(totalesAnio.gastos)} tone="rose" />
             {statsMeses ? (
               <ResumenChip
                 label="Mejor mes"
-                value={`${statsMeses.mejor.mesLabel} · ${formatCurrency(statsMeses.mejor.resultado)}`}
+                value={`${statsMeses.mejor.mesLabel} · ${formatGlobalAmount(statsMeses.mejor.resultado)}`}
                 tone="slate"
                 small
               />
@@ -232,17 +233,17 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
                   <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-semibold text-slate-900">
                     <td className="px-4 py-3 sm:px-5">Total {displayYear}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-emerald-800">
-                      {formatCurrency(totalesAnio.ingresos)}
+                      {formatGlobalAmount(totalesAnio.ingresos)}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-rose-800">
-                      {formatCurrency(totalesAnio.gastos)}
+                      {formatGlobalAmount(totalesAnio.gastos)}
                     </td>
                     <td
                       className={`px-4 py-3 text-right tabular-nums sm:px-5 ${
                         resultadoPositivo ? 'text-emerald-800' : 'text-rose-800'
                       }`}
                     >
-                      {formatCurrency(totalesAnio.resultado)}
+                      {formatGlobalAmount(totalesAnio.resultado)}
                     </td>
                   </tr>
                 </tfoot>
@@ -252,7 +253,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
             {statsMeses && statsMeses.peor.mesLabel !== statsMeses.mejor.mesLabel ? (
               <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:px-5">
                 El mes más difícil fue <strong className="text-slate-700">{statsMeses.peor.mesLabel}</strong> (
-                {formatCurrency(statsMeses.peor.resultado)}).
+                {formatGlobalAmount(statsMeses.peor.resultado)}).
               </p>
             ) : null}
           </div>
@@ -291,6 +292,7 @@ function ResumenChip({
 }
 
 function MesTableRow({ row, maxAbs }: { row: MesRow; maxAbs: number }) {
+  const { formatGlobalAmount } = useAmountDisplay();
   if (!row.hayMovimiento) {
     return (
       <tr className="text-slate-400">
@@ -316,14 +318,14 @@ function MesTableRow({ row, maxAbs }: { row: MesRow; maxAbs: number }) {
           />
         </span>
       </td>
-      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatCurrency(row.ingresos)}</td>
-      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatCurrency(row.gastos)}</td>
+      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatGlobalAmount(row.ingresos)}</td>
+      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatGlobalAmount(row.gastos)}</td>
       <td
         className={`px-4 py-3 text-right font-semibold tabular-nums sm:px-5 ${
           row.resultado >= 0 ? 'text-emerald-700' : 'text-rose-700'
         }`}
       >
-        {formatCurrency(row.resultado)}
+        {formatGlobalAmount(row.resultado)}
       </td>
     </tr>
   );

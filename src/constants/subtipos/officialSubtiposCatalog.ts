@@ -1,4 +1,5 @@
 import type { FinanzaGastoRegistroValue } from '../../data/finanzaGastoRegistro';
+import { OFFICIAL_OPERATIVO_SUBTIPO_VALUES } from './operativoOficialCatalog';
 import { resolveLegacyAliasNormKey } from './legacySubtipoAliases';
 import { subtipoDedupeKey } from './subtipoDedupeKey';
 
@@ -28,14 +29,14 @@ const ADMINISTRATIVO_EMPRESA_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
   { value: 'MEMBRESIAS', label: 'Membresías', categoria: 'administrativo_empresa' },
   { value: 'MUNICIPALES', label: 'Municipales', categoria: 'administrativo_empresa' },
   { value: 'OFICINA', label: 'Oficina', categoria: 'administrativo_empresa' },
-  { value: 'OTROS /ESPECIFICAR', label: 'Otros / especificar', categoria: 'administrativo_empresa' },
+  { value: 'OTROS / ESPECIFICAR', label: 'Otros / especificar', categoria: 'administrativo_empresa' },
   { value: 'PERMISOS VARIOS', label: 'Permisos varios', categoria: 'administrativo_empresa' },
   { value: 'REPRESENTACIÓN', label: 'Representación', categoria: 'administrativo_empresa' },
   { value: 'ATU', label: 'ATU', categoria: 'administrativo_empresa' },
-  { value: 'sunarp', label: 'SUNARP', categoria: 'administrativo_empresa' },
+  { value: 'SUNARP', label: 'SUNARP', categoria: 'administrativo_empresa' },
   { value: 'SUNAT', label: 'SUNAT', categoria: 'administrativo_empresa' },
   { value: 'SUTRAN', label: 'SUTRAN', categoria: 'administrativo_empresa' },
-  { value: 'revision_tecnica_taxi', label: 'REVISIÓN TÉCNICA TAXI', categoria: 'administrativo_empresa' },
+  { value: 'TAXI', label: 'Taxi', categoria: 'administrativo_empresa' },
   { value: 'TRABAJOS EVENTUALES', label: 'Trabajos eventuales', categoria: 'administrativo_empresa' },
   { value: 'TRÁMITES NOTARIALES', label: 'Trámites notariales', categoria: 'administrativo_empresa' },
   { value: 'VIGENCIA DE PODER', label: 'Vigencia de poder', categoria: 'administrativo_empresa' },
@@ -44,12 +45,12 @@ const ADMINISTRATIVO_EMPRESA_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
 
 const FINANCIERO_PRESTAMO_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
   { value: 'ALQUILERES', label: 'Alquileres', categoria: 'financiero_prestamo' },
-  { value: 'prestamo', label: 'Préstamo', categoria: 'financiero_prestamo' },
-  { value: 'cuota', label: 'Cuota compra de activos', categoria: 'financiero_prestamo' },
-  { value: 'cuota', label: 'Cuota de mantenimiento', categoria: 'financiero_prestamo' },
-  { value: 'interes', label: 'Intereses', categoria: 'financiero_prestamo' },
-  { value: 'membresias', label: 'Membresías', categoria: 'financiero_prestamo' },
-  { value: 'prestamo_interes_banca', label: 'Otros / especificar', categoria: 'financiero_prestamo' },
+  { value: 'PRÉSTAMO', label: 'Préstamo', categoria: 'financiero_prestamo' },
+  { value: 'CUOTA COMPRA DE ACTIVOS', label: 'Cuota compra de activos', categoria: 'financiero_prestamo' },
+  { value: 'CUOTA DE MANTENIMIENTO', label: 'Cuota de mantenimiento', categoria: 'financiero_prestamo' },
+  { value: 'INTERESES', label: 'Intereses', categoria: 'financiero_prestamo' },
+  { value: 'MEMBRESÍAS', label: 'Membresías', categoria: 'financiero_prestamo' },
+  { value: 'OTROS / ESPECIFICAR', label: 'Otros / especificar', categoria: 'financiero_prestamo' },
 ];
 
 const INVERSION_COMPRA_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
@@ -63,63 +64,35 @@ const INVERSION_COMPRA_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
   { value: 'compra_software_gestion', label: 'Compra de software de gestión', categoria: 'inversion_compra' },
   { value: 'muebles_enseres', label: 'Muebles y enseres', categoria: 'inversion_compra' },
   { value: 'equipamiento_oficina', label: 'Equipamiento oficina', categoria: 'inversion_compra' },
+  { value: 'otros_especificar', label: 'Otros / especificar', categoria: 'inversion_compra' },
 ];
 
 const REPRESENTACION_INTERNA_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
-  { value: 'almuerzo_socios', label: 'Almuerzos socios', categoria: 'representacion_interna' },
-  { value: 'regalos', label: 'Regalos empresariales', categoria: 'representacion_interna' },
-  { value: 'gasto_representacion', label: 'Invitaciones a eventos para clientes', categoria: 'representacion_interna' },
-  { value: 'alojamientos', label: 'Alojamientos', categoria: 'representacion_interna' },
-  { value: 'movilidad_socios', label: 'Traslado ejecutivos', categoria: 'representacion_interna' },
-  { value: 'reunion_socios', label: 'Reuniones corporativos internos', categoria: 'representacion_interna' },
-  { value: 'gasto_representacion', label: 'Reconocimientos', categoria: 'representacion_interna' },
-  { value: 'gasto_representacion', label: 'Capacitación', categoria: 'representacion_interna' },
-  { value: 'gasto_representacion', label: 'Mobiliario', categoria: 'representacion_interna' },
+  { value: 'ALMUERZOS SOCIOS', label: 'Almuerzos socios', categoria: 'representacion_interna' },
+  { value: 'REGALOS EMPRESARIALES', label: 'Regalos empresariales', categoria: 'representacion_interna' },
+  {
+    value: 'INVITACIONES A EVENTOS PARA CLIENTES',
+    label: 'Invitaciones a eventos para clientes',
+    categoria: 'representacion_interna',
+  },
+  { value: 'ALOJAMIENTOS', label: 'Alojamientos', categoria: 'representacion_interna' },
+  { value: 'TRASLADO EJECUTIVOS', label: 'Traslado ejecutivos', categoria: 'representacion_interna' },
+  {
+    value: 'REUNIONES CORPORATIVOS INTERNOS',
+    label: 'Reuniones corporativos internos',
+    categoria: 'representacion_interna',
+  },
+  { value: 'RECONOCIMIENTOS', label: 'Reconocimientos', categoria: 'representacion_interna' },
+  { value: 'CAPACITACION', label: 'Capacitación', categoria: 'representacion_interna' },
+  { value: 'MOBILIARIO', label: 'Mobiliario', categoria: 'representacion_interna' },
 ];
 
-const OPERATIVO_VEHICULO_SUBTIPOS: readonly OfficialSubtipoEntry[] = [
-  { value: 'documentos', label: 'AFOCAT', categoria: 'operativo_vehiculo' },
-  { value: 'atu', label: 'ATU', categoria: 'operativo_vehiculo' },
-  { value: 'documentos', label: 'Garantías', categoria: 'operativo_vehiculo' },
-  { value: 'multas_tramites', label: 'Municipales', categoria: 'operativo_vehiculo' },
-  { value: 'otros_operativo', label: 'Oficina', categoria: 'operativo_vehiculo' },
-  { value: 'otros_operativo', label: 'Otros / especificar', categoria: 'operativo_vehiculo' },
-  { value: 'multas_tramites', label: 'Permisos varios', categoria: 'operativo_vehiculo' },
-  { value: 'autopartes', label: 'Faro / arreglos', categoria: 'operativo_vehiculo' },
-  { value: 'revision_tecnica_particular', label: 'REVISIÓN TÉCNICA PARTICULAR', categoria: 'operativo_vehiculo' },
-  { value: 'revision_tecnica_taxi', label: 'REVISIÓN TÉCNICA TAXI', categoria: 'operativo_vehiculo' },
-  { value: 'sat', label: 'SAT', categoria: 'operativo_vehiculo' },
-  { value: 'documentos', label: 'Seguros', categoria: 'operativo_vehiculo' },
-  { value: 'documentos', label: 'SOAT', categoria: 'operativo_vehiculo' },
-  { value: 'sunarp', label: 'SUNARP', categoria: 'operativo_vehiculo' },
-  { value: 'sunat', label: 'SUNAT', categoria: 'operativo_vehiculo' },
-  { value: 'sutran', label: 'SUTRAN', categoria: 'operativo_vehiculo' },
-  { value: 'movilidad', label: 'Taxi o delivery', categoria: 'operativo_vehiculo' },
-  { value: 'otros_operativo', label: 'Trabajos eventuales', categoria: 'operativo_vehiculo' },
-  { value: 'multas_tramites', label: 'Trámites notariales', categoria: 'operativo_vehiculo' },
-  { value: 'otros_operativo', label: 'Útiles de oficina', categoria: 'operativo_vehiculo' },
-  { value: 'accesorios', label: 'Accesorios', categoria: 'operativo_vehiculo' },
-  { value: 'aire_acondicionado', label: 'Aire acondicionado', categoria: 'operativo_vehiculo' },
-  { value: 'bateria', label: 'Batería', categoria: 'operativo_vehiculo' },
-  { value: 'combustible', label: 'Combustible', categoria: 'operativo_vehiculo' },
-  { value: 'documentos', label: 'Documentos', categoria: 'operativo_vehiculo' },
-  { value: 'electricidad', label: 'Electricista', categoria: 'operativo_vehiculo' },
-  { value: 'frenos', label: 'Frenos', categoria: 'operativo_vehiculo' },
-  { value: 'gnv', label: 'GNV taller', categoria: 'operativo_vehiculo' },
-  { value: 'gps_chips', label: 'GPS equipos', categoria: 'operativo_vehiculo' },
-  { value: 'impuesto_vehicular', label: 'Impuesto vehicular', categoria: 'operativo_vehiculo' },
-  { value: 'interior', label: 'Fundas o forros auto', categoria: 'operativo_vehiculo' },
-  { value: 'mantenimiento', label: 'Mantenimiento simple', categoria: 'operativo_vehiculo' },
-  { value: 'mantenimiento', label: 'Mantenimiento completo', categoria: 'operativo_vehiculo' },
-  { value: 'motor', label: 'Motor taller', categoria: 'operativo_vehiculo' },
-  { value: 'suspension', label: 'Suspensión', categoria: 'operativo_vehiculo' },
-  { value: 'llantas', label: 'Llantas', categoria: 'operativo_vehiculo' },
-  { value: 'planchado_pintura', label: 'Planchado / pintura', categoria: 'operativo_vehiculo' },
-  { value: 'gps_chips', label: 'GPS recarga chips', categoria: 'operativo_vehiculo' },
-  { value: 'accesorios', label: 'Canasta o regalo', categoria: 'operativo_vehiculo' },
-  { value: 'multas_callao', label: 'Multa Callao', categoria: 'operativo_vehiculo' },
-  { value: 'documentos', label: 'Devolución garantía', categoria: 'operativo_vehiculo' },
-];
+const OPERATIVO_VEHICULO_SUBTIPOS: readonly OfficialSubtipoEntry[] =
+  OFFICIAL_OPERATIVO_SUBTIPO_VALUES.map((value) => ({
+    value,
+    label: value,
+    categoria: 'operativo_vehiculo' as const,
+  }));
 
 export const OFFICIAL_SUBTIPOS_BY_CATEGORIA: Record<
   OfficialSubtipoCategoria,

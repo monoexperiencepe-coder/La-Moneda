@@ -46,6 +46,7 @@ const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const AIPage = lazy(() => import('./pages/AIPage'));
 const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
+const SubtipoConciliacion = lazy(() => import('./pages/Admin/SubtipoConciliacion'));
 
 /** Spinner mientras se verifica la sesión de Supabase. */
 const AuthLoadingScreen: React.FC = () => (
@@ -142,7 +143,7 @@ const AppContent: React.FC = () => {
                         <Route path="/finanzas/resumen" element={<SectionGuard section="finanzas_resumen"><Resumen /></SectionGuard>} />
                         <Route path="/finanzas/utilidad-operativa" element={<SectionGuard section="finanzas_resumen"><UtilidadOperativa /></SectionGuard>} />
                         <Route path="/finanzas/revision-clasificacion" element={<SectionGuard section="finanzas"><RevisionClasificacion /></SectionGuard>} />
-                        <Route path="/finanzas/ia-clasificacion" element={<SectionGuard section="finanzas_gastos"><IAClasificacionPage /></SectionGuard>} />
+                        <Route path="/finanzas/ia-clasificacion" element={<SectionGuard section="finanzas_ia_clasificacion"><IAClasificacionPage /></SectionGuard>} />
 
                         {/* Vehículos */}
                         <Route path="/vehiculos" element={<SectionGuard section="vehiculos"><VehiculosHub /></SectionGuard>} />
@@ -177,6 +178,10 @@ const AppContent: React.FC = () => {
                               <HistorialSistema />
                             </AdminOnly>
                           }
+                        />
+                        <Route
+                          path="/admin/conciliacion-subtipos"
+                          element={<SubtipoConciliacion />}
                         />
 
                         {/* Catch all */}

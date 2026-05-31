@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import Select from '../Common/Select';
-import { formatCurrency, formatMontoGraficoBarra } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 export type MonthlyBarChartVariant = 'emerald' | 'teal';
 
@@ -56,7 +56,15 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
   yearSelectLabel = 'Año',
   showMonthTotalsGrid = true,
 }) => {
+  const { formatGlobalAmount, canViewGlobal } = useAmountDisplay();
   const vs = VARIANT_STYLES[variant];
+  const yTickFormatter = (value: unknown) =>
+    canViewGlobal ? `S/${(toNumberSafe(value) / 1000).toFixed(0)}k` : '•••';
+  const barLabelFormatter = (value: unknown) => {
+    const n = toNumberSafe(value);
+    if (n === 0) return '';
+    return formatGlobalAmount(n);
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
@@ -88,11 +96,11 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
               tick={{ fontSize: 11, fill: '#9CA3AF' }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(value) => `S/${(toNumberSafe(value) / 1000).toFixed(0)}k`}
+              tickFormatter={yTickFormatter}
               width={44}
             />
             <Tooltip
-              formatter={(value) => [formatCurrency(toNumberSafe(value)), tooltipSeriesName]}
+              formatter={(value) => [formatGlobalAmount(toNumberSafe(value)), tooltipSeriesName]}
               labelFormatter={(label) => `Mes: ${String(label ?? '')}`}
               contentStyle={{
                 borderRadius: '12px',
@@ -106,7 +114,7 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
                 dataKey="total"
                 position="top"
                 offset={8}
-                formatter={(value) => formatMontoGraficoBarra(toNumberSafe(value))}
+                formatter={barLabelFormatter}
                 style={{
                   fill: vs.labelFill,
                   fontSize: 11,
@@ -132,7 +140,7 @@ const MonthlyBarChartCard: React.FC<MonthlyBarChartCardProps> = ({
               >
                 <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{row.mes}</div>
                 <div className={`mt-1 text-xs font-bold tabular-nums leading-tight ${vs.gridAmountClass}`}>
-                  {row.total > 0 ? formatCurrency(row.total) : '—'}
+                  {row.total > 0 ? formatGlobalAmount(row.total) : '—'}
                 </div>
               </div>
             ))}

@@ -52,6 +52,14 @@ export function sortGastosHistorialByActivity(
   });
 }
 
+function stampWithinWindow(stamp: string | null | undefined, now: number, windowMs: number): boolean {
+  const s = stamp?.trim();
+  if (!s) return false;
+  const t = new Date(s.includes('T') ? s : s.replace(' ', 'T')).getTime();
+  return Number.isFinite(t) && now - t <= windowMs;
+}
+
+/** Alta reciente, pin local o revisado_at reciente: omitir filtro año/mes en vista rápida. */
 export function isGastoRecentlyReclassified(
   g: Gasto,
   pinnedAtMs?: number,
@@ -59,10 +67,19 @@ export function isGastoRecentlyReclassified(
 ): boolean {
   const now = Date.now();
   if (pinnedAtMs != null && now - pinnedAtMs <= windowMs) return true;
-  const rev = g.revisado_at?.trim();
-  if (!rev) return false;
-  const t = new Date(rev.includes('T') ? rev : rev.replace(' ', 'T')).getTime();
-  return Number.isFinite(t) && now - t <= windowMs;
+  if (stampWithinWindow(g.revisado_at, now, windowMs)) return true;
+  if (stampWithinWindow(g.createdAt, now, windowMs)) return true;
+  return false;
+}
+
+/** Asegura timestamps de actividad tras crear/editar para orden y visibilidad local. */
+export function enrichGastoHistorialActivity(gasto: Gasto): Gasto {
+  const nowIso = new Date().toISOString();
+  return {
+    ...gasto,
+    revisado_at: gasto.revisado_at?.trim() || nowIso,
+    createdAt: gasto.createdAt?.trim() || nowIso,
+  };
 }
 
 /** Une filas del servidor con pins locales (sin duplicar). */

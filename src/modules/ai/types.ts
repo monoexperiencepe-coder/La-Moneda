@@ -18,7 +18,14 @@ export type AiToolName =
   | 'getRankingInversionVehiculos'
   | 'getDetalleInversionVehiculo'
   // Inversiones no vehiculares (tipo_gasto = inversion_compra en gastos)
-  | 'getInversionesNoVehiculares';
+  | 'getInversionesNoVehiculares'
+  // Flota operativa (vehículos + conductores; sin montos)
+  | 'getFlotaResumen'
+  | 'getVehiculosDisponibles'
+  | 'getConductoresAsignados'
+  | 'getVehiculosSinConductor'
+  | 'getVehiculoPorPlaca'
+  | 'getConductorPorVehiculo';
 
 export type AiSuggestedAction = {
   label: string;

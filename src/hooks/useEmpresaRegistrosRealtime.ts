@@ -212,7 +212,21 @@ export function useEmpresaRegistrosRealtime({
         empresaId,
         extra: { tipo_gasto: mapped.tipo_gasto },
       });
-      if (!canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null)) {
+      const visible = canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null);
+      if (import.meta.env.DEV) {
+        void import('../audit/techAuditDiagnostics').then(({ logRealtimeAudit }) => {
+          logRealtimeAudit({
+            eventType,
+            table: 'gastos',
+            recordId: mapped.id,
+            tipo_gasto: mapped.tipo_gasto,
+            refreshTriggered: false,
+            handler: visible ? 'upsertGasto' : 'removeGastoLocal',
+            visibleToCurrentUser: visible,
+          });
+        });
+      }
+      if (!visible) {
         handlersRef.current.removeGastoLocal(mapped.id, { source: 'realtime' });
       } else {
         handlersRef.current.upsertGasto(mapped, { source: 'realtime' });
@@ -298,7 +312,13 @@ export function useEmpresaRegistrosRealtime({
         return;
       }
       if (payload.new) {
-        handlersRef.current.mergeKilometraje(mapKilometrajeRow(payload.new));
+        const mapped = mapKilometrajeRow(payload.new);
+        if (import.meta.env.DEV) {
+          void import('../audit/techAuditDiagnostics').then(({ logKmRealtime }) => {
+            logKmRealtime(payload.eventType, mapped, 'merge');
+          });
+        }
+        handlersRef.current.mergeKilometraje(mapped);
         scheduleBatch.current();
       }
     };

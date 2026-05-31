@@ -6,6 +6,7 @@ import { fetchAllSupabasePages } from './supabaseRangeFetch';
 import { devPerfAsync } from '../utils/devPerf';
 import { insertFinancialAuditLog, logPostgrestError } from './financialAuditService';
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
+import { stampCreatedByExtra } from '../utils/amountPermissions';
 import { isValidIngresoPrimaryKey } from '../utils/ingresoRecordId';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
@@ -65,9 +66,17 @@ export async function insertIngreso(
 ): Promise<Ingreso | null> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return null;
+  const uid = await getAuthenticatedUserIdForAudit();
+  const rowForInsert =
+    uid != null
+      ? {
+          ...row,
+          excelExtra: stampCreatedByExtra(row.excelExtra ?? null, uid),
+        }
+      : row;
   const { data, error } = await supabase
     .from('ingresos')
-    .insert(ingresoToInsert(empresaId, row))
+    .insert(ingresoToInsert(empresaId, rowForInsert))
     .select('*')
     .single();
   if (error) {

@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useMemo, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import Modal from '../Common/Modal';
@@ -8,12 +9,12 @@ import type {
   PrestamoFinancieroEstado,
 } from '../../data/types';
 import { calcularPrestamoFinancieroInfo } from '../../utils/prestamosFinancierosCalc';
-import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import { Loader2, Trash2 } from 'lucide-react';
 import { matchesSearchQuery } from '../../utils/recordSearch';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(amount: number, moneda: Moneda, formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
 function modalidadEtiqueta(m: ModalidadPagoPrestamo): string {
@@ -148,6 +149,7 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
   onDelete,
   scrollToCardId,
 }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const [busqueda, setBusqueda] = useState('');
   const [estado, setEstado] = useState<FiltroEstado>('todos');
   const [moneda, setMoneda] = useState<FiltroMoneda>('todos');
@@ -432,15 +434,15 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
                     </span>
                   </td>
                   <td className={`${td} whitespace-nowrap`}>{p.monedaCapital}</td>
-                  <td className={`${td} text-right tabular-nums font-medium`}>{montoFmt(p.montoOriginal, p.monedaCapital)}</td>
-                  <td className={`${td} text-right tabular-nums`}>{montoFmt(calc.capitalActualEstimado, p.monedaCapital)}</td>
+                  <td className={`${td} text-right tabular-nums font-medium`}>{montoFmt(p.montoOriginal, p.monedaCapital, formatGlobalAmount)}</td>
+                  <td className={`${td} text-right tabular-nums`}>{montoFmt(calc.capitalActualEstimado, p.monedaCapital, formatGlobalAmount)}</td>
                   <td className={td}>{modalidadEtiqueta(p.modalidadPago)}</td>
                   <td className={`${td} tabular-nums`}>{tasaFmt(p)}</td>
                   <td className={`${td} text-right tabular-nums font-semibold text-slate-900`}>
-                    {montoFmt(p.interesMensualActual, p.monedaPago)}
+                    {montoFmt(p.interesMensualActual, p.monedaPago, formatGlobalAmount)}
                   </td>
                   <td className={`${td} text-right tabular-nums text-indigo-900/90`}>
-                    {montoFmt(calc.totalInteresPagadoEstimado, p.monedaPago)}
+                    {montoFmt(calc.totalInteresPagadoEstimado, p.monedaPago, formatGlobalAmount)}
                   </td>
                   <td className={`${td} whitespace-nowrap text-slate-600`}>
                     {p.fechaCancelacion ? formatDate(p.fechaCancelacion) : '—'}
@@ -549,7 +551,7 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
               <tbody>
                 {tramosOrdenadosModal.map((t) => {
                   const linea = calcTramosModal.porTramo.find((x) => x.tramoId === t.id);
-                  const cuota = linea != null ? montoFmt(linea.interesMensualEfectivo, t.monedaPago) : '—';
+                  const cuota = linea != null ? montoFmt(linea.interesMensualEfectivo, t.monedaPago, formatGlobalAmount) : '—';
                   const tasaTxt =
                     t.modalidadPago === 'tasa_anual' && t.tasaAnual != null && Number.isFinite(t.tasaAnual)
                       ? `${(t.tasaAnual * 100).toLocaleString('es-PE', { maximumFractionDigits: 4 })}%`
@@ -562,7 +564,7 @@ const PrestamosRegistroTable: React.FC<PrestamosRegistroTableProps> = ({
                       <td className="py-1 pr-2">{modalidadEtiqueta(t.modalidadPago)}</td>
                       <td className="py-1 pr-2 text-right tabular-nums">
                         {t.capitalReferencial != null && Number.isFinite(t.capitalReferencial)
-                          ? montoFmt(t.capitalReferencial, t.monedaCapital)
+                          ? montoFmt(t.capitalReferencial, t.monedaCapital, formatGlobalAmount)
                           : '—'}
                       </td>
                       <td className="py-1 pr-2 tabular-nums">{tasaTxt}</td>

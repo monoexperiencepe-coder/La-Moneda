@@ -4,6 +4,7 @@
 import { normalizeAdministrativoSubtipo, resolveAdministrativoSubtipoGastoCanon } from '../../utils/administrativoSubtipo';
 import { normalizeInversionSubtipo } from '../../utils/inversionSubtipo';
 import { normalizeOperativoSubtipo, resolveOperativoSubtipoGastoCanon } from '../../utils/operativoSubtipo';
+import { normalizeFinancieroPrestamoSubtipo, resolveFinancieroPrestamoSubtipoGastoCanon } from '../../utils/financieroPrestamoSubtipo';
 import { normalizeRepresentacionInternaSubtipo } from '../../utils/representacionInternaSubtipoLabel';
 import { normKey } from '../../utils/normKey';
 import { resolveLegacyAliasNormKey } from './legacySubtipoAliases';
@@ -35,10 +36,7 @@ export function resolveCanonicalSubtipoValueFull(categoria: string, raw: string)
     return resolveOperativoSubtipoGastoCanon(v) ?? normalizeOperativoSubtipo(v) ?? v;
   }
   if (cat === 'financiero_prestamo') {
-    const k = normKey(v);
-    if (k === 'intereses') return 'interes';
-    if (k === 'prestamos') return 'prestamo';
-    if (k === 'cuotas') return 'cuota';
+    return normalizeFinancieroPrestamoSubtipo(v) ?? resolveFinancieroPrestamoSubtipoGastoCanon(v) ?? v;
   }
   return v;
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
 import { KPIData } from '../../data/types';
-import { formatCurrency } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 interface KPICardsProps {
   data: KPIData;
@@ -41,10 +41,12 @@ const KPICard: React.FC<KPICardProps> = ({
 );
 
 const KPICards: React.FC<KPICardsProps> = ({ data }) => {
+  const { formatGlobalAmount } = useAmountDisplay();
+
   const cards: KPICardProps[] = [
     {
       title: 'Total Ingresos',
-      value: formatCurrency(data.totalIngresos),
+      value: formatGlobalAmount(data.totalIngresos),
       subtitle: 'Ingresos del período',
       icon: <TrendingUp size={20} />,
       trend: 'up',
@@ -54,7 +56,7 @@ const KPICards: React.FC<KPICardsProps> = ({ data }) => {
     },
     {
       title: 'Total Gastos',
-      value: formatCurrency(data.totalGastos),
+      value: formatGlobalAmount(data.totalGastos),
       subtitle: 'Gastos del período',
       icon: <TrendingDown size={20} />,
       trend: 'down',
@@ -64,7 +66,7 @@ const KPICards: React.FC<KPICardsProps> = ({ data }) => {
     },
     {
       title: 'Rebajes (descuentos)',
-      value: formatCurrency(data.totalDescuentos),
+      value: formatGlobalAmount(data.totalDescuentos),
       subtitle: 'Suma de montos (≤ 0)',
       icon: <Activity size={20} />,
       trend: 'neutral',
@@ -74,7 +76,7 @@ const KPICards: React.FC<KPICardsProps> = ({ data }) => {
     },
     {
       title: 'Margen Neto',
-      value: formatCurrency(data.margenNeto),
+      value: formatGlobalAmount(data.margenNeto),
       subtitle: 'Ingresos − gastos + rebajes',
       icon: <DollarSign size={20} />,
       trend: data.margenNeto >= 0 ? 'up' : 'down',
@@ -84,7 +86,7 @@ const KPICards: React.FC<KPICardsProps> = ({ data }) => {
     },
     {
       title: 'Promedio Diario',
-      value: formatCurrency(data.promedioIngresoDiario),
+      value: formatGlobalAmount(data.promedioIngresoDiario),
       subtitle: 'Por día activo',
       icon: <Activity size={20} />,
       accent: 'text-purple-600',

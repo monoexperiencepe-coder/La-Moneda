@@ -1,5 +1,7 @@
-/** Instrumentación DEV-only para auditar cuellos de botella (fetch, bootstrap, KPIs). */
-export const DEV_PERF = import.meta.env.DEV;
+import { isVerboseDebug } from '../config/verboseDebug';
+
+/** Instrumentación DEV-only (requiere VITE_VERBOSE_DEBUG=1 para no spamear consola). */
+export const DEV_PERF = import.meta.env.DEV && isVerboseDebug();
 
 export async function devPerfAsync<T>(
   label: string,

@@ -7,12 +7,12 @@ import {
   formatGlobalIngresosDisplay,
 } from '../../utils/financialGlobalKpis';
 import { resolveGastosGlobalTotalState } from '../../utils/gastosFinancialSummary';
-import { formatCurrency } from '../../utils/formatting';
 import {
   sumUtilidadHistoricaTotal,
   UTILIDAD_HISTORICA_TOOLTIP,
 } from '../../utils/utilidadOperativa';
 import SmartClock from '../../components/Common/SmartClock';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 
 /** Ocultar resultado neto en hub hasta que la data operativa esté ordenada. */
 const SHOW_RESULTADO_NETO_EN_HUB = false;
@@ -32,6 +32,7 @@ type HubCardOption = {
 
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
+  const { formatGlobalAmount, canViewGlobal } = useAmountDisplay();
   const {
     ingresos,
     gastos,
@@ -52,9 +53,13 @@ const FinanzasHub: React.FC = () => {
       ),
     [gastosFinancialSummary, localGastosTotal, gastos.length, gastosLoadScope, isLoadingGastosSummary],
   );
-  const totalGastosTabla = formatGlobalGastosDisplay(gastosGlobalState);
-  const totalIngresosTabla = formatGlobalIngresosDisplay(ingresos);
-  const utilidadHistoricaDisplay = formatCurrency(sumUtilidadHistoricaTotal(cajaNegocioVehiculo));
+  const totalGastosTabla = canViewGlobal
+    ? formatGlobalGastosDisplay(gastosGlobalState, formatGlobalAmount)
+    : formatGlobalAmount(0);
+  const totalIngresosTabla = canViewGlobal
+    ? formatGlobalIngresosDisplay(ingresos, formatGlobalAmount)
+    : formatGlobalAmount(0);
+  const utilidadHistoricaDisplay = formatGlobalAmount(sumUtilidadHistoricaTotal(cajaNegocioVehiculo));
   const gastosSourceLabel =
     gastosGlobalState.source === 'rpc' ? 'BD' : gastosGlobalState.source === 'loading' ? '' : 'Vista rápida';
 

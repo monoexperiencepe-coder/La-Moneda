@@ -1,9 +1,10 @@
+import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Ingreso, Vehicle } from '../../../data/types';
 import { MESES } from '../../../data/catalogs';
 import IngresosMesChart from '../../../components/Finanzas/IngresosMesChart';
-import { formatCurrency } from '../../../utils/formatting';
+;
 import { ingresoMontoPEN } from '../../../utils/moneda';
 import {
   ingresosExtraordinariosTotal,
@@ -27,6 +28,7 @@ interface IngresosReporteSectionProps {
 }
 
 const IngresosReporteSection: React.FC<IngresosReporteSectionProps> = ({ ingresos, vehicles, yearOptions }) => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
@@ -111,11 +113,11 @@ const IngresosReporteSection: React.FC<IngresosReporteSectionProps> = ({ ingreso
         <div className="grid gap-3 sm:grid-cols-2 stagger-children">
           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 p-4 backdrop-blur-sm transition-shadow duration-300 hover:shadow-sm">
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Total en período</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-950">{formatCurrency(totalPeriodo)}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-950">{formatGlobalAmount(totalPeriodo)}</p>
             <p className="mt-1 text-xs text-emerald-700/90">{range.label}</p>
             <p className="mt-2 text-[11px] text-emerald-800/80 leading-snug">
-              Vehiculares {formatCurrency(totalVehicularPeriodo)} · Extraordinarios{' '}
-              {formatCurrency(totalExtraordinarioPeriodo)}
+              Vehiculares {formatGlobalAmount(totalVehicularPeriodo)} · Extraordinarios{' '}
+              {formatGlobalAmount(totalExtraordinarioPeriodo)}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 backdrop-blur-sm transition-shadow duration-300 hover:shadow-sm">
@@ -171,7 +173,7 @@ const IngresosReporteSection: React.FC<IngresosReporteSectionProps> = ({ ingreso
                       <span className="mr-2 font-bold text-teal-600">{idx + 1}.</span>
                       {x.label}
                     </span>
-                    <span className="font-semibold tabular-nums">{formatCurrency(x.monto)}</span>
+                    <span className="font-semibold tabular-nums">{formatGlobalAmount(x.monto)}</span>
                   </button>
                 </li>
               ))}

@@ -1,4 +1,5 @@
 import type { AppRole, AppUserProfile } from '../data/types';
+import { canAccessAI as canAccessAiByRole, canViewAmountsGlobal } from './amountPermissions';
 
 /**
  * Restricción financiera por cuenta operador (frontend).
@@ -44,6 +45,7 @@ export type AppSection =
   | 'finanzas_financiamiento'
   | 'finanzas_inversiones'
   | 'finanzas_caja'
+  | 'finanzas_ia_clasificacion'
   | 'vehiculos'
   | 'operaciones'
   | 'reportes'
@@ -120,12 +122,23 @@ export function canMoveGastoToTipo(
 
 export function canViewAmounts(user: PermissionUser | null | undefined): boolean {
   if (!user) return false;
-  return !isFinancialOperadorRestricted(user);
+  if (isFinancialOperadorRestricted(user)) return false;
+  return canViewAmountsGlobal(user.role);
 }
 
-/** Totales globales / conciliación cruzada / KPIs del dueño. */
+/** Totales globales / conciliación cruzada / KPIs del dueño. Contador: siempre oculto. */
 export function canViewGlobalTotals(user: PermissionUser | null | undefined): boolean {
-  return canViewAmounts(user);
+  if (!user) return false;
+  if (isFinancialOperadorRestricted(user)) return false;
+  return canViewAmountsGlobal(user.role);
+}
+
+/** Re-export central para IA y navegación. */
+export { canAccessAI } from './amountPermissions';
+export function canAccessAiModule(user: PermissionUser | null | undefined): boolean {
+  if (!user) return false;
+  if (isFinancialOperadorRestricted(user)) return true;
+  return canAccessAiByRole(user.role);
 }
 
 export function canEditGastoTipo(user: PermissionUser | null | undefined, tipoGasto: string | null | undefined): boolean {
@@ -192,6 +205,9 @@ export function canViewSection(user: PermissionUser | null | undefined, section:
     case 'finanzas_gastos':
     case 'finanzas_ingresos':
       return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+    case 'finanzas_ia_clasificacion':
+      if (isFinancialOperadorRestricted(user)) return true;
+      return canAccessAiModule(user);
     case 'finanzas_resumen':
       return canUseResumen(user);
     case 'finanzas_reportes':
@@ -213,12 +229,18 @@ export function canViewSection(user: PermissionUser | null | undefined, section:
       return true;
     case 'asistente':
       if (isFinancialOperadorRestricted(user)) return true;
-      return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+      return canAccessAiModule(user);
     case 'admin':
       return user.role === 'admin';
     default:
       return false;
   }
+}
+
+/** Alta/edición de vehículos (RLS: admin, contador, socio). */
+export function canMutateVehiculos(user: PermissionUser | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
 }
 
 export function filterGastosForUser<T extends { tipo_gasto?: string | null }>(

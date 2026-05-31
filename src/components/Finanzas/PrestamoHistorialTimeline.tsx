@@ -1,6 +1,7 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo } from 'react';
 import type { Moneda, PrestamoFinanciero, PrestamoFinancieroTramo } from '../../data/types';
-import { formatCurrency, formatDate, formatUSD } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatting';
 import {
   buildTimelineFromDetalle,
   movimientoBadgeLabel,
@@ -8,8 +9,12 @@ import {
   type PrestamoTimelineEntry,
 } from '../../utils/prestamoMovimientos';
 
-function montoFmt(amount: number, moneda: Moneda): string {
-  return moneda === 'USD' ? formatUSD(amount) : formatCurrency(amount, 'S/');
+function montoFmt(
+  amount: number,
+  moneda: Moneda,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string {
+  return moneda === 'USD' ? formatGlobalAmount(amount, 'USD') : formatGlobalAmount(amount);
 }
 
 function badgeClass(tipo: PrestamoMovimientoTipo): string {
@@ -29,12 +34,15 @@ function badgeClass(tipo: PrestamoMovimientoTipo): string {
   }
 }
 
-function deltaLabel(entry: PrestamoTimelineEntry): string | null {
+function deltaLabel(
+  entry: PrestamoTimelineEntry,
+  formatGlobalAmount: (n: number, c?: 'PEN' | 'USD') => string,
+): string | null {
   if (entry.deltaCapital == null || entry.deltaCapital === 0) return null;
   if (entry.deltaCapital > 0) {
-    return `+${montoFmt(entry.deltaCapital, entry.monedaCapital)}`;
+    return `+${montoFmt(entry.deltaCapital, entry.monedaCapital, formatGlobalAmount)}`;
   }
-  return `−${montoFmt(Math.abs(entry.deltaCapital), entry.monedaCapital)}`;
+  return `−${montoFmt(Math.abs(entry.deltaCapital), entry.monedaCapital, formatGlobalAmount)}`;
 }
 
 export interface PrestamoHistorialTimelineProps {
@@ -48,6 +56,7 @@ const PrestamoHistorialTimeline: React.FC<PrestamoHistorialTimelineProps> = ({
   tramos,
   compact = false,
 }) => {
+  const { formatGlobalAmount } = useAmountDisplay();
   const entries = useMemo(() => buildTimelineFromDetalle(prestamo, tramos), [prestamo, tramos]);
 
   if (entries.length === 0) {
@@ -62,7 +71,7 @@ const PrestamoHistorialTimeline: React.FC<PrestamoHistorialTimelineProps> = ({
       />
       <ul className="space-y-0">
         {entries.map((entry) => {
-          const delta = deltaLabel(entry);
+          const delta = deltaLabel(entry, formatGlobalAmount);
           return (
             <li key={entry.id} className="relative pb-3 last:pb-0">
               <span
@@ -83,7 +92,7 @@ const PrestamoHistorialTimeline: React.FC<PrestamoHistorialTimelineProps> = ({
                 <p className="text-[11px] font-medium text-slate-800 leading-snug">{entry.titulo}</p>
                 {entry.capitalNuevo != null ? (
                   <p className="text-[10px] text-slate-600 mt-0.5 tabular-nums">
-                    Capital: {montoFmt(entry.capitalNuevo, entry.monedaCapital)}
+                    Capital: {montoFmt(entry.capitalNuevo, entry.monedaCapital, formatGlobalAmount)}
                     {delta ? <span className="ml-1 font-semibold text-slate-800">({delta})</span> : null}
                   </p>
                 ) : null}
@@ -91,12 +100,12 @@ const PrestamoHistorialTimeline: React.FC<PrestamoHistorialTimelineProps> = ({
                 entry.interesNuevo != null &&
                 Math.abs(entry.interesAnterior - entry.interesNuevo) > 0.005 ? (
                   <p className="text-[10px] text-slate-600 tabular-nums">
-                    Cuota: {montoFmt(entry.interesAnterior, entry.monedaPago)} →{' '}
-                    {montoFmt(entry.interesNuevo, entry.monedaPago)}
+                    Cuota: {montoFmt(entry.interesAnterior, entry.monedaPago, formatGlobalAmount)} →{' '}
+                    {montoFmt(entry.interesNuevo, entry.monedaPago, formatGlobalAmount)}
                   </p>
                 ) : entry.interesNuevo != null ? (
                   <p className="text-[10px] text-slate-600 tabular-nums">
-                    Cuota mensual: {montoFmt(entry.interesNuevo, entry.monedaPago)}
+                    Cuota mensual: {montoFmt(entry.interesNuevo, entry.monedaPago, formatGlobalAmount)}
                   </p>
                 ) : null}
                 {entry.comentario ? (

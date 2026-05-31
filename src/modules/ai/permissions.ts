@@ -1,5 +1,6 @@
 import type { PermissionUser } from '../../utils/permissions';
 import {
+  canAccessAI,
   canUseFinanciamiento,
   canUseIngresos,
   canUseReports,
@@ -15,6 +16,23 @@ const OPERADOR_ALLOWED_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getMovimientosRecientes',
   'suggestCategoriaGasto',
   'getPendientesConSugerencia',
+  // Flota operativa (sin montos ni reportes financieros)
+  'getFlotaResumen',
+  'getVehiculosDisponibles',
+  'getConductoresAsignados',
+  'getVehiculosSinConductor',
+  'getVehiculoPorPlaca',
+  'getConductorPorVehiculo',
+]);
+
+/** Consultas de flota: vehículos, conductores, disponibilidad. No incluye montos ni reportes. */
+export const FLEET_TOOLS: ReadonlySet<AiToolName> = new Set([
+  'getFlotaResumen',
+  'getVehiculosDisponibles',
+  'getConductoresAsignados',
+  'getVehiculosSinConductor',
+  'getVehiculoPorPlaca',
+  'getConductorPorVehiculo',
 ]);
 
 const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
@@ -31,16 +49,27 @@ const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getInversionesNoVehiculares',
 ]);
 
-/** ¿Puede usar el asistente IA? (operador restringido + roles financieros + admin). */
+/** ¿Puede usar el asistente IA? (operador restringido + admin/socio). Contador: no. */
 export function canUseAiAssistant(user: PermissionUser | null | undefined): boolean {
   if (!user) return false;
   if (isFinancialOperadorRestricted(user)) return true;
-  return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+  return canAccessAI(user.role);
 }
 
 /** ¿Puede ejecutar esta herramienta con el rol actual? */
+function canUseFleetTools(user: PermissionUser): boolean {
+  if (isFinancialOperadorRestricted(user)) return true;
+  return (
+    user.role === 'admin' ||
+    user.role === 'socio' ||
+    user.role === 'operador'
+  );
+}
+
 export function canExecuteAiTool(user: PermissionUser | null | undefined, tool: AiToolName): boolean {
   if (!user) return false;
+  if (!canUseAiAssistant(user)) return false;
+  if (FLEET_TOOLS.has(tool)) return canUseFleetTools(user);
   if (isFinancialOperadorRestricted(user)) {
     return OPERADOR_ALLOWED_TOOLS.has(tool);
   }

@@ -1,12 +1,14 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatUSD } from '../../utils/formatting';
+;
 import { totalInversionUsdForVehicle } from '../../services/inversionesVehiculoService';
 import { calculateVehicleRentability } from '../../utils/calculations';
 
 const VehiculosHub: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { vehicles, ingresos, gastos, descuentos, inversionesVehiculo } = useRegistrosContext();
   const rentability = calculateVehicleRentability(vehicles, ingresos, gastos, descuentos);
@@ -82,12 +84,12 @@ const VehiculosHub: React.FC = () => {
                 <p className="text-xs text-gray-400 font-mono">{r.vehicle.placa}</p>
                 {inversionUsdByVehicleId.get(r.vehicle.id) != null ? (
                   <p className="text-[10px] text-amber-800 font-medium mt-0.5 tabular-nums">
-                    Inv. adq. {formatUSD(inversionUsdByVehicleId.get(r.vehicle.id)!)}
+                    Inv. adq. {formatGlobalAmount(inversionUsdByVehicleId.get(r.vehicle.id)!, 'USD')}
                   </p>
                 ) : null}
               </div>
               <span className={`text-sm font-bold ${r.margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {formatCurrency(r.margen)}
+                {formatGlobalAmount(r.margen)}
               </span>
               <ChevronRight size={14} className="text-gray-300" />
             </div>

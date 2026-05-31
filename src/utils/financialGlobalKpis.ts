@@ -13,6 +13,8 @@ import {
   summaryCategoria,
 } from './gastosFinancialSummary';
 
+import type { GlobalAmountFormatter } from './displayAmount';
+
 export type FinancialKpiSource = 'bd' | 'memoria-periodo' | 'memoria-vista-rapida' | 'loading';
 
 /** Suma histórica de ingresos cargados en contexto (fetchIngresos paginado completo). */
@@ -35,21 +37,23 @@ export function computeGlobalUtilidadPEN(
 export function formatGlobalResultadoNetoDisplay(
   ingresos: Ingreso[],
   gastosState: GastosGlobalTotalState,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
 ): string {
-  return formatGlobalUtilidadDisplay(ingresos, gastosState);
+  return formatGlobalUtilidadDisplay(ingresos, gastosState, formatAmount);
 }
 
 /** @deprecated Usar formatGlobalResultadoNetoDisplay — no es utilidad operativa. */
 export function formatGlobalUtilidadDisplay(
   ingresos: Ingreso[],
   gastosState: GastosGlobalTotalState,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
 ): string {
   if (gastosState.source === 'loading' || gastosState.loadingLabel) {
     return gastosState.loadingLabel ?? 'Cargando totales globales…';
   }
   const u = computeGlobalUtilidadPEN(ingresos, gastosState);
   if (u == null) return '—';
-  return formatCurrency(u);
+  return formatAmount(u);
 }
 
 export function globalUtilidadSource(gastosState: GastosGlobalTotalState): FinancialKpiSource {
@@ -110,9 +114,12 @@ export function resolveInversionCompraKpi(
   };
 }
 
-export function formatInversionCompraDisplay(kpi: InversionCompraKpi): string {
+export function formatInversionCompraDisplay(
+  kpi: InversionCompraKpi,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
+): string {
   if (kpi.loadingLabel) return kpi.loadingLabel;
-  return formatCurrency(kpi.monto);
+  return formatAmount(kpi.monto);
 }
 
 export interface ResultadoNetoKpi {
@@ -129,6 +136,7 @@ export function resolveResultadoNetoKpi(
   gastosState: GastosGlobalTotalState,
   useSummaryAllTime: boolean,
   totalGastosPeriodoLocal: number,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
 ): ResultadoNetoKpi {
   if (useSummaryAllTime) {
     if (gastosState.source === 'loading' || gastosState.total == null) {
@@ -141,22 +149,28 @@ export function resolveResultadoNetoKpi(
     const value = totalIngresosPeriodo - gastosState.total;
     return {
       value,
-      display: formatCurrency(value),
+      display: formatAmount(value),
       gastosSource: gastosState.source === 'rpc' ? 'bd' : 'memoria-vista-rapida',
     };
   }
   const value = totalIngresosPeriodo - totalGastosPeriodoLocal;
   return {
     value,
-    display: formatCurrency(value),
+    display: formatAmount(value),
     gastosSource: 'memoria-periodo',
   };
 }
 
-export function formatGlobalIngresosDisplay(ingresos: Ingreso[]): string {
-  return formatCurrency(sumIngresosGlobalPEN(ingresos));
+export function formatGlobalIngresosDisplay(
+  ingresos: Ingreso[],
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
+): string {
+  return formatAmount(sumIngresosGlobalPEN(ingresos));
 }
 
-export function formatGlobalGastosDisplay(gastosState: GastosGlobalTotalState): string {
-  return formatGastosGlobalTotalDisplay(gastosState);
+export function formatGlobalGastosDisplay(
+  gastosState: GastosGlobalTotalState,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
+): string {
+  return formatGastosGlobalTotalDisplay(gastosState, formatAmount);
 }

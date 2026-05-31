@@ -26,7 +26,10 @@ import {
 } from './clasificacionMemoriaService';
 import { registrarFeedbackAplicacion } from './clasificacionFeedbackService';
 import type { ClasificacionFeedbackRow } from '../../modules/ai/clasificacionFeedbackTypes';
-import { tipoGastoRequiereVehiculo } from '../../utils/gastoMoveCategoriaDefaults';
+import {
+  tipoGastoAdmiteVehiculoOpcional,
+  tipoGastoRequiereVehiculo,
+} from '../../utils/gastoMoveCategoriaDefaults';
 import { FINANZA_MOVE_TARGET_TIPO_GASTO } from '../../utils/permissions';
 
 function resolveEmpresaId(tenantEmpresaId?: string | null): string {
@@ -201,7 +204,10 @@ export async function applyIaClasificacionSugerencia(params: {
   }
 
   let vehicleId: number | null = null;
-  if (tipoGastoRequiereVehiculo(tipoDestino, subDestino)) {
+  if (
+    tipoGastoRequiereVehiculo(tipoDestino, subDestino)
+    || tipoGastoAdmiteVehiculoOpcional(tipoDestino)
+  ) {
     const raw = row.vehicle_id ?? gasto.vehicleId;
     const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw ? Number(raw) : NaN;
     vehicleId = Number.isFinite(n) && n > 0 ? n : null;

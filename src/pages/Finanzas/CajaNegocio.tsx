@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarRange, ChevronLeft, Download } from 'lucide-react';
@@ -5,7 +6,7 @@ import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatCurrency, formatDateLong, todayStr, toDateOnlyString } from '../../utils/formatting';
+import { formatDateLong, todayStr, toDateOnlyString } from '../../utils/formatting';
 import type { CajaNegocioVehiculo } from '../../data/types';
 import MonthlyBarChartCard from '../../components/Charts/MonthlyBarChartCard';
 import { MESES } from '../../data/catalogs';
@@ -41,6 +42,7 @@ function MiniStat({ label, value, hint }: { label: string; value: string; hint?:
 }
 
 const CajaNegocio: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { cajaNegocioVehiculo, vehicles } = useRegistrosContext();
 
@@ -320,7 +322,7 @@ const CajaNegocio: React.FC = () => {
       <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-b from-teal-50/90 to-white p-5 shadow-sm sm:p-7">
         <p className="text-xs font-semibold uppercase tracking-wide text-teal-900/80">En el período que eliges abajo</p>
         <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-teal-950 sm:text-4xl">
-          {formatCurrency(totalFiltrado)}
+          {formatGlobalAmount(totalFiltrado)}
         </p>
         <p className="mt-3 text-sm text-slate-700">
           <span className="font-semibold text-slate-900">{filtrados.length}</span> movimiento{filtrados.length === 1 ? '' : 's'}
@@ -331,13 +333,13 @@ const CajaNegocio: React.FC = () => {
         </p>
 
         <div className="mt-6 grid grid-cols-3 rounded-xl border border-teal-100/80 bg-white/80 divide-x divide-teal-100">
-          <MiniStat label="Hoy (en ese período)" value={formatCurrency(filteredPeriodInsights.todayInPeriod)} />
+          <MiniStat label="Hoy (en ese período)" value={formatGlobalAmount(filteredPeriodInsights.todayInPeriod)} />
           <MiniStat
             label="Mejor mes"
-            value={filteredPeriodInsights.peakTotal > 0 ? formatCurrency(filteredPeriodInsights.peakTotal) : '—'}
+            value={filteredPeriodInsights.peakTotal > 0 ? formatGlobalAmount(filteredPeriodInsights.peakTotal) : '—'}
             hint={filteredPeriodInsights.peakTotal > 0 ? filteredPeriodInsights.peakLabel : undefined}
           />
-          <MiniStat label="Promedio / mes" value={formatCurrency(filteredPeriodInsights.avgMonthly)} />
+          <MiniStat label="Promedio / mes" value={formatGlobalAmount(filteredPeriodInsights.avgMonthly)} />
         </div>
         <p className="mt-2 text-center text-[10px] text-slate-500">
           Promedio = total ÷ {filteredPeriodInsights.monthsSpan} mes{filteredPeriodInsights.monthsSpan === 1 ? '' : 'es'} entre las
@@ -347,7 +349,7 @@ const CajaNegocio: React.FC = () => {
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-teal-100/80 pt-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Todo lo cargado en el sistema</p>
-            <p className="text-lg font-bold tabular-nums text-slate-800">{formatCurrency(totalGlobal)}</p>
+            <p className="text-lg font-bold tabular-nums text-slate-800">{formatGlobalAmount(totalGlobal)}</p>
           </div>
         </div>
       </section>
@@ -444,7 +446,7 @@ const CajaNegocio: React.FC = () => {
                         <p className="text-xs font-medium text-slate-500">{labelVehiculo(row.vehicleId)}</p>
                         <p className="mt-0.5 text-[11px] text-slate-400">{formatDateLong(toDateOnlyString(row.fecha))}</p>
                       </div>
-                      <p className="shrink-0 text-sm font-bold tabular-nums text-teal-900">{formatCurrency(row.monto)}</p>
+                      <p className="shrink-0 text-sm font-bold tabular-nums text-teal-900">{formatGlobalAmount(row.monto)}</p>
                     </div>
                     <p className="mt-2 text-sm text-slate-900">{row.concepto}</p>
                     {(() => {
@@ -490,7 +492,7 @@ const CajaNegocio: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-teal-900">
-                        {formatCurrency(row.monto)}
+                        {formatGlobalAmount(row.monto)}
                       </td>
                       <td className="hidden max-w-[200px] px-4 py-2.5 text-xs text-slate-500 lg:table-cell">
                         {(() => {

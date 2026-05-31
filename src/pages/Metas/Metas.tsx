@@ -1,3 +1,4 @@
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, CalendarClock, Gauge, PiggyBank, Sparkles, Target, TrendingUp } from 'lucide-react';
@@ -7,7 +8,7 @@ import { calculateKPIs, calculateVehicleRentability } from '../../utils/calculat
 import { buildMetasGuia } from '../../utils/metasGuiaCoach';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
-import { formatCurrency } from '../../utils/formatting';
+;
 
 const STORAGE_KEY = 'laMoneda_metas_v1';
 
@@ -35,6 +36,7 @@ function monthsApproxFromDays(days: number): number {
 }
 
 const Metas: React.FC = () => {
+  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const { vehicles, ingresos, gastos, descuentos, inversionesVehiculo } = useRegistrosContext();
 
@@ -143,7 +145,7 @@ const Metas: React.FC = () => {
         medianaInversionPen: medianaInversionPorUnidad,
         capitalIncrementalEstimado: capitalOrdenMagnitud,
         rentability,
-      }),
+      }, formatGlobalAmount),
     [
       year,
       activos,
@@ -160,6 +162,7 @@ const Metas: React.FC = () => {
       medianaInversionPorUnidad,
       capitalOrdenMagnitud,
       rentability,
+      formatGlobalAmount,
     ],
   );
 
@@ -376,7 +379,7 @@ const Metas: React.FC = () => {
             <div>
               <span className="font-semibold text-gray-800">Margen mediano por vehículo activo (histórico Fact)</span>
               <p className="text-gray-600 tabular-nums mt-0.5">
-                {margenMediano != null ? formatCurrency(margenMediano) : 'Sin datos suficientes'}
+                {margenMediano != null ? formatGlobalAmount(margenMediano) : 'Sin datos suficientes'}
               </p>
               <p className="text-[11px] text-gray-400 mt-1">
                 Mitad de tu flota activa está por encima y mitad por debajo de este margen acumulado (ingresos − gastos operativos +
@@ -392,7 +395,7 @@ const Metas: React.FC = () => {
               <span className="font-semibold text-gray-800">Ingresos del año · promedio mensual por activo</span>
               <p className="text-gray-600 tabular-nums mt-0.5">
                 {ingresosYtdPorVehiculoPromedio != null
-                  ? `${formatCurrency(ingresosYtdPorVehiculoPromedio)} / mes / vehículo`
+                  ? `${formatGlobalAmount(ingresosYtdPorVehiculoPromedio)} / mes / vehículo`
                   : 'Sin activos o sin ingresos'}
               </p>
               <p className="text-[11px] text-gray-400 mt-1">
@@ -407,7 +410,7 @@ const Metas: React.FC = () => {
             <div>
               <span className="font-semibold text-gray-800">Inversión registrada · mediana por unidad</span>
               <p className="text-gray-600 tabular-nums mt-0.5">
-                {medianaInversionPorUnidad != null ? formatCurrency(medianaInversionPorUnidad) : 'Sin inversiones en PEN'}
+                {medianaInversionPorUnidad != null ? formatGlobalAmount(medianaInversionPorUnidad) : 'Sin inversiones en PEN'}
               </p>
               <p className="text-[11px] text-gray-400 mt-1">
                 Suma de filas <code className="text-[10px] bg-gray-100 px-1 rounded">inversiones_vehiculo</code> por vehículo. Solo
@@ -420,7 +423,7 @@ const Metas: React.FC = () => {
         {capitalOrdenMagnitud != null && brecha != null && brecha > 0 && (
           <div className="rounded-xl border border-violet-100 bg-violet-50/80 px-4 py-3 text-sm">
             <p className="font-semibold text-violet-950">Capital incremental (muy burdo)</p>
-            <p className="text-violet-900 tabular-nums mt-1 text-lg font-bold">{formatCurrency(capitalOrdenMagnitud)}</p>
+            <p className="text-violet-900 tabular-nums mt-1 text-lg font-bold">{formatGlobalAmount(capitalOrdenMagnitud)}</p>
             <p className="text-[11px] text-violet-800 mt-2 leading-relaxed">
               {brecha} × mediana de inversión por unidad. Ignora financiamiento, demoras y costos no cargados en tabla de inversiones.
             </p>

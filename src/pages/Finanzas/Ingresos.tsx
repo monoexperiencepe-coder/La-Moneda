@@ -8,7 +8,8 @@ import { ColumnCountHintTh } from '../../components/Common/ColumnCountHintTh';
 import IncomeForm from '../../components/Forms/IncomeForm';
 import type { Ingreso } from '../../data/types';
 import Select from '../../components/Common/Select';
-import { formatCurrency, todayStr } from '../../utils/formatting';
+import { todayStr } from '../../utils/formatting';
+import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import {
   ingresosExtraordinariosTotal,
@@ -25,6 +26,7 @@ import CopilotEvidenceSlot from '../../components/Copilot/CopilotEvidenceSlot';
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
 const Ingresos: React.FC = () => {
+  const { formatGlobalAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { ingresos, vehicles, deleteIngreso, addIngreso, toast } = useRegistrosContext();
@@ -579,7 +581,7 @@ const Ingresos: React.FC = () => {
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{totalCardTitle}</p>
                 <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-emerald-900 sm:text-2xl">
-                  {formatCurrency(animatedTotal)}
+                  {formatGlobalAmount(animatedTotal)}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
@@ -589,7 +591,7 @@ const Ingresos: React.FC = () => {
                       {chartYear === 'ALL' ? 'Promedio anual' : 'Promedio mensual'}
                     </p>
                     <p className="mt-1.5 text-lg font-bold tabular-nums text-slate-900 sm:text-xl">
-                      {formatCurrency(
+                      {formatGlobalAmount(
                         chartYear === 'ALL' ? (allYearsRollup?.avgPerYear ?? 0) : chartYearInsights.avgMonthly,
                       )}
                     </p>
@@ -625,7 +627,7 @@ const Ingresos: React.FC = () => {
                         : chartYearInsights.peakLabel}
                     </p>
                     <p className="mt-1 text-base font-semibold tabular-nums text-slate-700 sm:text-lg">
-                      {formatCurrency(
+                      {formatGlobalAmount(
                         chartYear === 'ALL' ? (allYearsRollup?.peakTotal ?? 0) : chartYearInsights.peakTotal,
                       )}
                     </p>
@@ -636,7 +638,7 @@ const Ingresos: React.FC = () => {
                       Promedio / movimiento
                     </p>
                     <p className="mt-1.5 text-lg font-bold tabular-nums text-slate-900 sm:text-xl">
-                      {formatCurrency(chartMonthAgg?.avgPerMov ?? 0)}
+                      {formatGlobalAmount(chartMonthAgg?.avgPerMov ?? 0)}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-400">En el mes filtrado</p>
                   </>
@@ -645,7 +647,7 @@ const Ingresos: React.FC = () => {
               <div className="rounded-xl border border-emerald-100/90 bg-gradient-to-br from-emerald-50/90 to-white p-3.5 shadow-sm ring-1 ring-emerald-900/[0.05] sm:p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800/90">Ingreso hoy</p>
                 <p className="mt-1.5 text-lg font-bold tabular-nums text-emerald-900 sm:text-xl">
-                  {formatCurrency(todayTotal)}
+                  {formatGlobalAmount(todayTotal)}
                 </p>
               </div>
             </div>
@@ -657,7 +659,7 @@ const Ingresos: React.FC = () => {
                 </p>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                   {monthlyFocusRows.map((row) => {
-                    const amountFormatted = formatCurrency(row.total);
+                    const amountFormatted = formatGlobalAmount(row.total);
                     return (
                       <div
                         key={row.month}
@@ -698,11 +700,11 @@ const Ingresos: React.FC = () => {
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 flex items-center justify-between gap-2">
                   <span className="text-slate-600">Ingresos vehiculares</span>
-                  <span className="font-semibold tabular-nums text-emerald-800">{formatCurrency(totalVehicularVista)}</span>
+                  <span className="font-semibold tabular-nums text-emerald-800">{formatGlobalAmount(totalVehicularVista)}</span>
                 </div>
                 <div className="rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2 flex items-center justify-between gap-2">
                   <span className="text-violet-800">Ingresos extraordinarios</span>
-                  <span className="font-semibold tabular-nums text-violet-900">{formatCurrency(totalExtraordinarioVista)}</span>
+                  <span className="font-semibold tabular-nums text-violet-900">{formatGlobalAmount(totalExtraordinarioVista)}</span>
                 </div>
               </div>
               <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 p-3 sm:p-4">
@@ -730,7 +732,7 @@ const Ingresos: React.FC = () => {
                   <span className="tabular-nums">{graficoRankingResumen.count} movimientos</span>
                   {' · '}
                   <span className="tabular-nums font-semibold text-emerald-800">
-                    {formatCurrency(graficoRankingResumen.total)}
+                    {formatGlobalAmount(graficoRankingResumen.total)}
                   </span>
                 </p>
               </div>
@@ -893,7 +895,7 @@ const Ingresos: React.FC = () => {
                             </td>
                             <td className="py-2.5 pr-2 text-right tabular-nums text-slate-600">{row.count}</td>
                             <td className="py-2.5 pr-3 text-right text-sm font-semibold tabular-nums text-slate-900">
-                              {formatCurrency(row.total)}
+                              {formatGlobalAmount(row.total)}
                             </td>
                           </tr>
                         ))}
@@ -906,7 +908,7 @@ const Ingresos: React.FC = () => {
                             {displayedVehicleGrand.count}
                           </td>
                           <td className="py-2.5 pr-3 text-right text-sm font-bold tabular-nums text-emerald-900">
-                            {formatCurrency(displayedVehicleGrand.total)}
+                            {formatGlobalAmount(displayedVehicleGrand.total)}
                           </td>
                         </tr>
                       </tfoot>

@@ -1,6 +1,7 @@
 /** Agregados financieros de gastos (RPC get_gastos_financial_summary). */
 
 import { formatCurrency } from './formatting';
+import type { GlobalAmountFormatter } from './displayAmount';
 
 export interface GastosCategoriaSummary {
   monto: number;
@@ -129,10 +130,13 @@ export function resolveGastosGlobalTotalState(
   };
 }
 
-export function formatGastosGlobalTotalDisplay(state: GastosGlobalTotalState): string {
+export function formatGastosGlobalTotalDisplay(
+  state: GastosGlobalTotalState,
+  formatAmount: GlobalAmountFormatter = (n) => formatCurrency(n),
+): string {
   if (state.loadingLabel) return state.loadingLabel;
   if (state.total == null) return '—';
-  return formatCurrency(state.total);
+  return formatAmount(state.total);
 }
 
 /** Parrilla Gastos: { count, monto } por tab tipo_gasto. */
