@@ -47,17 +47,21 @@ import {
   type PermissionUser,
 } from '../utils/permissions';
 import {
+  ensureRealtimeSocketReady,
+  getRealtimeSocketDiag,
+  logRealtimeSocket,
+} from '../utils/realtimeSocketDiag';
+import {
   isRealtimeDebugEnv,
   logRealtimeBoot,
+  logRealtimeDisabled,
   logRealtimeModuleLoaded,
   logRealtimeMounted,
   logRealtimeParseMiss,
   logRealtimeRawPayload,
-  logRealtimeStatus,
   logRealtimeSubscribeDone,
   logRealtimeSubscribeStart,
   logRealtimeUnmounted,
-  resolveRealtimeDisabledReason,
 } from '../utils/realtimeBootLog';
 
 logRealtimeModuleLoaded('useEmpresaRegistrosRealtime');
@@ -176,6 +180,8 @@ export function useEmpresaRegistrosRealtime({
 }: Options): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const permissionUserRef = useRef(permissionUser);
+  permissionUserRef.current = permissionUser;
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const batchRef = useRef({ count: 0 });
@@ -235,24 +241,19 @@ export function useEmpresaRegistrosRealtime({
   useEffect(() => {
     const empresaId = (empresaIdInput ?? '').trim();
     if (!enabled || !empresaId) {
-      if (isRealtimeDebugEnv()) {
-        const reasonIfDisabled = resolveRealtimeDisabledReason({
-          isAuthenticated: bootMeta?.isAuthenticated ?? false,
-          authLoading: bootMeta?.authLoading,
-          profileLoaded: bootMeta?.profileLoaded,
-          profileEmpresaId: bootMeta?.profileEmpresaId,
-          empresaRealtimeId: empresaId,
-          enabled,
-          role: bootMeta?.role ?? null,
-          userId: bootMeta?.userId ?? null,
-          hookMounted: true,
-        });
-        console.warn('[realtime:disabled]', {
-          enabled,
-          empresaId: empresaId || null,
-          reasonIfDisabled,
-        });
-      }
+      logRealtimeDisabled({
+        source: 'useEmpresaRegistrosRealtime',
+        isAuthenticated: bootMeta?.isAuthenticated ?? false,
+        authLoading: bootMeta?.authLoading,
+        profileLoaded: bootMeta?.profileLoaded,
+        profileEmpresaId: bootMeta?.profileEmpresaId,
+        empresaRealtimeId: empresaId,
+        empresaId: empresaId || null,
+        enabled,
+        role: bootMeta?.role ?? permissionUser?.role ?? null,
+        userId: bootMeta?.userId ?? null,
+        hookMounted: true,
+      });
       setConnected(false);
       return;
     }
@@ -267,17 +268,68 @@ export function useEmpresaRegistrosRealtime({
       tableCount: EMPRESA_TABLES.length,
     });
 
-    void supabase.auth.getSession().then(({ data: sessionData, error: sessionErr }) => {
-      logRealtimeSubscribeStart({
+    logRealtimeSocket('effect_start', { channel: channelName, empresaId });
+
+    let cancelled = false;
+    let subscribed = false;
+    let retryCount = 0;
+    let activeChannel: RealtimeChannel | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const emitSubscribeStatus = (status: string, err?: Error) => {
+      if (cancelled) {
+        console.warn('[realtime:status:ignored]', {
+          status,
+          channel: channelName,
+          reason: 'effect_cleanup',
+        });
+        return;
+      }
+
+      subscribed = status === 'SUBSCRIBED';
+      setConnected(subscribed);
+
+      const statusPayload = {
+        status,
+        err: err?.message ?? null,
+        errName: err?.name ?? null,
         channel: channelName,
         empresaId,
-        filter: empresaFilter,
-        tables: [...EMPRESA_TABLES],
-        hasSession: Boolean(sessionData.session),
-        sessionUserId: sessionData.session?.user?.id ?? null,
-        sessionError: sessionErr?.message ?? null,
+        channelState: activeChannel?.state ?? null,
+        subscribed,
+        retryCount,
+        ...getRealtimeSocketDiag(),
+      };
+
+      console.warn('[realtime:status]', statusPayload);
+      console.warn('[realtime:status:json]', JSON.stringify(statusPayload, null, 2));
+
+      if (isRealtimeDebugEnv() && status !== 'SUBSCRIBED') {
+        console.warn('[realtime:status] canal no SUBSCRIBED — revisar socket, publication o JWT', statusPayload);
+      }
+    };
+
+    const scheduleSubscribeRetry = (reason: string) => {
+      if (cancelled || retryCount >= 3 || !activeChannel) return;
+      retryCount += 1;
+      const delayMs = 1500 * retryCount;
+      console.warn('[realtime:retry:scheduled]', {
+        reason,
+        retryCount,
+        delayMs,
+        channel: channelName,
+        ...getRealtimeSocketDiag(),
       });
-    });
+      retryTimer = setTimeout(() => {
+        if (cancelled || !activeChannel) return;
+        console.warn('[realtime:retry]', { retryCount, reason, channel: channelName });
+        if (!supabase.realtime.isConnected()) {
+          supabase.realtime.connect();
+        }
+        activeChannel.subscribe(emitSubscribeStatus);
+      }, delayMs);
+    };
 
     const handleRemoteDbChange = createRemoteDbChangeHandler(
       {
@@ -297,8 +349,9 @@ export function useEmpresaRegistrosRealtime({
 
     const applyIncremental = (table: (typeof EMPRESA_TABLES)[number], parsed: RealtimePayload) => {
       const h = handlersRef.current;
+      const pu = permissionUserRef.current;
       const { eventType } = parsed;
-      const canFinanzasSecundarias = canUseInversiones(permissionUser);
+      const canFinanzasSecundarias = canUseInversiones(pu);
 
       switch (table) {
         case 'gastos': {
@@ -309,13 +362,13 @@ export function useEmpresaRegistrosRealtime({
           }
           if (!parsed.new) return;
           const mapped = mapGastoRow(parsed.new);
-          const visible = canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null);
+          const visible = canViewGastoTipo(pu, mapped.tipo_gasto ?? null);
           if (visible) h.upsertGasto(mapped, { source: 'realtime' });
           else h.removeGastoLocal(mapped.id, { source: 'realtime' });
           return;
         }
         case 'ingresos': {
-          if (!canUseIngresos(permissionUser)) return;
+          if (!canUseIngresos(pu)) return;
           if (eventType === 'DELETE') {
             const id = idFromRow(parsed.old, false);
             if (typeof id === 'string' && id) h.removeIngresoLocal(id);
@@ -463,7 +516,7 @@ export function useEmpresaRegistrosRealtime({
       );
     }
 
-    if (canViewFinancialAuditLogs(permissionUser)) {
+    if (canViewFinancialAuditLogs(permissionUserRef.current)) {
       realtimeLogSubscribe({
         channel: channelName,
         table: 'financial_audit_logs',
@@ -494,41 +547,80 @@ export function useEmpresaRegistrosRealtime({
     logRealtimeSubscribeDone({
       channel: channelName,
       empresaId,
-      listeners: EMPRESA_TABLES.length + (canViewFinancialAuditLogs(permissionUser) ? 1 : 0),
+      listeners:
+        EMPRESA_TABLES.length +
+        (canViewFinancialAuditLogs(permissionUserRef.current) ? 1 : 0),
     });
 
-    channel.subscribe((status, err) => {
-      setConnected(status === 'SUBSCRIBED');
-      logRealtimeStatus({
+    void (async () => {
+      const sessionInfo = await ensureRealtimeSocketReady();
+      if (cancelled) return;
+
+      logRealtimeSubscribeStart({
         channel: channelName,
-        status,
         empresaId,
-        error: err?.message ?? null,
-        subscribed: status === 'SUBSCRIBED',
+        filter: empresaFilter,
+        tables: [...EMPRESA_TABLES],
+        hasSession: sessionInfo.hasSession,
+        sessionUserId: sessionInfo.sessionUserId,
+        ...getRealtimeSocketDiag(),
       });
-      if (isRealtimeDebugEnv() && status !== 'SUBSCRIBED') {
-        console.warn('[realtime:status] canal no SUBSCRIBED — revisar publication, RLS o JWT', {
-          status,
-          empresaId,
-          error: err?.message ?? null,
-        });
-      }
-    });
 
-    channelRef.current = channel;
+      activeChannel = channel;
+      channelRef.current = channel;
+      channel.subscribe((status, err) => {
+        emitSubscribeStatus(status, err);
+        if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+          scheduleSubscribeRetry(status);
+        }
+      });
+
+      watchdogTimer = setTimeout(() => {
+        if (cancelled) return;
+        const watchdogPayload = {
+          subscribed,
+          channel: channelName,
+          empresaId,
+          channelState: activeChannel?.state ?? null,
+          retryCount,
+          cancelled,
+          ...getRealtimeSocketDiag(),
+        };
+        console.warn('[realtime:watchdog]', watchdogPayload);
+        console.warn('[realtime:watchdog:json]', JSON.stringify(watchdogPayload, null, 2));
+
+        if (!subscribed) {
+          if (!supabase.realtime.isConnected()) {
+            console.warn('[realtime:watchdog] socket desconectado — forzando connect()');
+            supabase.realtime.connect();
+          }
+          scheduleSubscribeRetry('watchdog_not_subscribed');
+        }
+      }, 5000);
+    })();
 
     return () => {
-      logRealtimeUnmounted({ channel: channelName, empresaId });
+      cancelled = true;
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      logRealtimeUnmounted({ channel: channelName, empresaId, reason: 'effect_cleanup' });
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
       setConnected(false);
       realtimeLogCleanup({ channel: channelName, empresaId });
       realtimeRegistry.unregister(channelName);
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+      const ch = activeChannel ?? channelRef.current;
+      if (ch) {
+        console.warn('[realtime:cleanup]', {
+          channel: channelName,
+          channelState: ch.state,
+          ...getRealtimeSocketDiag(),
+        });
+        void supabase.removeChannel(ch);
       }
+      activeChannel = null;
+      channelRef.current = null;
     };
-  }, [enabled, empresaIdInput, permissionUser?.email, permissionUser?.role, bootMeta?.isAuthenticated, bootMeta?.authLoading]);
+  }, [enabled, empresaIdInput]);
 
   return { connected };
 }

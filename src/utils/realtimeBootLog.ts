@@ -49,18 +49,9 @@ export function resolveRealtimeDisabledReason(
   return null;
 }
 
-function rtLog(label: string, payload: Record<string, unknown>): void {
-  if (!isRealtimeDebugEnv()) return;
-  console.info(label, payload);
-}
-
-/** Log de arranque — siempre en DEV al evaluar RegistrosContext / hook. */
-export function logRealtimeBoot(snap: RealtimeBootSnapshot): void {
-  if (!isRealtimeDebugEnv()) return;
-
+export function buildRealtimeBootPayload(snap: RealtimeBootSnapshot): Record<string, unknown> {
   const reasonIfDisabled = resolveRealtimeDisabledReason(snap);
-
-  rtLog('[realtime:boot]', {
+  return {
     source: snap.source ?? 'unknown',
     isAuthenticated: snap.isAuthenticated,
     profileLoaded: snap.profileLoaded ?? false,
@@ -74,31 +65,74 @@ export function logRealtimeBoot(snap: RealtimeBootSnapshot): void {
     reasonIfDisabled,
     hookMounted: snap.hookMounted ?? null,
     supabaseConfigured: isSupabaseClientConfigured(),
-  });
+    importMetaDev: import.meta.env.DEV,
+    importMetaMode: import.meta.env.MODE,
+  };
+}
+
+function emitDiagnosticView(
+  label: string,
+  payload: Record<string, unknown>,
+  level: 'info' | 'warn' = 'info',
+): void {
+  if (!isRealtimeDebugEnv()) return;
+
+  try {
+    console.table(payload);
+  } catch {
+    /* algunos entornos no soportan console.table con ciertos valores */
+  }
+
+  const json = JSON.stringify(payload, null, 2);
+  const log = level === 'warn' ? console.warn.bind(console) : console.info.bind(console);
+  log(`${label}:json`, json);
+  log(label, payload);
+}
+
+/** Log de arranque — siempre en DEV, incluso si enabled=false. */
+export function logRealtimeBoot(snap: RealtimeBootSnapshot): void {
+  emitDiagnosticView('[realtime:boot]', buildRealtimeBootPayload(snap), 'info');
+}
+
+/** Hook/contexto deshabilitado — payload completo visible en consola. */
+export function logRealtimeDisabled(
+  snap: RealtimeBootSnapshot & { empresaId?: string | null },
+): void {
+  const payload = {
+    ...buildRealtimeBootPayload(snap),
+    empresaId: snap.empresaId ?? (snap.empresaRealtimeId || null),
+  };
+  emitDiagnosticView('[realtime:disabled]', payload, 'warn');
 }
 
 export function logRealtimeMounted(meta: Record<string, unknown>): void {
-  rtLog('[realtime:mounted]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  console.info('[realtime:mounted]', meta);
 }
 
 export function logRealtimeUnmounted(meta: Record<string, unknown>): void {
-  rtLog('[realtime:unmounted]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  console.info('[realtime:unmounted]', meta);
 }
 
 export function logRealtimeSubscribeStart(meta: Record<string, unknown>): void {
-  rtLog('[realtime:subscribe:start]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  emitDiagnosticView('[realtime:subscribe:start]', meta, 'info');
 }
 
 export function logRealtimeSubscribeDone(meta: Record<string, unknown>): void {
-  rtLog('[realtime:subscribe:done]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  console.info('[realtime:subscribe:done]', meta);
 }
 
 export function logRealtimeStatus(meta: Record<string, unknown>): void {
-  rtLog('[realtime:status]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  emitDiagnosticView('[realtime:status]', meta, 'info');
 }
 
 export function logRealtimeRawPayload(meta: Record<string, unknown>): void {
-  rtLog('[realtime:raw]', meta);
+  if (!isRealtimeDebugEnv()) return;
+  console.info('[realtime:raw]', meta);
 }
 
 export function logRealtimeParseMiss(meta: Record<string, unknown>): void {
@@ -107,5 +141,6 @@ export function logRealtimeParseMiss(meta: Record<string, unknown>): void {
 
 /** Confirmación de que el módulo se cargó (diagnóstico lazy/import). */
 export function logRealtimeModuleLoaded(moduleId: string): void {
-  rtLog('[realtime:module]', { loaded: moduleId, at: new Date().toISOString() });
+  if (!isRealtimeDebugEnv()) return;
+  console.info('[realtime:module]', { loaded: moduleId, at: new Date().toISOString() });
 }
