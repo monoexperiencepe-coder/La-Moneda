@@ -38,6 +38,11 @@ const ACTION_LABELS: Record<string, string> = {
   change_amount: 'Cambió monto del gasto',
   delete_record: 'Eliminó gasto',
   edit_gasto: 'Editó gasto',
+  create_kilometraje: 'Registró kilometraje',
+  delete_kilometraje: 'Eliminó kilometraje',
+  create_control_fecha: 'Registró documentación',
+  edit_control_fecha: 'Editó documentación',
+  delete_control_fecha: 'Eliminó documentación',
 };
 
 function actionLabel(actionType: string): string {

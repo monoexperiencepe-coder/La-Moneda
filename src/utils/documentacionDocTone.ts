@@ -1,4 +1,4 @@
-import { esControlFechaExcluidoDeEstadoVencido, esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
+import { esControlFechaAlertaMantenimientoNoVencido, esControlFechaExcluidoDeEstadoVencido, esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
 import type { TipoControlFecha } from '../data/types';
 import { isExpired, isExpiringSoon } from './formatting';
 
@@ -8,7 +8,7 @@ export type DocTone = 'empty' | 'ok' | 'soon' | 'late' | 'neutral' | 'mant';
 export function docColumnTone(date: string | undefined, tipo: TipoControlFecha): DocTone {
   if (!date) return 'empty';
   if (esControlFechaSinAlertaVencimiento(tipo)) return 'neutral';
-  if (tipo === 'BAT_MANT_REALIZADO') {
+  if (esControlFechaAlertaMantenimientoNoVencido(tipo)) {
     if (isExpired(date)) return 'mant';
     if (isExpiringSoon(date, 30)) return 'mant';
     return 'ok';
@@ -31,6 +31,17 @@ export function docRowWorstTone(
     if (t === 'late') return 'late';
     if (t === 'soon') worst = 'soon';
     else if (t === 'ok' && worst === 'empty') worst = 'ok';
+  }
+  if (worst === 'empty' && doc) {
+    let hasRealVencimiento = false;
+    let hasAnyDate = false;
+    for (const { tipo } of columnas) {
+      const d = doc[tipo];
+      if (!d) continue;
+      hasAnyDate = true;
+      if (!esControlFechaExcluidoDeEstadoVencido(tipo)) hasRealVencimiento = true;
+    }
+    if (hasAnyDate && !hasRealVencimiento) return 'ok';
   }
   return worst;
 }

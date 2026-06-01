@@ -200,7 +200,7 @@ export function mapIngresoRow(r: Record<string, unknown>): Ingreso {
     fecha: toDateOnlyString(r.fecha),
     fechaRegistro: toDateOnlyString(r.fecha_registro ?? r.fecha),
     vehicleId: r.vehicle_id != null && r.vehicle_id !== '' ? num(r.vehicle_id) : null,
-    esExtraordinario: Boolean(r.es_extraordinario),
+    esExtraordinario: r.es_extraordinario != null ? Boolean(r.es_extraordinario) : r.vehicle_id == null,
     tipo: str(r.tipo),
     subTipo: strOrNull(r.sub_tipo),
     fechaDesde: strOrNull(r.fecha_desde),
@@ -469,12 +469,11 @@ export function ingresoToInsert(
   empresaId: string,
   row: Omit<Ingreso, 'id' | 'createdAt'>,
 ): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     fecha: row.fecha,
     fecha_registro: row.fechaRegistro,
     vehicle_id: row.vehicleId,
-    es_extraordinario: row.esExtraordinario ?? false,
     tipo: row.tipo,
     sub_tipo: row.subTipo,
     fecha_desde: row.fechaDesde,
@@ -493,6 +492,11 @@ export function ingresoToInsert(
     estado_pago: row.estadoPago ?? 'PAGADO',
     excel_extra: row.excelExtra ?? null,
   };
+  /** Columna opcional: omitir si aún no existe en el proyecto Supabase. */
+  if (import.meta.env.VITE_INGRESOS_ES_EXTRAORDINARIO === '1') {
+    payload.es_extraordinario = row.esExtraordinario ?? false;
+  }
+  return payload;
 }
 
 export function gastoToInsert(empresaId: string, row: Omit<Gasto, 'id' | 'createdAt'>): Record<string, unknown> {

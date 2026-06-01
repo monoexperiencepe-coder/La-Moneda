@@ -4,6 +4,8 @@ import type { FinancialAuditLog } from '../data/types';
 import { isValidAuditUserId } from './authAuditUser';
 import { cleanUuid, deepStripZeroIdFields } from '../utils/uuidColumn';
 
+const AUDIT_LOGS_CHANGED_EVENT = 'la-moneda:audit-logs-changed';
+
 export interface FinancialAuditLogInsert {
   user_id: string;
   action_type: string;
@@ -78,6 +80,9 @@ export async function insertFinancialAuditLog(
   if (error) {
     logPostgrestError('financial_audit_logs insert', error);
     return false;
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUDIT_LOGS_CHANGED_EVENT));
   }
   return true;
 }

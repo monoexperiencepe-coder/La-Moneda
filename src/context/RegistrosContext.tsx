@@ -265,6 +265,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       upsertCajaNegocio: registros.upsertCajaNegocio,
       removeCajaNegocioLocal: registros.removeCajaNegocioLocal,
       refreshControlFechasViews: registros.refreshControlFechasViews,
+      reloadKilometrajesOnly: registros.reloadKilometrajesOnly,
+      reloadControlFechasLatest: registros.reloadControlFechasLatest,
     }),
     [
       registros.upsertGasto,
@@ -290,6 +292,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       registros.upsertCajaNegocio,
       registros.removeCajaNegocioLocal,
       registros.refreshControlFechasViews,
+      registros.reloadKilometrajesOnly,
+      registros.reloadControlFechasLatest,
     ],
   );
 

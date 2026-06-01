@@ -16,13 +16,15 @@ import type { TipoControlFecha, Vehicle } from '../../data/types';
 
 const DOC_TIPOS = DOC_MODULE_UI_COLUMNS.map((c) => c.tipo);
 
-/** Scroll interno en md; en lg el sticky sigue al viewport (debajo del header h-16). */
-const DOC_TABLE_WRAP =
-  'hidden md:block overflow-x-auto max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain lg:max-h-none lg:overflow-y-visible isolate';
-const DOC_TH_STICKY =
-  'sticky top-0 lg:top-16 z-30 bg-white border-b border-gray-100 shadow-[0_1px_0_0_rgb(229_231_235)]';
-const DOC_TH_UNIT =
-  'sticky top-0 lg:top-16 left-0 z-40 bg-white border-r border-b border-gray-100 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08),0_1px_0_0_rgb(229_231_235)]';
+/** Contenedor único de scroll (vertical + horizontal); sticky solo funciona dentro de él. */
+const DOC_TABLE_WRAP = 'hidden md:block overflow-auto max-h-[min(calc(100vh-14rem),720px)] overscroll-contain';
+const DOC_TH_HEAD = 'bg-white py-2 px-1.5 text-center whitespace-nowrap border-b border-gray-100';
+const DOC_TH_UNIT_HEAD =
+  'sticky top-0 left-0 z-30 bg-white py-2 pl-3 pr-2 text-left border-r border-b border-gray-100 min-w-[9rem] shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08),0_1px_0_0_rgb(229_231_235)]';
+const DOC_TH_STICKY_TOP =
+  'sticky top-0 z-20 bg-white border-b border-gray-100 shadow-[0_1px_0_0_rgb(229_231_235)]';
+const DOC_TD_UNIT =
+  'sticky left-0 z-10 border-r border-gray-100 min-w-[9rem] shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08)]';
 
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
 
@@ -302,19 +304,19 @@ const Documentacion: React.FC = () => {
             </div>
 
             <div className={DOC_TABLE_WRAP}>
-              <table className="w-full border-collapse text-left min-w-[980px]">
+              <table className="w-full border-separate border-spacing-0 text-left min-w-[980px]">
                 <thead>
                   <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className={`py-2 pl-3 pr-2 text-left ${DOC_TH_UNIT}`}>Unidad</th>
+                    <th className={DOC_TH_UNIT_HEAD}>Unidad</th>
                     {DOC_MODULE_UI_COLUMNS.map(({ tipo, th }) => (
-                      <th key={tipo} className={`py-2 px-1.5 text-center whitespace-nowrap ${DOC_TH_STICKY}`}>
+                      <th key={tipo} className={`${DOC_TH_HEAD} ${DOC_TH_STICKY_TOP}`}>
                         {th}
                       </th>
                     ))}
-                    <th className={`py-2 pl-2 pr-3 text-center ${DOC_TH_STICKY}`}>Estado</th>
+                    <th className={`py-2 pl-2 pr-3 text-center ${DOC_TH_STICKY_TOP}`}>Estado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody>
                   {visibleRows.map(({ v, doc, statusTone }) => {
                     const rowAccent =
                       statusTone === 'late'
@@ -324,11 +326,8 @@ const Documentacion: React.FC = () => {
                           : 'border-l-2 border-l-transparent hover:bg-violet-50/30';
                     const unitBg = stickyUnitBg(statusTone);
                     return (
-                      <tr key={v.id} className={`transition-colors ${rowAccent}`}>
-                        <td
-                          className={`py-2.5 pl-3 pr-2 sticky left-0 z-20 border-r border-gray-100 ${unitBg}`}
-                          style={{ boxShadow: '4px 0 8px -2px rgba(0,0,0,0.08)' }}
-                        >
+                      <tr key={v.id} className={`transition-colors border-b border-gray-50 ${rowAccent}`}>
+                        <td className={`py-2.5 pl-3 pr-2 align-top ${DOC_TD_UNIT} ${unitBg}`}>
                           <div className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">
                             #{v.id} · {v.placa}
                           </div>

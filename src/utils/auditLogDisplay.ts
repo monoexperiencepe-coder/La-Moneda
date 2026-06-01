@@ -4,6 +4,13 @@ import { toDateOnlyString } from './formatting';
 import { labelTipoGastoFinanciero } from './tipoGastoLabels';
 import { getSubtipoFinancieroLabel } from './subtipoFinancieroLabel';
 import { vehicleIdAuditScalar } from './uuidColumn';
+import { TIPOS_CONTROL_FECHA_OPTIONS } from '../data/controlFechaCatalog';
+
+function controlFechaTipoLabel(tipo: unknown): string {
+  const t = String(tipo ?? '').trim();
+  if (!t) return '—';
+  return TIPOS_CONTROL_FECHA_OPTIONS.find((o) => o.value === t)?.label ?? t;
+}
 
 function vehicleLabel(vehicles: Vehicle[], vehicleId: unknown): string {
   if (vehicleId == null || vehicleId === '') return '—';
@@ -39,12 +46,39 @@ function fechaCompact(isoDay: string): string {
 /** Una línea corta: tipo · vehículo · fecha · monto (snake_case en payloads de auditoría). */
 export function formatAuditEntitySummary(log: FinancialAuditLog, vehicles: Vehicle[]): string {
   const typeTag =
-    log.entityType === 'ingreso' ? 'Ing.' : log.entityType === 'gasto' ? 'Gasto' : log.entityType.slice(0, 12);
+    log.entityType === 'ingreso'
+      ? 'Ing.'
+      : log.entityType === 'gasto'
+        ? 'Gasto'
+        : log.entityType === 'kilometraje'
+          ? 'Km'
+          : log.entityType === 'control_fecha'
+            ? 'Doc.'
+            : log.entityType.slice(0, 12);
 
   const merged: Record<string, unknown> = {
     ...(log.oldData ?? {}),
     ...(log.newData ?? {}),
   };
+
+  if (log.entityType === 'kilometraje') {
+    const veh = vehicleLabel(vehicles, merged.vehicle_id);
+    const fecha = fechaCompact(toDateOnlyString(merged.fecha));
+    const km =
+      merged.kilometraje != null && merged.kilometraje !== ''
+        ? `${Number(merged.kilometraje).toLocaleString('es-PE')} km`
+        : merged.km_mantenimiento != null && merged.km_mantenimiento !== ''
+          ? `mant. ${Number(merged.km_mantenimiento).toLocaleString('es-PE')} km`
+          : '';
+    return ['Km', veh, fecha, km].filter(Boolean).join(' · ') || `Km · #${log.entityId}`;
+  }
+
+  if (log.entityType === 'control_fecha') {
+    const veh = vehicleLabel(vehicles, merged.vehicle_id);
+    const tipo = controlFechaTipoLabel(merged.tipo);
+    const venc = fechaCompact(toDateOnlyString(merged.fecha_vencimiento));
+    return ['Doc.', veh, tipo, venc].filter((p) => p !== '' && p !== '—').join(' · ') || `Doc. · #${log.entityId}`;
+  }
 
   if (log.actionType === 'change_vehicle_id') {
     const o = log.oldData?.vehicle_id;
@@ -155,6 +189,10 @@ export function formatAuditChangeSummary(log: FinancialAuditLog, vehicles: Vehic
     const fromTipo = labelTipoGastoFinanciero(before.tipo_gasto as string | null | undefined);
     const toTipo = labelTipoGastoFinanciero(after.tipo_gasto as string | null | undefined);
     if (fromTipo !== toTipo) return `${fromTipo} → ${toTipo}`;
+  }
+
+  if (log.entityType === 'kilometraje' || log.entityType === 'control_fecha') {
+    return log.reason?.trim() || formatAuditEntitySummary(log, vehicles);
   }
 
   return log.reason?.trim() || '—';

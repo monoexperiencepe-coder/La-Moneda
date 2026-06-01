@@ -4,6 +4,7 @@ import { controlFechaPatchToSnake, controlFechaToInsert, mapControlFechaRow } fr
 import type { ControlFecha } from '../data/types';
 import { devPerfAsync } from '../utils/devPerf';
 import { fetchAllSupabasePagesDetailed } from './supabaseRangeFetch';
+import { logOperationalAudit } from './operationalAuditLog';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -172,6 +173,9 @@ export async function fetchDocumentacionFullAll(
   );
 }
 
+const CONTROL_FECHA_AUDIT_SELECT =
+  'id,vehicle_id,tipo,fecha_vencimiento,fecha_registro,comentarios';
+
 export async function insertControlFecha(
   row: Omit<ControlFecha, 'id' | 'createdAt'>,
   tenantEmpresaId?: string | null,
@@ -187,6 +191,14 @@ export async function insertControlFecha(
     console.error('[control_fechas insert]', error.message);
     return null;
   }
+  if (data) {
+    const raw = data as Record<string, unknown>;
+    void logOperationalAudit('create_control_fecha', 'control_fecha', String(raw.id ?? ''), {
+      newData: raw,
+      reason: 'Registro de documentación / control de fecha desde UI',
+      tenantEmpresaId: empresaId,
+    });
+  }
   return data ? mapControlFechaRow(data as Record<string, unknown>) : null;
 }
 
@@ -197,6 +209,13 @@ export async function patchControlFecha(
 ): Promise<ControlFecha | null> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId || !Number.isFinite(id)) return null;
+
+  const { data: beforeRow } = await supabase
+    .from('control_fechas')
+    .select(CONTROL_FECHA_AUDIT_SELECT)
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
 
   const snake = controlFechaPatchToSnake(patch);
   if (Object.keys(snake).length === 0) {
@@ -225,12 +244,28 @@ export async function patchControlFecha(
     return null;
   }
   const row = data?.[0];
+  if (row) {
+    void logOperationalAudit('edit_control_fecha', 'control_fecha', id, {
+      oldData: (beforeRow as Record<string, unknown> | null) ?? null,
+      newData: row as Record<string, unknown>,
+      reason: 'Edición de documentación / control de fecha desde UI',
+      tenantEmpresaId: empresaId,
+    });
+  }
   return row ? mapControlFechaRow(row as Record<string, unknown>) : null;
 }
 
 export async function removeControlFecha(id: number, tenantEmpresaId?: string | null): Promise<boolean> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return false;
+
+  const { data: beforeRow } = await supabase
+    .from('control_fechas')
+    .select(CONTROL_FECHA_AUDIT_SELECT)
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('control_fechas')
     .delete()
@@ -239,6 +274,13 @@ export async function removeControlFecha(id: number, tenantEmpresaId?: string | 
   if (error) {
     console.error('[control_fechas delete]', error.message);
     return false;
+  }
+  if (beforeRow) {
+    void logOperationalAudit('delete_control_fecha', 'control_fecha', id, {
+      oldData: beforeRow as Record<string, unknown>,
+      reason: 'Eliminación de documentación / control de fecha desde UI',
+      tenantEmpresaId: empresaId,
+    });
   }
   return true;
 }

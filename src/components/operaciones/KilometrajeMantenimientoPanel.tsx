@@ -15,6 +15,7 @@ import {
   tipoMantenimientoEtiqueta,
   variacionSuperaUmbralAlerta,
 } from '../../utils/kmMantenimientoControl';
+import { ultimoKmPorVehiculo } from '../../utils/fleetPanel';
 import KmMantenimientoResumen from './KmMantenimientoResumen';
 import {
   buildKilometrajePayload,
@@ -85,6 +86,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
   const [historialVehicleFilter, setHistorialVehicleFilter] = useState('');
   const submitLockRef = useRef(false);
   const lastSubmitRef = useRef<{ key: string; at: number } | null>(null);
+  const lastAutofillVehicleRef = useRef('');
 
   useEffect(() => {
     if (restrictVehicleId == null) return;
@@ -92,6 +94,20 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
     if (!ok) return;
     setKm((p) => ({ ...p, vehicleId: String(restrictVehicleId) }));
   }, [restrictVehicleId, vehicles]);
+
+  useEffect(() => {
+    const vid = km.vehicleId;
+    if (vid === lastAutofillVehicleRef.current) return;
+    lastAutofillVehicleRef.current = vid;
+    if (!vid) {
+      setKm((p) => (p.kilometraje === '' ? p : { ...p, kilometraje: '' }));
+      return;
+    }
+    const n = Number(vid);
+    if (!Number.isFinite(n)) return;
+    const lastKm = ultimoKmPorVehiculo(kilometrajes, n);
+    setKm((p) => ({ ...p, kilometraje: lastKm != null ? String(lastKm) : '' }));
+  }, [km.vehicleId, kilometrajes]);
 
   const controlKm = useMemo(
     () => buildKmControlRows(kilometrajes, restrictVehicleId ?? null),

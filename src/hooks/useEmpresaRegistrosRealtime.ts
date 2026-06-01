@@ -44,7 +44,7 @@ import {
   type PermissionUser,
 } from '../utils/permissions';
 
-/** Historial del sistema: recargar lista al insertar un log remoto. */
+/** Historial del sistema: recargar lista al insertar un log (local o remoto). */
 export const AUDIT_LOGS_REALTIME_EVENT = 'la-moneda:audit-logs-changed';
 
 type RealtimePayload = {
@@ -76,8 +76,12 @@ export type EmpresaRealtimeHandlers = {
   removeGastoCajaLocal: (id: number) => void;
   upsertCajaNegocio: (row: CajaNegocioVehiculo) => void;
   removeCajaNegocioLocal: (id: number) => void;
-  /** RPC resumen + historial paginado de controles de fecha. */
+  /** Resumen RPC de controles + historial paginado de controles de fecha. */
   refreshControlFechasViews: () => void | Promise<void>;
+  /** Refetch completo de kilometrajes (realtime / consistencia). */
+  reloadKilometrajesOnly: () => void | Promise<void>;
+  /** Refetch resumen documentación (realtime / consistencia). */
+  reloadControlFechasLatest: () => void | Promise<void>;
 };
 
 type Options = {
@@ -148,6 +152,7 @@ export function useEmpresaRegistrosRealtime({
   const batchRef = useRef({ count: 0 });
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlFechasDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const kilometrajesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRemoteMutationRef = useRef(onRemoteMutation);
   onRemoteMutationRef.current = onRemoteMutation;
 
@@ -183,7 +188,16 @@ export function useEmpresaRegistrosRealtime({
     if (controlFechasDebounceRef.current) clearTimeout(controlFechasDebounceRef.current);
     controlFechasDebounceRef.current = setTimeout(() => {
       controlFechasDebounceRef.current = null;
+      void handlersRef.current.reloadControlFechasLatest?.();
       void handlersRef.current.refreshControlFechasViews();
+    }, 400);
+  });
+
+  const scheduleKilometrajesRefresh = useRef(() => {
+    if (kilometrajesDebounceRef.current) clearTimeout(kilometrajesDebounceRef.current);
+    kilometrajesDebounceRef.current = setTimeout(() => {
+      kilometrajesDebounceRef.current = null;
+      void handlersRef.current.reloadKilometrajesOnly?.();
     }, 400);
   });
 
@@ -321,6 +335,7 @@ export function useEmpresaRegistrosRealtime({
         if (typeof id === 'number') {
           handlersRef.current.removeKilometrajeLocal(id);
           scheduleBatch.current();
+          scheduleKilometrajesRefresh.current();
         }
         return;
       }
@@ -333,6 +348,7 @@ export function useEmpresaRegistrosRealtime({
         }
         handlersRef.current.mergeKilometraje(mapped);
         scheduleBatch.current();
+        scheduleKilometrajesRefresh.current();
       }
     };
 
@@ -488,6 +504,7 @@ export function useEmpresaRegistrosRealtime({
     return () => {
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
       if (controlFechasDebounceRef.current) clearTimeout(controlFechasDebounceRef.current);
+      if (kilometrajesDebounceRef.current) clearTimeout(kilometrajesDebounceRef.current);
       setConnected(false);
       realtimeLogCleanup({ channel: channelName, empresaId });
       realtimeRegistry.unregister(channelName);
