@@ -3,7 +3,6 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
   realtimeLogCleanup,
-  realtimeLogStatus,
   realtimeLogSubscribe,
   realtimeRegistry,
 } from '../utils/realtimeDebug';
@@ -47,6 +46,21 @@ import {
   canViewGastoTipo,
   type PermissionUser,
 } from '../utils/permissions';
+import {
+  isRealtimeDebugEnv,
+  logRealtimeBoot,
+  logRealtimeModuleLoaded,
+  logRealtimeMounted,
+  logRealtimeParseMiss,
+  logRealtimeRawPayload,
+  logRealtimeStatus,
+  logRealtimeSubscribeDone,
+  logRealtimeSubscribeStart,
+  logRealtimeUnmounted,
+  resolveRealtimeDisabledReason,
+} from '../utils/realtimeBootLog';
+
+logRealtimeModuleLoaded('useEmpresaRegistrosRealtime');
 
 /** Historial del sistema: recargar lista al insertar un log (local o remoto). */
 export const AUDIT_LOGS_REALTIME_EVENT = 'la-moneda:audit-logs-changed';
@@ -86,6 +100,15 @@ export type EmpresaRealtimeHandlers = {
   reloadGastosFinancialSummary?: (opts?: { silent?: boolean }) => Promise<void>;
 };
 
+type RealtimeBootMeta = {
+  isAuthenticated?: boolean;
+  authLoading?: boolean;
+  profileLoaded?: boolean;
+  profileEmpresaId?: string | null;
+  role?: string | null;
+  userId?: string | null;
+};
+
 type Options = {
   enabled: boolean;
   empresaId: string | null | undefined;
@@ -93,6 +116,7 @@ type Options = {
   handlers: EmpresaRealtimeHandlers;
   onRemoteActivity?: (info: { count: number }) => void;
   onRemoteMutation?: () => void;
+  bootMeta?: RealtimeBootMeta;
 };
 
 const BATCH_MS = 2500;
@@ -148,6 +172,7 @@ export function useEmpresaRegistrosRealtime({
   handlers,
   onRemoteActivity,
   onRemoteMutation,
+  bootMeta,
 }: Options): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -183,13 +208,49 @@ export function useEmpresaRegistrosRealtime({
   }, [onRemoteActivity]);
 
   useEffect(() => {
+    logRealtimeBoot({
+      source: 'useEmpresaRegistrosRealtime',
+      isAuthenticated: bootMeta?.isAuthenticated ?? false,
+      authLoading: bootMeta?.authLoading,
+      profileLoaded: bootMeta?.profileLoaded,
+      profileEmpresaId: bootMeta?.profileEmpresaId,
+      empresaRealtimeId: (empresaIdInput ?? '').trim(),
+      enabled,
+      role: bootMeta?.role ?? permissionUser?.role ?? null,
+      userId: bootMeta?.userId ?? null,
+      hookMounted: true,
+    });
+  }, [
+    enabled,
+    empresaIdInput,
+    bootMeta?.isAuthenticated,
+    bootMeta?.authLoading,
+    bootMeta?.profileLoaded,
+    bootMeta?.profileEmpresaId,
+    bootMeta?.role,
+    bootMeta?.userId,
+    permissionUser?.role,
+  ]);
+
+  useEffect(() => {
     const empresaId = (empresaIdInput ?? '').trim();
     if (!enabled || !empresaId) {
-      if (import.meta.env.DEV) {
+      if (isRealtimeDebugEnv()) {
+        const reasonIfDisabled = resolveRealtimeDisabledReason({
+          isAuthenticated: bootMeta?.isAuthenticated ?? false,
+          authLoading: bootMeta?.authLoading,
+          profileLoaded: bootMeta?.profileLoaded,
+          profileEmpresaId: bootMeta?.profileEmpresaId,
+          empresaRealtimeId: empresaId,
+          enabled,
+          role: bootMeta?.role ?? null,
+          userId: bootMeta?.userId ?? null,
+          hookMounted: true,
+        });
         console.warn('[realtime:disabled]', {
           enabled,
           empresaId: empresaId || null,
-          reason: !enabled ? 'enabled=false' : 'sin empresa_id',
+          reasonIfDisabled,
         });
       }
       setConnected(false);
@@ -198,6 +259,25 @@ export function useEmpresaRegistrosRealtime({
 
     const empresaFilter = `empresa_id=eq.${empresaId}`;
     const channelName = `empresa-registros-${empresaId}`;
+
+    logRealtimeMounted({
+      channel: channelName,
+      empresaId,
+      filter: empresaFilter,
+      tableCount: EMPRESA_TABLES.length,
+    });
+
+    void supabase.auth.getSession().then(({ data: sessionData, error: sessionErr }) => {
+      logRealtimeSubscribeStart({
+        channel: channelName,
+        empresaId,
+        filter: empresaFilter,
+        tables: [...EMPRESA_TABLES],
+        hasSession: Boolean(sessionData.session),
+        sessionUserId: sessionData.session?.user?.id ?? null,
+        sessionError: sessionErr?.message ?? null,
+      });
+    });
 
     const handleRemoteDbChange = createRemoteDbChangeHandler(
       {
@@ -345,8 +425,23 @@ export function useEmpresaRegistrosRealtime({
         'postgres_changes',
         { event: '*', schema: 'public', table, filter: empresaFilter },
         (payload) => {
+          const rawType = payload.eventType ?? (payload as { event?: string }).event ?? '';
+          logRealtimeRawPayload({
+            table,
+            rawEventType: rawType,
+            hasNew: Boolean(payload.new && Object.keys(payload.new).length),
+            hasOld: Boolean(payload.old && Object.keys(payload.old).length),
+            rowEmpresaId:
+              (payload.new as Record<string, unknown> | undefined)?.empresa_id ??
+              (payload.old as Record<string, unknown> | undefined)?.empresa_id ??
+              null,
+          });
+
           const parsed = parsePayload(payload);
-          if (!parsed) return;
+          if (!parsed) {
+            logRealtimeParseMiss({ table, rawEventType: rawType, payload });
+            return;
+          }
 
           const rowId = idFromRow(
             parsed.new ?? parsed.old,
@@ -396,18 +491,26 @@ export function useEmpresaRegistrosRealtime({
       );
     }
 
-    channel.subscribe((status) => {
+    logRealtimeSubscribeDone({
+      channel: channelName,
+      empresaId,
+      listeners: EMPRESA_TABLES.length + (canViewFinancialAuditLogs(permissionUser) ? 1 : 0),
+    });
+
+    channel.subscribe((status, err) => {
       setConnected(status === 'SUBSCRIBED');
-      realtimeLogStatus({
+      logRealtimeStatus({
         channel: channelName,
-        empresaId,
         status,
-        extra: { tables: [...EMPRESA_TABLES, 'financial_audit_logs'] },
+        empresaId,
+        error: err?.message ?? null,
+        subscribed: status === 'SUBSCRIBED',
       });
-      if (import.meta.env.DEV && status !== 'SUBSCRIBED') {
-        console.warn('[realtime:status] canal no suscrito — revisar publication SQL y RLS', {
+      if (isRealtimeDebugEnv() && status !== 'SUBSCRIBED') {
+        console.warn('[realtime:status] canal no SUBSCRIBED — revisar publication, RLS o JWT', {
           status,
           empresaId,
+          error: err?.message ?? null,
         });
       }
     });
@@ -415,6 +518,7 @@ export function useEmpresaRegistrosRealtime({
     channelRef.current = channel;
 
     return () => {
+      logRealtimeUnmounted({ channel: channelName, empresaId });
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
       setConnected(false);
       realtimeLogCleanup({ channel: channelName, empresaId });
@@ -424,7 +528,7 @@ export function useEmpresaRegistrosRealtime({
         channelRef.current = null;
       }
     };
-  }, [enabled, empresaIdInput, permissionUser?.email, permissionUser?.role]);
+  }, [enabled, empresaIdInput, permissionUser?.email, permissionUser?.role, bootMeta?.isAuthenticated, bootMeta?.authLoading]);
 
   return { connected };
 }

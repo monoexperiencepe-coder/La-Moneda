@@ -29,6 +29,7 @@ import { useAuth } from './AuthContext';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
 import { resolveEmpresaRealtimeId } from '../utils/resolveEmpresaRealtimeId';
+import { logRealtimeBoot, logRealtimeModuleLoaded } from '../utils/realtimeBootLog';
 import { canCreateIngresos, canMutateIngresos } from '../utils/roles';
 import { useUndoManager } from './UndoManagerContext';
 import type { GastosFinancialSummary } from '../utils/gastosFinancialSummary';
@@ -51,6 +52,8 @@ import {
   undoDeletePendiente,
   undoUpdatePendiente,
 } from '../undo/factories';
+
+logRealtimeModuleLoaded('RegistrosContext');
 
 interface RegistrosContextValue {
   vehicles: Vehicle[];
@@ -199,7 +202,7 @@ const RegistrosContext = createContext<RegistrosContextValue | null>(null);
 export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const registros = useRegistros();
   const toastHook = useToast();
-  const { role, user, profile, isAuthenticated } = useAuth();
+  const { role, user, profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const undoManager = useUndoManager();
 
   useEffect(() => {
@@ -224,20 +227,39 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     [profile?.empresa_id],
   );
 
+  const profileLoaded = !authLoading && profile != null;
+  const realtimeEnabled = isAuthenticated && Boolean(empresaRealtimeId);
+
+  useEffect(() => {
+    logRealtimeBoot({
+      source: 'RegistrosContext',
+      isAuthenticated,
+      profileLoaded,
+      authLoading,
+      profileEmpresaId: profile?.empresa_id ?? null,
+      empresaRealtimeId,
+      enabled: realtimeEnabled,
+      role: profile?.role ?? role ?? null,
+      userId: profile?.id ?? user?.id ?? null,
+      hookMounted: false,
+    });
+  }, [
+    isAuthenticated,
+    authLoading,
+    profileLoaded,
+    empresaRealtimeId,
+    profile?.empresa_id,
+    profile?.role,
+    profile?.id,
+    role,
+    user?.id,
+    realtimeEnabled,
+  ]);
+
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     console.log('[summary-context]', registros.gastosFinancialSummary);
   }, [registros.gastosFinancialSummary]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || !isAuthenticated) return;
-    console.info('[realtime:session]', {
-      empresaRealtimeId: empresaRealtimeId || null,
-      profileEmpresaId: profile?.empresa_id ?? null,
-      role: profile?.role ?? null,
-      bootstrapComplete: registros.registrosBootstrapComplete,
-    });
-  }, [isAuthenticated, empresaRealtimeId, profile?.empresa_id, profile?.role, registros.registrosBootstrapComplete]);
 
   const realtimeHandlers = useMemo(
     () => ({
@@ -316,12 +338,20 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 
   const { connected: registrosRealtimeConnected } = useEmpresaRegistrosRealtime({
-    enabled: isAuthenticated && Boolean(empresaRealtimeId),
+    enabled: realtimeEnabled,
     empresaId: empresaRealtimeId,
     permissionUser,
     handlers: realtimeHandlers,
     onRemoteActivity: handleRemoteRegistrosActivity,
     onRemoteMutation: registros.bumpRegistrosRemoteSync,
+    bootMeta: {
+      isAuthenticated,
+      authLoading,
+      profileLoaded,
+      profileEmpresaId: profile?.empresa_id ?? null,
+      role: profile?.role ?? role ?? null,
+      userId: profile?.id ?? user?.id ?? null,
+    },
   });
 
   const showUndoToast = useMemo(
