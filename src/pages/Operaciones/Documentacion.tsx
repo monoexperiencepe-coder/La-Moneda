@@ -5,25 +5,38 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
 import { formatDate } from '../../utils/formatting';
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
-import { DocTone, docColumnTone, docNearestExpiryIso, docRowWorstTone } from '../../utils/documentacionDocTone';
-import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
+import {
+  DocTone,
+  docColumnTone,
+  docNearestExpiryIso,
+  docRowWorstTone,
+} from '../../utils/documentacionDocTone';
+import { DOC_MODULE_UI_COLUMNS } from '../../data/controlFechaCatalog';
 import type { TipoControlFecha, Vehicle } from '../../data/types';
 
-const DOC_TIPOS = DOC_MODULE_COLUMNS.map((c) => c.tipo);
+const DOC_TIPOS = DOC_MODULE_UI_COLUMNS.map((c) => c.tipo);
+
+/** Scroll interno en md; en lg el sticky sigue al viewport (debajo del header h-16). */
+const DOC_TABLE_WRAP =
+  'hidden md:block overflow-x-auto max-h-[min(70vh,520px)] overflow-y-auto overscroll-y-contain lg:max-h-none lg:overflow-y-visible isolate';
+const DOC_TH_STICKY =
+  'sticky top-0 lg:top-16 z-30 bg-white border-b border-gray-100 shadow-[0_1px_0_0_rgb(229_231_235)]';
+const DOC_TH_UNIT =
+  'sticky top-0 lg:top-16 left-0 z-40 bg-white border-r border-b border-gray-100 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08),0_1px_0_0_rgb(229_231_235)]';
 
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
 
-type RowTone = Exclude<DocTone, 'neutral'>;
+type RowStatusTone = 'empty' | 'ok' | 'soon' | 'late';
 
-const TONE_CELL: Record<DocTone, string> = {
+const TONE_CELL: Record<Exclude<DocTone, 'empty'>, string> = {
   late: 'bg-red-50 text-red-700 font-semibold',
   soon: 'bg-amber-50 text-amber-800 font-semibold',
   ok: 'bg-emerald-50 text-emerald-800',
   neutral: 'bg-slate-50 text-slate-700 border border-slate-100',
-  empty: 'text-gray-300',
+  mant: 'bg-red-50 text-red-700 font-semibold',
 };
 
-const TONE_DOT: Record<Exclude<RowTone, 'empty'>, string> = {
+const TONE_DOT: Record<'late' | 'soon' | 'ok', string> = {
   late: 'bg-red-500',
   soon: 'bg-amber-400',
   ok: 'bg-emerald-500',
@@ -34,7 +47,8 @@ const DateCell: React.FC<{ date?: string; label: string; tipo: TipoControlFecha 
   if (t === 'empty') {
     return <span className="text-gray-300 text-xs select-none" title={`${label}: sin dato`}>—</span>;
   }
-  const titleExtra = t === 'neutral' ? ' (fecha de referencia, no vencimiento)' : '';
+  const titleExtra =
+    t === 'neutral' ? ' (fecha de referencia, no vencimiento)' : t === 'mant' ? ' (revisar mantenimiento)' : '';
   return (
     <span
       className={`inline-block rounded-md px-1.5 py-0.5 text-[11px] sm:text-xs tabular-nums ${TONE_CELL[t]}`}
@@ -45,18 +59,19 @@ const DateCell: React.FC<{ date?: string; label: string; tipo: TipoControlFecha 
   );
 };
 
-const StatusBadge: React.FC<{ t: RowTone }> = ({ t }) => {
-  if (t === 'empty') return <span className="text-gray-300 text-xs">—</span>;
-  const labels: Record<Exclude<RowTone, 'empty'>, string> = { late: 'Vencido', soon: '≤ 30 d', ok: 'Al día' };
-  const cls: Record<Exclude<RowTone, 'empty'>, string> = {
+const StatusBadge: React.FC<{ status: RowStatusTone }> = ({ status }) => {
+  if (status === 'empty') return <span className="text-gray-300 text-xs">—</span>;
+  const labels: Record<'late' | 'soon' | 'ok', string> = { late: 'Vencido', soon: '≤ 30 d', ok: 'Al día' };
+  const cls: Record<'late' | 'soon' | 'ok', string> = {
     late: 'bg-red-100 text-red-700 border-red-200',
     soon: 'bg-amber-100 text-amber-800 border-amber-200',
     ok: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   };
+  const tone = status === 'late' || status === 'soon' || status === 'ok' ? status : 'ok';
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls[t]}`}>
-      <span className={`size-1.5 rounded-full ${TONE_DOT[t]}`} />
-      {labels[t]}
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls[tone]}`}>
+      <span className={`size-1.5 rounded-full ${TONE_DOT[tone]}`} />
+      {labels[tone]}
     </span>
   );
 };
@@ -64,23 +79,33 @@ const StatusBadge: React.FC<{ t: RowTone }> = ({ t }) => {
 interface VehicleRow {
   v: Vehicle;
   doc: DocPivot | undefined;
-  wt: RowTone;
+  statusTone: RowStatusTone;
   nearest: string;
 }
 
-const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; wt: RowTone }> = ({ v, doc, wt }) => (
+function stickyUnitBg(wt: RowStatusTone): string {
+  if (wt === 'late') return 'bg-red-50';
+  if (wt === 'soon') return 'bg-amber-50';
+  return 'bg-white';
+}
+
+const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; status: RowStatusTone }> = ({
+  v,
+  doc,
+  status,
+}) => (
   <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
     <div className="flex justify-between items-start gap-2 mb-3">
       <div className="min-w-0">
-        <p className="font-bold text-gray-900 text-sm">{v.placa}</p>
+        <p className="font-bold text-gray-900 text-sm">#{v.id} · {v.placa}</p>
         <p className="text-xs text-gray-500 truncate">
           {v.marca} {v.modelo}
         </p>
       </div>
-      <StatusBadge t={wt} />
+      <StatusBadge status={status} />
     </div>
     <ul className="divide-y divide-gray-50 rounded-xl border border-gray-50 overflow-hidden">
-      {DOC_MODULE_COLUMNS.map(({ tipo, label }) => (
+      {DOC_MODULE_UI_COLUMNS.map(({ tipo, label }) => (
         <li key={tipo} className="flex justify-between gap-3 px-2.5 py-2 text-xs bg-white">
           <span className="text-gray-500 shrink-0 max-w-[42%] truncate" title={label}>
             {label}
@@ -122,19 +147,27 @@ const Documentacion: React.FC = () => {
   const allRows: VehicleRow[] = useMemo(() => {
     return vehicles.map((v) => {
       const doc = pivot.get(v.id);
-      const wt = docRowWorstTone(doc, DOC_MODULE_COLUMNS);
-      return { v, doc, wt, nearest: docNearestExpiryIso(doc, DOC_MODULE_COLUMNS) };
+      const statusTone = docRowWorstTone(doc, DOC_MODULE_UI_COLUMNS);
+      return { v, doc, statusTone, nearest: docNearestExpiryIso(doc, DOC_MODULE_UI_COLUMNS) };
     });
   }, [vehicles, pivot]);
 
-  const alertCount = useMemo(() => allRows.filter((r) => r.wt === 'late' || r.wt === 'soon').length, [allRows]);
+  const vencidosCount = useMemo(
+    () => allRows.filter((r) => r.statusTone === 'late').length,
+    [allRows],
+  );
+  const porVencerCount = useMemo(
+    () => allRows.filter((r) => r.statusTone === 'soon').length,
+    [allRows],
+  );
+  const alertCount = vencidosCount + porVencerCount;
 
   const visibleRows = useMemo(() => {
     let rows = allRows;
-    if (docQuery === 'vencidos') rows = allRows.filter((r) => r.wt === 'late');
-    else if (docQuery === 'porvencer') rows = allRows.filter((r) => r.wt === 'soon');
-    else if (docQuery === 'alertas') rows = allRows.filter((r) => r.wt === 'late' || r.wt === 'soon');
-    else if (soloProblemas) rows = allRows.filter((r) => r.wt === 'late' || r.wt === 'soon');
+    if (docQuery === 'vencidos') rows = allRows.filter((r) => r.statusTone === 'late');
+    else if (docQuery === 'porvencer') rows = allRows.filter((r) => r.statusTone === 'soon');
+    else if (docQuery === 'alertas') rows = allRows.filter((r) => r.statusTone === 'late' || r.statusTone === 'soon');
+    else if (soloProblemas) rows = allRows.filter((r) => r.statusTone === 'late' || r.statusTone === 'soon');
     if (sortBy === 'unidad') {
       rows = [...rows].sort((a, b) => a.v.id - b.v.id);
     } else if (sortBy === 'vencimiento') {
@@ -164,14 +197,9 @@ const Documentacion: React.FC = () => {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => document.getElementById('registro-vencimiento-supabase')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="shrink-0 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold shadow-sm"
-        >
-          Registrar vencimiento
-        </button>
       </div>
+
+      <ControlFechaRegistroPanel historialSearchMode="documentacion" formExpandedDefault />
 
       {docQuery && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-900">
@@ -190,15 +218,14 @@ const Documentacion: React.FC = () => {
         <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
           <AlertTriangle size={15} className="shrink-0 text-red-600" />
           <p className="text-xs font-semibold text-red-800">
-            {allRows.filter((r) => r.wt === 'late').length > 0 && (
+            {vencidosCount > 0 && (
               <span className="mr-2">
-                {allRows.filter((r) => r.wt === 'late').length} vencido
-                {allRows.filter((r) => r.wt === 'late').length > 1 ? 's' : ''}
+                {vencidosCount} vencido{vencidosCount > 1 ? 's' : ''}
               </span>
             )}
-            {allRows.filter((r) => r.wt === 'soon').length > 0 && (
+            {porVencerCount > 0 && (
               <span className="text-amber-800">
-                {allRows.filter((r) => r.wt === 'soon').length} por vencer (≤30 d)
+                {porVencerCount} por vencer (≤30 d)
               </span>
             )}
           </p>
@@ -215,7 +242,7 @@ const Documentacion: React.FC = () => {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-100 bg-white shadow-soft overflow-hidden">
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50/60">
           <div className="flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
             <span className="font-medium text-gray-700">Leyenda:</span>
@@ -269,52 +296,53 @@ const Documentacion: React.FC = () => {
         ) : (
           <>
             <div className="md:hidden space-y-3 p-3 bg-gray-50/40">
-              {visibleRows.map(({ v, doc, wt }) => (
-                <MobileDocCard key={v.id} v={v} doc={doc} wt={wt} />
+              {visibleRows.map(({ v, doc, statusTone }) => (
+                <MobileDocCard key={v.id} v={v} doc={doc} status={statusTone} />
               ))}
             </div>
 
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full border-collapse text-left min-w-[1100px]">
+            <div className={DOC_TABLE_WRAP}>
+              <table className="w-full border-collapse text-left min-w-[980px]">
                 <thead>
-                  <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider bg-white border-b border-gray-100">
-                    <th className="py-2 pl-3 pr-2 sticky left-0 bg-white z-10" style={{ boxShadow: '2px 0 6px -2px rgba(0,0,0,0.07)' }}>
-                      Unidad
-                    </th>
-                    {DOC_MODULE_COLUMNS.map(({ tipo, th }) => (
-                      <th key={tipo} className="py-2 px-1.5 text-center whitespace-nowrap">
+                  <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className={`py-2 pl-3 pr-2 text-left ${DOC_TH_UNIT}`}>Unidad</th>
+                    {DOC_MODULE_UI_COLUMNS.map(({ tipo, th }) => (
+                      <th key={tipo} className={`py-2 px-1.5 text-center whitespace-nowrap ${DOC_TH_STICKY}`}>
                         {th}
                       </th>
                     ))}
-                    <th className="py-2 pl-2 pr-3 text-center">Estado</th>
+                    <th className={`py-2 pl-2 pr-3 text-center ${DOC_TH_STICKY}`}>Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {visibleRows.map(({ v, doc, wt }) => {
+                  {visibleRows.map(({ v, doc, statusTone }) => {
                     const rowAccent =
-                      wt === 'late'
+                      statusTone === 'late'
                         ? 'border-l-2 border-l-red-400 bg-red-50/30 hover:bg-red-50/60'
-                        : wt === 'soon'
+                        : statusTone === 'soon'
                           ? 'border-l-2 border-l-amber-400 bg-amber-50/20 hover:bg-amber-50/50'
                           : 'border-l-2 border-l-transparent hover:bg-violet-50/30';
+                    const unitBg = stickyUnitBg(statusTone);
                     return (
                       <tr key={v.id} className={`transition-colors ${rowAccent}`}>
                         <td
-                          className="py-2.5 pl-3 pr-2 sticky left-0 z-[1] bg-inherit"
-                          style={{ boxShadow: '2px 0 6px -2px rgba(0,0,0,0.06)' }}
+                          className={`py-2.5 pl-3 pr-2 sticky left-0 z-20 border-r border-gray-100 ${unitBg}`}
+                          style={{ boxShadow: '4px 0 8px -2px rgba(0,0,0,0.08)' }}
                         >
-                          <div className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">{v.placa}</div>
+                          <div className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">
+                            #{v.id} · {v.placa}
+                          </div>
                           <div className="text-[10px] text-gray-500 truncate max-w-[9rem] sm:max-w-[13rem]">
                             {v.marca} {v.modelo}
                           </div>
                         </td>
-                        {DOC_MODULE_COLUMNS.map(({ tipo, label }) => (
-                          <td key={tipo} className="py-2.5 px-1.5 text-center align-middle">
+                        {DOC_MODULE_UI_COLUMNS.map(({ tipo, label }) => (
+                          <td key={tipo} className="py-2.5 px-1.5 text-center align-middle bg-inherit">
                             <DateCell date={doc?.[tipo]} label={label} tipo={tipo} />
                           </td>
                         ))}
                         <td className="py-2.5 pl-2 pr-3 text-center align-middle">
-                          <StatusBadge t={wt} />
+                          <StatusBadge status={statusTone} />
                         </td>
                       </tr>
                     );
@@ -339,10 +367,6 @@ const Documentacion: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-
-      <div id="registro-vencimiento-supabase" className="scroll-mt-24">
-        <ControlFechaRegistroPanel historialSearchMode="documentacion" />
       </div>
     </div>
   );

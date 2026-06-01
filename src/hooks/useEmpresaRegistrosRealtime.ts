@@ -87,6 +87,8 @@ type Options = {
   permissionUser: PermissionUser | null;
   handlers: EmpresaRealtimeHandlers;
   onRemoteActivity?: (info: { count: number }) => void;
+  /** Llamado en cada INSERT/UPDATE/DELETE remoto (refetch historiales, etc.). */
+  onRemoteMutation?: () => void;
 };
 
 const BATCH_MS = 2500;
@@ -107,24 +109,28 @@ const EMPRESA_TABLES = [
 ] as const;
 
 function parsePayload(payload: {
-  eventType: string;
+  eventType?: string;
+  event?: string;
   new: Record<string, unknown>;
   old: Record<string, unknown>;
 }): RealtimePayload {
+  const rawType = payload.eventType ?? payload.event ?? '';
   return {
-    eventType: payload.eventType as RealtimePayload['eventType'],
+    eventType: rawType as RealtimePayload['eventType'],
     new: payload.new ?? null,
     old: payload.old ?? null,
   };
 }
 
 function idFromRow(row: Record<string, unknown> | null, numeric: boolean): string | number | null {
-  if (!row || row.id == null) return null;
+  if (!row) return null;
+  const raw = row.id ?? row.ID;
+  if (raw == null || raw === '') return null;
   if (numeric) {
-    const n = Number(row.id);
+    const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   }
-  return String(row.id);
+  return String(raw);
 }
 
 export function useEmpresaRegistrosRealtime({
@@ -133,6 +139,7 @@ export function useEmpresaRegistrosRealtime({
   permissionUser,
   handlers,
   onRemoteActivity,
+  onRemoteMutation,
 }: Options): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -141,6 +148,12 @@ export function useEmpresaRegistrosRealtime({
   const batchRef = useRef({ count: 0 });
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlFechasDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onRemoteMutationRef = useRef(onRemoteMutation);
+  onRemoteMutationRef.current = onRemoteMutation;
+
+  const notifyRemoteMutation = useRef(() => {
+    onRemoteMutationRef.current?.();
+  });
 
   const scheduleBatch = useRef(() => {
     batchRef.current.count += 1;
@@ -431,6 +444,8 @@ export function useEmpresaRegistrosRealtime({
         { event: '*', schema: 'public', table, filter: empresaFilter },
         (payload) => {
           const parsed = parsePayload(payload);
+          if (!parsed.eventType) return;
+          notifyRemoteMutation.current();
           realtimeLogEvent({
             channel: channelName,
             table,

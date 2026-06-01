@@ -30,7 +30,6 @@ import Badge from '../../components/Common/Badge';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
 import KilometrajeMantenimientoPanel from '../../components/operaciones/KilometrajeMantenimientoPanel';
-import ValorTiempoSection from '../../components/operaciones/ValorTiempoSection';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
 import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
 import { useAuth } from '../../context/AuthContext';
@@ -623,7 +622,6 @@ const VehiculoDetalle: React.FC = () => {
               getVehicleLabel={getVehicleLabel}
               restrictVehicleId={vehicle.id}
             />
-            <ValorTiempoSection scopeVehicleId={vehicle.id} subtitle="Valor tiempo filtrado a esta unidad (Supabase)." />
           </div>
         )}
 

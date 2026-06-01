@@ -10,6 +10,7 @@ export type UndoEntityType =
   | 'kilometraje'
   | 'pendiente'
   | 'prestamo'
+  | 'control_fecha'
   | 'other';
 
 /** Última acción reversible en memoria (solo esta sesión de pestaña). */

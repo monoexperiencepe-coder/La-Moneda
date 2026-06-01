@@ -7,10 +7,10 @@ import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import type { KilometrajeRegistro, Vehicle } from '../../data/types';
 import {
   buildKmControlRows,
+  buildKmMantenimientoMensualSummary,
   formatKmFechaLine,
   getKmDesdeUltimoMantenimiento,
   KM_ALERTA_VARIACION_DESDE_MANT,
-  kmMantenimientoStatusLabel,
   tipoMantenimientoDesdeRegistro,
   tipoMantenimientoEtiqueta,
   variacionSuperaUmbralAlerta,
@@ -82,6 +82,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [historialVehicleFilter, setHistorialVehicleFilter] = useState('');
   const submitLockRef = useRef(false);
   const lastSubmitRef = useRef<{ key: string; at: number } | null>(null);
 
@@ -104,7 +105,11 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
 
   const ultimos = useMemo(() => {
     const base =
-      restrictVehicleId != null ? kilometrajes.filter((r) => r.vehicleId === restrictVehicleId) : kilometrajes;
+      restrictVehicleId != null
+        ? kilometrajes.filter((r) => r.vehicleId === restrictVehicleId)
+        : historialVehicleFilter
+          ? kilometrajes.filter((r) => String(r.vehicleId) === historialVehicleFilter)
+          : kilometrajes;
     return [...base]
       .sort((a, b) => {
         const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
@@ -113,8 +118,27 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
         if (fd !== 0) return fd;
         return b.id - a.id;
       })
-      .slice(0, restrictVehicleId != null ? 40 : 60);
-  }, [kilometrajes, restrictVehicleId]);
+      .slice(0, restrictVehicleId != null || historialVehicleFilter ? 200 : 60);
+  }, [kilometrajes, restrictVehicleId, historialVehicleFilter]);
+
+  const historialFilterVehicleId =
+    restrictVehicleId ?? (historialVehicleFilter ? Number(historialVehicleFilter) : null);
+
+  const resumenMensualMant = useMemo(() => {
+    if (historialFilterVehicleId == null || !Number.isFinite(historialFilterVehicleId)) return [];
+    return buildKmMantenimientoMensualSummary(kilometrajes, historialFilterVehicleId);
+  }, [kilometrajes, historialFilterVehicleId]);
+
+  const historialVehicleOpts = useMemo(
+    () => [
+      { value: '', label: 'Todos los vehículos' },
+      ...active.map((v) => ({
+        value: String(v.id),
+        label: `#${v.id} — ${v.placa} — ${v.marca} ${v.modelo}`.trim(),
+      })),
+    ],
+    [active],
+  );
 
   const tipoHint = TIPO_MANTENIMIENTO_OPTIONS.find((o) => o.value === km.tipoMant)?.hint ?? '';
   const esMantenimiento = km.tipoMant === 'simple' || km.tipoMant === 'completo';
@@ -231,7 +255,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
               type="number"
               value={km.kmMantenimiento}
               onChange={(e) => setKm((p) => ({ ...p, kmMantenimiento: e.target.value }))}
-              placeholder="Opcional: si vacío, usa el km actual"
+              placeholder="Completa este campo o el odómetro actual"
             />
           ) : null}
           <Input
@@ -239,7 +263,9 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
             type="number"
             value={km.kilometraje}
             onChange={(e) => setKm((p) => ({ ...p, kilometraje: e.target.value }))}
-            placeholder="Requerido"
+            placeholder={
+              esMantenimiento ? 'Completa este campo o el km de mantenimiento' : 'Requerido'
+            }
           />
           <div className={esMantenimiento ? 'sm:col-span-2' : 'sm:col-span-2 lg:col-span-2'}>
             <Input
@@ -268,17 +294,17 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
 
       <Card
         title="Control KMS (referencia rápida)"
-        subtitle={`Variación = km actual − km del último mantenimiento (Simple o Completo). Alerta si ≥ ${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km.`}
+        subtitle={`Variación = km actual − km del último mantenimiento (Simple o Completo). Alerta si ≥ ${KM_ALERTA_VARIACION_DESDE_MANT.toLocaleString('es-PE')} km. Columna Día = días desde el último mantenimiento.`}
       >
         <div className={KM_CONTROL_TABLE_WRAP}>
-          <table className="w-full text-sm min-w-[720px] border-separate border-spacing-0">
+          <table className="w-full text-sm min-w-[780px] border-separate border-spacing-0">
             <thead className={KM_TABLE_HEAD}>
               <tr className="text-xs text-gray-500 uppercase">
                 <th className={`text-left ${KM_TABLE_TH}`}>Unidad</th>
                 <th className={`text-left ${KM_TABLE_TH}`}>Último mant.</th>
                 <th className={`text-left ${KM_TABLE_TH}`}>Último registro</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Variación</th>
-                <th className={`text-right ${KM_TABLE_TH}`}>Estado</th>
+                <th className={`text-right pr-8 ${KM_TABLE_TH}`}>Variación</th>
+                <th className={`text-right pl-6 min-w-[5rem] ${KM_TABLE_TH}`}>Día</th>
                 <th className={`text-right ${KM_TABLE_TH}`}>Tipo mant.</th>
               </tr>
             </thead>
@@ -306,21 +332,18 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
                           : 'Sin kilometraje actual registrado'}
                       </td>
                       <td
-                        className={`py-2 text-right tabular-nums font-semibold align-top ${
+                        className={`py-2 pr-8 text-right tabular-nums font-semibold align-top ${
                           alerta ? 'text-red-700' : 'text-gray-900'
                         }`}
                       >
                         {r.diffKm != null ? `${r.diffKm.toLocaleString('es-PE')} km` : '—'}
-                        {alerta ? (
-                          <span className="ml-1 block text-[10px] font-bold uppercase text-red-600">¡Alerta!</span>
-                        ) : null}
                       </td>
                       <td
-                        className={`py-2 text-right text-xs font-semibold align-top ${
-                          alerta ? 'text-red-800' : r.status === 'ok' ? 'text-emerald-800' : 'text-amber-900'
+                        className={`py-2 pl-6 min-w-[5rem] text-right tabular-nums font-semibold align-top ${
+                          alerta ? 'text-red-700' : 'text-gray-900'
                         }`}
                       >
-                        {r.warningMessage ?? kmMantenimientoStatusLabel(r.status)}
+                        {r.dias != null ? r.dias : '—'}
                       </td>
                       <td className="py-2 text-right align-top">
                         <TipoMantBadge tipo={r.tipoMant} />
@@ -334,7 +357,40 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
         </div>
       </Card>
 
-      <Card title="Últimos registros de kilometraje" subtitle="Al borrar una fila, el control KMS se recalcula al instante.">
+      <Card
+        title="Últimos registros de kilometraje"
+        subtitle="Al borrar una fila, el control KMS se recalcula al instante."
+      >
+        {restrictVehicleId == null ? (
+          <div className="mb-3 max-w-md">
+            <Select
+              label="Filtrar historial por vehículo"
+              options={historialVehicleOpts}
+              value={historialVehicleFilter}
+              onChange={setHistorialVehicleFilter}
+            />
+          </div>
+        ) : null}
+        {resumenMensualMant.length > 0 ? (
+          <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+            <p className="text-xs font-semibold text-slate-600 mb-2">
+              Mantenimientos por mes · {getVehicleLabel(historialFilterVehicleId)}
+            </p>
+            <ul className="space-y-1.5 text-xs text-slate-700">
+              {resumenMensualMant.map((row) => (
+                <li key={row.key} className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span className="font-semibold text-slate-900 min-w-[8rem]">{row.label}</span>
+                  <span>Simple: {row.simple}</span>
+                  <span>Completo: {row.completo}</span>
+                  <span className="font-medium">Total: {row.total}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {ultimos.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">Sin registros para este filtro.</p>
+        ) : (
         <div className={KM_CONTROL_TABLE_WRAP}>
           <table className="w-full text-sm min-w-[560px] border-separate border-spacing-0">
             <thead className={KM_TABLE_HEAD}>
@@ -389,6 +445,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
             </tbody>
           </table>
         </div>
+        )}
       </Card>
     </div>
   );

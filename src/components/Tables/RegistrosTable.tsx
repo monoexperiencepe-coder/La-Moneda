@@ -686,10 +686,24 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const canShowEmpty = !bootstrapPending && !isRecalculating && !(serverPagination?.loading);
 
   const emptyMessage = (
-    <div className="text-center py-10 text-gray-400 text-sm">
-      {query
-        ? 'No se encontraron resultados para los filtros aplicados'
-        : 'Sin registros disponibles'}
+    <div className="text-center py-10 text-gray-400 text-sm space-y-3">
+      <p>
+        {query
+          ? `Sin resultados para «${query.trim()}»`
+          : 'Sin registros disponibles'}
+      </p>
+      {query.trim() ? (
+        <button
+          type="button"
+          className="text-sm font-semibold text-primary-600 hover:text-primary-800 hover:underline"
+          onClick={() => {
+            setQuery('');
+            setPage(1);
+          }}
+        >
+          Limpiar búsqueda
+        </button>
+      ) : null}
     </div>
   );
 

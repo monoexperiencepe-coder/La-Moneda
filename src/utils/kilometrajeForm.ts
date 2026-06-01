@@ -21,6 +21,9 @@ export const TIPO_MANTENIMIENTO_OPTIONS: { value: TipoMantenimientoForm; label: 
   },
 ];
 
+export const KM_AT_LEAST_ONE_ERROR =
+  'Ingresa kilometraje de mantenimiento o kilometraje actual.';
+
 export function parseKmInput(raw: string): number | null {
   const t = raw.trim();
   if (t === '') return null;
@@ -44,7 +47,7 @@ export function buildKilometrajePayload(input: {
   const extra = input.descripcionExtra.trim();
 
   if (input.tipo === 'solo_km') {
-    if (kmAct == null) return { ok: false, error: 'Indica el kilometraje actual (odómetro).' };
+    if (kmAct == null) return { ok: false, error: KM_AT_LEAST_ONE_ERROR };
     return {
       ok: true,
       row: {
@@ -59,13 +62,15 @@ export function buildKilometrajePayload(input: {
     };
   }
 
-  if (kmAct == null) {
-    return { ok: false, error: 'Indica el kilometraje al momento del mantenimiento.' };
+  if (kmAct == null && kmMantIn == null) {
+    return { ok: false, error: KM_AT_LEAST_ONE_ERROR };
   }
 
-  const kmMant = kmMantIn ?? kmAct;
   const tag = input.tipo === 'completo' ? 'MANT.COMPLETO' : 'MANT.SIMPLE';
   const descripcion = extra ? `${tag} · ${extra}` : tag;
+
+  const kmMantenimiento = kmMantIn ?? kmAct ?? null;
+  const kilometraje = kmAct ?? null;
 
   return {
     ok: true,
@@ -73,8 +78,8 @@ export function buildKilometrajePayload(input: {
       vehicleId: input.vehicleId,
       fecha: fechaVal.value,
       fechaRegistro: todayStr(),
-      kmMantenimiento: kmMant,
-      kilometraje: kmAct,
+      kmMantenimiento,
+      kilometraje,
       descripcion,
       costo: null,
     },

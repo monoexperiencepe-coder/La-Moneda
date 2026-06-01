@@ -8,6 +8,15 @@ export function esControlFechaSinAlertaVencimiento(tipo: TipoControlFecha): bool
   return tipo === 'INSTALACION_GNV' || tipo === 'BAT_COMPRA_NUEVA';
 }
 
+/** Alerta visual (p. ej. rojo) pero no cuenta como vencimiento real ni en métricas. */
+export function esControlFechaAlertaMantenimientoNoVencido(tipo: TipoControlFecha): boolean {
+  return tipo === 'BAT_MANT_REALIZADO';
+}
+
+export function esControlFechaExcluidoDeEstadoVencido(tipo: TipoControlFecha): boolean {
+  return esControlFechaSinAlertaVencimiento(tipo) || esControlFechaAlertaMantenimientoNoVencido(tipo);
+}
+
 /** Opciones para selects de control de fechas (única fuente de etiquetas). */
 export const TIPOS_CONTROL_FECHA_OPTIONS: { value: TipoControlFecha; label: string }[] = [
   { value: 'BAT_MANT_REALIZADO', label: 'BAT — mant. realizado' },
@@ -45,3 +54,8 @@ export const DOC_MODULE_COLUMNS: { tipo: TipoControlFecha; th: string; label: st
   { tipo: 'BAT_COMPRA_NUEVA', th: 'BAT cmp', label: 'BAT compra nueva' },
   { tipo: 'OTRO_VENCIMIENTO', th: 'Otro', label: 'Otro vencimiento' },
 ];
+
+/** Columnas visibles en UI principal (sin GPS ni Impuesto; datos en BD se conservan). */
+export const DOC_MODULE_UI_COLUMNS = DOC_MODULE_COLUMNS.filter(
+  (c) => c.tipo !== 'GPS' && c.tipo !== 'IMPUESTO',
+);

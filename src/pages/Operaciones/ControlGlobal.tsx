@@ -5,7 +5,7 @@ import { ChevronLeft, AlertTriangle, Filter, CheckCircle2, Clock, XCircle } from
 import Card from '../../components/Common/Card';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
-import { esControlFechaSinAlertaVencimiento } from '../../data/controlFechaCatalog';
+import { esControlFechaExcluidoDeEstadoVencido } from '../../data/controlFechaCatalog';
 import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperativeAlerts';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 
@@ -32,7 +32,7 @@ const ControlGlobal: React.FC = () => {
       .filter((v) => v.activo)
       .map((v) => {
         const fechasV = controlFechas.filter((c) => c.vehicleId === v.id);
-        const fechasAlerta = fechasV.filter((c) => !esControlFechaSinAlertaVencimiento(c.tipo));
+        const fechasAlerta = fechasV.filter((c) => !esControlFechaExcluidoDeEstadoVencido(c.tipo));
         const vencidos = fechasAlerta
           .filter((c) => diffDays(c.fechaVencimiento) < 0)
           .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
@@ -90,7 +90,7 @@ const ControlGlobal: React.FC = () => {
   const alertas = useMemo(
     () =>
       controlFechas.filter(
-        (c) => !esControlFechaSinAlertaVencimiento(c.tipo) && diffDays(c.fechaVencimiento) <= 30,
+        (c) => !esControlFechaExcluidoDeEstadoVencido(c.tipo) && diffDays(c.fechaVencimiento) <= 30,
       ).length,
     [controlFechas],
   );

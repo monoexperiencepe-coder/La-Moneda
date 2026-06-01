@@ -1,4 +1,4 @@
-import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
+import { esControlFechaExcluidoDeEstadoVencido } from '../data/controlFechaCatalog';
 import type { Vehicle, Ingreso, ControlFecha, KilometrajeRegistro, Conductor, Pendiente } from '../data/types';
 import { cleanMojibakeText } from './cleanMojibakeText';
 import { todayStr } from './formatting';
@@ -95,7 +95,7 @@ export function buildFleetPanelRows(
   return active
     .map((v) => {
       const fechasV = controlFechas.filter((c) => c.vehicleId != null && Number(c.vehicleId) === Number(v.id));
-      const fechasAlerta = fechasV.filter((c) => !esControlFechaSinAlertaVencimiento(c.tipo));
+      const fechasAlerta = fechasV.filter((c) => !esControlFechaExcluidoDeEstadoVencido(c.tipo));
       const vencidos = fechasAlerta
         .filter((c) => diffDaysFromToday(c.fechaVencimiento) < 0)
         .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
@@ -204,7 +204,7 @@ export function computeTodayReview(
   const vencidosRows = controlFechas
     .filter(
       (c) =>
-        !esControlFechaSinAlertaVencimiento(c.tipo) &&
+        !esControlFechaExcluidoDeEstadoVencido(c.tipo) &&
         c.vehicleId != null &&
         activeIds.has(Number(c.vehicleId)) &&
         diffDaysFromToday(c.fechaVencimiento) < 0,
@@ -213,7 +213,7 @@ export function computeTodayReview(
 
   const porVencerRows = controlFechas
     .filter((c) => {
-      if (esControlFechaSinAlertaVencimiento(c.tipo)) return false;
+      if (esControlFechaExcluidoDeEstadoVencido(c.tipo)) return false;
       if (c.vehicleId == null || !activeIds.has(Number(c.vehicleId))) return false;
       const d = diffDaysFromToday(c.fechaVencimiento);
       return d >= 0 && d <= 30;

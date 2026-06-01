@@ -32,11 +32,14 @@ export interface ControlFechaRegistroPanelProps {
    * `default`: búsqueda genérica de historial.
    */
   historialSearchMode?: 'default' | 'documentacion';
+  /** En módulo Documentación: formulario de registro visible al cargar. */
+  formExpandedDefault?: boolean;
 }
 
 const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   prefilledVehicleId = null,
   historialSearchMode = 'default',
+  formExpandedDefault = false,
 }) => {
   const {
     vehicles,
@@ -73,7 +76,10 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   );
   const vehicleOpts = [
     { value: '', label: 'Seleccionar vehículo' },
-    ...active.map((v) => ({ value: String(v.id), label: `${v.placa} · ${v.marca} ${v.modelo}` })),
+    ...active.map((v) => ({
+      value: String(v.id),
+      label: `#${v.id} — ${v.placa} — ${v.marca} ${v.modelo}`.trim(),
+    })),
   ];
 
   const [vehicleId, setVehicleId] = useState('');
@@ -86,7 +92,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   const [histTipo, setHistTipo] = useState('');
   const [histDesde, setHistDesde] = useState('');
   const [histHasta, setHistHasta] = useState('');
-  const [openRegistroCard, setOpenRegistroCard] = useState(false);
+  const [openRegistroCard, setOpenRegistroCard] = useState(formExpandedDefault || historialSearchMode === 'documentacion');
   const [openHistFilters, setOpenHistFilters] = useState(false);
   const [savingRegistro, setSavingRegistro] = useState(false);
   const [deletingControlId, setDeletingControlId] = useState<number | null>(null);

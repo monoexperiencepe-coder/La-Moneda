@@ -44,6 +44,9 @@ import {
   undoUpdateConductor,
   undoCreateKilometraje,
   undoDeleteKilometraje,
+  undoCreateControlFecha,
+  undoDeleteControlFecha,
+  undoUpdateControlFecha,
   undoCreatePendiente,
   undoDeletePendiente,
   undoUpdatePendiente,
@@ -182,6 +185,9 @@ interface RegistrosContextValue {
   isLoadingGastos: boolean;
   /** `true` tras el primer fetch de gastos de la sesión/usuario actual. */
   hasLoadedGastosOnce: boolean;
+  /** Incrementa en cada mutación remota (realtime Supabase). */
+  registrosRemoteTick: number;
+  bumpRegistrosRemoteSync: () => void;
   /** Suscripción realtime activa (registros de la empresa en Supabase). */
   registrosRealtimeConnected: boolean;
   /** @deprecated Usar registrosRealtimeConnected */
@@ -305,6 +311,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     permissionUser,
     handlers: realtimeHandlers,
     onRemoteActivity: handleRemoteRegistrosActivity,
+    onRemoteMutation: registros.bumpRegistrosRemoteSync,
   });
 
   const showUndoToast = useMemo(
@@ -605,10 +612,13 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
       const result = await registros.addControlFecha(data);
       if (result) {
-        toastHook.success(
-          '🗓️ Control de fecha guardado',
-          `${data.tipo} · vence ${data.fechaVencimiento} · id ${result.id} (búscalo en la lista de abajo o en Supabase por id).`,
-        );
+        showUndoToast({
+          message: 'Documentación registrada',
+          detail: `${data.tipo} · ${data.fechaVencimiento}`,
+          undoAction: undoCreateControlFecha(result, async (id) => {
+            await registros.deleteControlFecha(id);
+          }),
+        });
       }
       return result;
     } catch (e) {
@@ -621,13 +631,25 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     id: number,
     patch: Partial<Omit<ControlFecha, 'id' | 'createdAt'>>,
   ) => {
+    const before =
+      registros.controlFechasHistory.find((c) => c.id === id) ??
+      registros.controlFechas.find((c) => c.id === id) ??
+      null;
     try {
       const result = await registros.updateControlFecha(id, patch);
       if (!result) {
         toastHook.error('No se pudo actualizar el documento');
         return null;
       }
-      toastHook.success('Documento actualizado', `${result.tipo} · vence ${result.fechaVencimiento}`);
+      if (before) {
+        showUndoToast({
+          message: 'Documentación actualizada',
+          detail: `${result.tipo} · ${result.fechaVencimiento}`,
+          undoAction: undoUpdateControlFecha(before, () => registros.refreshControlFechasViews()),
+        });
+      } else {
+        toastHook.success('Documento actualizado', `${result.tipo} · vence ${result.fechaVencimiento}`);
+      }
       return result;
     } catch (e) {
       toastHook.error('No se pudo actualizar el documento', e instanceof Error ? e.message : '');
@@ -653,8 +675,19 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const handleDeleteControlFecha = async (id: number): Promise<boolean> => {
+    const snapshot =
+      registros.controlFechasHistory.find((c) => c.id === id) ??
+      registros.controlFechas.find((c) => c.id === id) ??
+      null;
     try {
       await registros.deleteControlFecha(id);
+      if (snapshot) {
+        showUndoToast({
+          message: 'Documentación eliminada',
+          detail: `${snapshot.tipo} · ${snapshot.fechaVencimiento}`,
+          undoAction: undoDeleteControlFecha(snapshot, () => registros.refreshControlFechasViews()),
+        });
+      }
       return true;
     } catch (e) {
       toastHook.error('No se pudo eliminar', e instanceof Error ? e.message : '');
@@ -841,6 +874,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       applyGastoRemovedLocal: registros.applyGastoRemovedLocal,
       applyGastoMovedLocal: registros.applyGastoMovedLocal,
       subscribeGastoHistorialSync: registros.subscribeGastoHistorialSync,
+      registrosRemoteTick: registros.registrosRemoteTick,
+      bumpRegistrosRemoteSync: registros.bumpRegistrosRemoteSync,
       upsertIngreso: registros.upsertIngreso,
       deleteDescuento: registros.deleteDescuento,
       deletePrestamo: registros.deletePrestamo,

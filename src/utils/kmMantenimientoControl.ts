@@ -1,12 +1,6 @@
 import type { KilometrajeRegistro } from '../data/types';
-import { formatDate, todayStr } from './formatting';
+import { diffCalendarDays, formatDate, todayStr } from './formatting';
 import { vehicleIdSortRank } from './sortByVehicle';
-
-function diffDaysFromToday(dateStr: string): number {
-  const today = new Date(todayStr() + 'T00:00:00').getTime();
-  const target = new Date(dateStr.slice(0, 10) + 'T00:00:00').getTime();
-  return Math.round((target - today) / (1000 * 60 * 60 * 24));
-}
 
 /** Km recorridos desde el último mantenimiento; alerta en UI y en “Qué hacer hoy”. */
 export const KM_ALERTA_VARIACION_DESDE_MANT = 5000;
@@ -40,8 +34,16 @@ export interface KmControlRow extends KmDesdeUltimoMantenimientoResult {
   fUlt: string | null;
   /** @deprecated usar diffKm */
   variacion: number | null;
-  /** Días entre fechas mantenimiento y último registro (referencia). */
+  /** Días desde último mantenimiento real hasta último registro de km (o hoy Lima). */
   dias: number | null;
+}
+
+export interface KmMantenimientoMensualRow {
+  key: string;
+  label: string;
+  simple: number;
+  completo: number;
+  total: number;
 }
 
 function sortRowsChrono(rows: KilometrajeRegistro[]): KilometrajeRegistro[] {
@@ -151,6 +153,17 @@ function findUltimoRegistroActual(
   return { km: null, fecha: null };
 }
 
+/** Días calendario desde último mant. hasta fecha de referencia (último km o hoy). */
+export function computeDiasDesdeUltimoMantenimiento(
+  mantFecha: string | null,
+  regFecha: string | null,
+): number | null {
+  if (!mantFecha) return null;
+  const ref = regFecha ?? todayStr();
+  if (ref.slice(0, 10) < mantFecha.slice(0, 10)) return 0;
+  return diffCalendarDays(mantFecha, ref);
+}
+
 function resolveStatus(
   mantKm: number | null,
   regKm: number | null,
@@ -221,13 +234,10 @@ export function getKmDesdeUltimoMantenimiento(
 }
 
 function toKmControlRow(result: KmDesdeUltimoMantenimientoResult): KmControlRow {
-  const dias =
-    result.ultimoMantenimientoFecha && result.ultimoRegistroFecha
-      ? Math.abs(
-          diffDaysFromToday(result.ultimoMantenimientoFecha) -
-            diffDaysFromToday(result.ultimoRegistroFecha),
-        )
-      : null;
+  const dias = computeDiasDesdeUltimoMantenimiento(
+    result.ultimoMantenimientoFecha,
+    result.ultimoRegistroFecha,
+  );
 
   return {
     ...result,
@@ -260,6 +270,46 @@ export function buildKmControlRows(
   entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
 
   return entries.map(([vehicleId, rows]) => toKmControlRow(computeKmDesdeUltimoMantenimiento(vehicleId, rows)));
+}
+
+const MESES_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+/** Resumen mensual de mantenimientos simple/completo por vehículo (o todos). */
+export function buildKmMantenimientoMensualSummary(
+  kilometrajes: KilometrajeRegistro[],
+  vehicleId?: number | null,
+): KmMantenimientoMensualRow[] {
+  const rows =
+    vehicleId != null
+      ? kilometrajes.filter((r) => Number(r.vehicleId) === Number(vehicleId))
+      : kilometrajes;
+  const byMonth = new Map<string, { simple: number; completo: number }>();
+  for (const r of rows) {
+    const tipo = tipoMantenimientoDesdeRegistro(r);
+    if (tipo !== 'Simple' && tipo !== 'Completo') continue;
+    const key = r.fecha.slice(0, 7);
+    const cur = byMonth.get(key) ?? { simple: 0, completo: 0 };
+    if (tipo === 'Simple') cur.simple += 1;
+    else cur.completo += 1;
+    byMonth.set(key, cur);
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, counts]) => {
+      const y = Number(key.slice(0, 4));
+      const m = Number(key.slice(5, 7));
+      const label = `${MESES_ES[m - 1] ?? key} ${y}`;
+      return {
+        key,
+        label,
+        simple: counts.simple,
+        completo: counts.completo,
+        total: counts.simple + counts.completo,
+      };
+    });
 }
 
 /** Línea compacta «100,000 km · 12/04/2026». */
@@ -300,8 +350,7 @@ export function auditKmQaFlowMeta(): {
     requiredFields: [
       'vehicle_id (vehículo activo)',
       'fecha',
-      'kilometraje (odómetro; requerido)',
-      'km_mantenimiento (opcional; Simple/Completo)',
+      'kilometraje (odómetro) o km_mantenimiento (al menos uno)',
       'descripcion (notas; usar prefijo [QA_AUTO])',
     ],
     supportsUndo: true,

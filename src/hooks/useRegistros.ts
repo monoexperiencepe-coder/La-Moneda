@@ -264,6 +264,11 @@ export const useRegistros = () => {
   const reloadGastosSummaryRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
   const historialSyncListenersRef = useRef(new Set<(event: GastoHistorialSyncEvent) => void>());
   const summaryReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [registrosRemoteTick, setRegistrosRemoteTick] = useState(0);
+
+  const bumpRegistrosRemoteSync = useCallback(() => {
+    setRegistrosRemoteTick((n) => n + 1);
+  }, []);
 
   /** Vacía datos tenant/financieros al cerrar sesión o cambiar de usuario (evita mezclar operador ↔ admin). */
   const clearFinancialRegistrosState = useCallback(() => {
@@ -1497,6 +1502,8 @@ export const useRegistros = () => {
     applyGastoRemovedLocal,
     applyGastoMovedLocal,
     subscribeGastoHistorialSync,
+    registrosRemoteTick,
+    bumpRegistrosRemoteSync,
     upsertIngreso,
     removeIngresoLocal,
     upsertConductor,

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import KilometrajeMantenimientoPanel from '../../components/operaciones/KilometrajeMantenimientoPanel';
-import ValorTiempoSection from '../../components/operaciones/ValorTiempoSection';
 
 const Mantenimiento: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +18,7 @@ const Mantenimiento: React.FC = () => {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-gray-900">Mantenimiento</h1>
             <p className="text-sm text-gray-500">
-              Kilometrajes y valor tiempo se guardan en Supabase. Vencimientos (SOAT, GNV, etc.) en Operaciones → Documentación.
+              Kilometrajes en Supabase. Vencimientos (SOAT, GNV, etc.) en Operaciones → Documentación.
             </p>
           </div>
         </div>
@@ -33,7 +32,6 @@ const Mantenimiento: React.FC = () => {
         getVehicleLabel={getVehicleLabel}
       />
 
-      <ValorTiempoSection subtitle="Registros en Supabase (registros_tiempo). Misma pantalla que Operaciones → Valor tiempo." />
     </div>
   );
 };

@@ -213,6 +213,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     removeGastoLocal,
     applyGastoMovedLocal,
     subscribeGastoHistorialSync,
+    registrosRemoteTick,
     toast,
     addGasto,
     showUndoToast,
@@ -356,6 +357,10 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   const [historialPinnedAt, setHistorialPinnedAt] = useState<Map<string, number>>(() => new Map());
   const [historialPinnedRows, setHistorialPinnedRows] = useState<Map<string, Gasto>>(() => new Map());
   const bumpHistorial = useCallback(() => setHistorialRefreshTick((n) => n + 1), []);
+
+  useEffect(() => {
+    if (registrosRemoteTick > 0) bumpHistorial();
+  }, [registrosRemoteTick, bumpHistorial]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setHistorialSearchDebounced(historialSearchInput.trim()), 400);
@@ -2376,14 +2381,6 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               message="Preparando historial completo…"
               submessage="Sincronizando años históricos y registros de la categoría"
             />
-          </div>
-        ) : historialSourceTotal === 0 && !(historialScope === 'full' && historialFullLoading) ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-10 text-center text-xs text-slate-600">
-            {gastosHistorialEmptyHint}
-          </div>
-        ) : historialRowsDisplayed.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-10 text-center text-xs text-slate-600">
-            No hay gastos con el subtipo seleccionado en esta página. Pruebe «Todos subtipo».
           </div>
         ) : (
           <div id="copilot-gastos-table">

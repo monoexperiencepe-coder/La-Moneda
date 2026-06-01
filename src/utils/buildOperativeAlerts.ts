@@ -1,5 +1,5 @@
 import type { ControlFecha, Ingreso, Vehicle, KilometrajeRegistro } from '../data/types';
-import { esControlFechaSinAlertaVencimiento } from '../data/controlFechaCatalog';
+import { esControlFechaExcluidoDeEstadoVencido } from '../data/controlFechaCatalog';
 import { formatDate, todayStr } from './formatting';
 import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT, kmMantenimientoAlertDetail } from './kmMantenimientoControl';
 
@@ -56,7 +56,7 @@ export function buildOperativeAlerts(
 
   /* 1) Vencimientos próximos o ya vencidos (control_fechas) */
   const vencRows = controlFechas.filter((c) => {
-    if (esControlFechaSinAlertaVencimiento(c.tipo)) return false;
+    if (esControlFechaExcluidoDeEstadoVencido(c.tipo)) return false;
     const d = diffDaysFromToday(c.fechaVencimiento);
     return d <= DIAS_ALERTA_VENCIMIENTO;
   });

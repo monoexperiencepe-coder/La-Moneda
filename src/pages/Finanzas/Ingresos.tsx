@@ -947,9 +947,12 @@ const Ingresos: React.FC = () => {
           </div>
         </div>
         {ingresosHistorialFiltrados.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/90 py-12 text-center text-sm text-slate-600">
-            {historialEmptyHint}
-          </div>
+          <RegistrosTable
+            mode="ingresos"
+            ingresos={[]}
+            vehicles={vehicles}
+            onDeleteIngreso={deleteIngreso}
+          />
         ) : (
           <RegistrosTable
             mode="ingresos"

@@ -1,5 +1,10 @@
-import type { Conductor, Gasto, Ingreso, KilometrajeRegistro, Pendiente } from '../data/types';
+import type { Conductor, ControlFecha, Gasto, Ingreso, KilometrajeRegistro, Pendiente } from '../data/types';
 import { insertConductor, patchConductor, removeConductor } from '../services/conductoresService';
+import {
+  insertControlFecha,
+  patchControlFecha,
+  removeControlFecha,
+} from '../services/controlFechasService';
 import { insertKilometraje, removeKilometraje } from '../services/kilometrajesService';
 import { insertPendiente, patchPendiente, removePendiente } from '../services/pendientesService';
 import {
@@ -17,6 +22,7 @@ import { insertAporteAccionista, deleteAporteAccionista } from '../services/apor
 import type { AporteAccionista, PrestamoFinancieroDetalle } from '../data/types';
 import {
   omitConductorIds,
+  omitControlFechaIds,
   omitGastoIds,
   omitIngresoIds,
   omitKilometrajeIds,
@@ -173,6 +179,57 @@ export function gastoDetallePatchFromRow(g: Gasto): GastoDetalleManualPatch {
 }
 
 /** UPDATE detalle manual → restaura snapshot anterior del gasto. */
+export function undoCreateControlFecha(
+  created: ControlFecha,
+  deleteLocal: (id: number) => Promise<void>,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'create',
+    label: 'Documentación registrada',
+    entityType: 'control_fecha',
+    entityId: String(created.id),
+    undo: async () => {
+      const ok = await removeControlFecha(created.id);
+      if (!ok) throw new Error('undo_failed');
+      await deleteLocal(created.id);
+    },
+  };
+}
+
+export function undoDeleteControlFecha(
+  snapshot: ControlFecha,
+  refreshLocal: () => void | Promise<void>,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'delete',
+    label: 'Documentación eliminada',
+    entityType: 'control_fecha',
+    entityId: String(snapshot.id),
+    undo: async () => {
+      const restored = await insertControlFecha(omitControlFechaIds(snapshot));
+      if (!restored) throw new Error('undo_failed');
+      await refreshLocal();
+    },
+  };
+}
+
+export function undoUpdateControlFecha(
+  before: ControlFecha,
+  refreshLocal: () => void | Promise<void>,
+): Pick<RegisterUndoInput, 'type' | 'label' | 'entityType' | 'entityId' | 'undo'> {
+  return {
+    type: 'update',
+    label: 'Documentación actualizada',
+    entityType: 'control_fecha',
+    entityId: String(before.id),
+    undo: async () => {
+      const restored = await patchControlFecha(before.id, omitControlFechaIds(before));
+      if (!restored) throw new Error('undo_failed');
+      await refreshLocal();
+    },
+  };
+}
+
 export function undoCreateKilometraje(
   created: KilometrajeRegistro,
   deleteLocal: (id: number) => Promise<void>,

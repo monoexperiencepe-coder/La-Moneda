@@ -80,19 +80,27 @@ export const getMonthName = (month: number): string => {
   return months[month - 1] ?? '';
 };
 
+/** Fecha calendario de hoy en Perú (YYYY-MM-DD), sin desfase UTC. */
 export const todayStr = (): string => {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA', { timeZone: PERU_TIME_ZONE });
 };
 
 /** Año mínimo para registros operativos (kilometraje, movimientos). */
 export const REGISTRO_FECHA_MIN_YEAR = 2020;
 
 export function registroFechaInputBounds(): { min: string; max: string } {
-  const maxYear = new Date().getFullYear() + 1;
+  const maxYear = Number(todayStr().slice(0, 4)) + 1;
   return {
     min: `${REGISTRO_FECHA_MIN_YEAR}-01-01`,
     max: `${maxYear}-12-31`,
   };
+}
+
+/** Días calendario entre dos fechas YYYY-MM-DD (to − from). */
+export function diffCalendarDays(from: string, to: string): number {
+  const a = new Date(from.slice(0, 10) + 'T00:00:00').getTime();
+  const b = new Date(to.slice(0, 10) + 'T00:00:00').getTime();
+  return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
 /**

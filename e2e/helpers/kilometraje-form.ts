@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { KM_AT_LEAST_ONE_ERROR } from '../../src/utils/kilometrajeForm';
 import { clickUndo } from './gastos-form';
 import { markQaEntityCleaned, registerQaKilometraje, registerQaVehiculo } from './qa-registry';
 import { qaKmPlaca, qaTag } from './qa';
@@ -215,14 +216,20 @@ export type RegisterQaKmOpts = {
   vehicleId: number;
   vehiclePlaca: string;
   tag: string;
-  kilometraje: number;
+  kilometraje?: number;
   tipo?: KmTipoForm;
   kmMantenimiento?: number;
 };
 
+export { KM_AT_LEAST_ONE_ERROR };
+
 /** Registra kilometraje QA en /operaciones/mantenimiento. */
 export async function registerQaKm(page: Page, opts: RegisterQaKmOpts): Promise<{ id: number; tag: string }> {
   const { vehicleId, vehiclePlaca, tag, kilometraje, tipo = 'solo_km', kmMantenimiento } = opts;
+
+  if (kilometraje == null && kmMantenimiento == null) {
+    throw new Error('registerQaKm: indica kilometraje o kmMantenimiento');
+  }
 
   await openVehicleKmPanel(page, vehicleId);
   await selectKmTipo(page, tipo);
@@ -231,9 +238,12 @@ export async function registerQaKm(page: Page, opts: RegisterQaKmOpts): Promise<
     await page.getByLabel('KM al mantenimiento').fill(String(kmMantenimiento));
   }
 
-  const kmLabel =
-    tipo === 'solo_km' ? 'Kilometraje semanal (odómetro)' : 'Kilometraje actual (odómetro)';
-  await page.getByLabel(kmLabel).fill(String(kilometraje));
+  if (kilometraje != null) {
+    const kmLabel =
+      tipo === 'solo_km' ? 'Kilometraje semanal (odómetro)' : 'Kilometraje actual (odómetro)';
+    await page.getByLabel(kmLabel).fill(String(kilometraje));
+  }
+
   await page.getByLabel('Notas (opcional)').fill(tag);
 
   const insertResponse = page.waitForResponse(isSuccessfulKmInsertResponse, { timeout: 30_000 });
@@ -247,11 +257,47 @@ export async function registerQaKm(page: Page, opts: RegisterQaKmOpts): Promise<
     throw new Error(`Kilometraje insertado sin prefijo QA: "${body.descripcion}"`);
   }
   registerQaKilometraje(body.id, tag);
-  qaTestKmLog(`registro id=${body.id} veh=${vehiclePlaca} km=${kilometraje} tipo=${tipo}`);
-  await expect(kmHistorialRow(page, vehiclePlaca, kilometraje).first()).toBeVisible({
-    timeout: KM_ROW_TIMEOUT_MS,
-  });
+  qaTestKmLog(
+    `registro id=${body.id} veh=${vehiclePlaca} km=${kilometraje ?? '—'} mant=${kmMantenimiento ?? '—'} tipo=${tipo}`,
+  );
+
+  if (kilometraje != null) {
+    await expect(kmHistorialRow(page, vehiclePlaca, kilometraje).first()).toBeVisible({
+      timeout: KM_ROW_TIMEOUT_MS,
+    });
+  } else if (kmMantenimiento != null) {
+    await expectKmMantVisible(page, { vehiclePlaca, kmMantenimiento, tag });
+  }
+
   return { id: body.id, tag };
+}
+
+function kmHistorialRowByMant(page: Page, vehiclePlaca: string, kmMantenimiento: number) {
+  return getKmHistorialTable(page)
+    .locator('tbody tr')
+    .filter({ hasText: vehiclePlaca })
+    .filter({ hasText: String(kmMantenimiento) });
+}
+
+/** Intenta guardar sin kilometraje; debe bloquear con mensaje de validación. */
+export async function expectKmValidationBlocked(page: Page, opts: { vehicleId: number; tipo?: KmTipoForm }): Promise<void> {
+  const { vehicleId, tipo = 'simple' } = opts;
+  await openVehicleKmPanel(page, vehicleId);
+  await selectKmTipo(page, tipo);
+
+  let posted = false;
+  const onResponse = (resp: { url(): string; request(): { method(): string }; status(): number }) => {
+    if (isSuccessfulKmInsertResponse(resp)) posted = true;
+  };
+  page.on('response', onResponse);
+
+  try {
+    await page.getByRole('button', { name: 'Guardar registro' }).click();
+    await expect(page.getByText(KM_AT_LEAST_ONE_ERROR)).toBeVisible({ timeout: KM_ROW_TIMEOUT_MS });
+    expect(posted).toBe(false);
+  } finally {
+    page.off('response', onResponse);
+  }
 }
 
 function kmHistorialRow(page: Page, vehiclePlaca: string, km: number) {
@@ -267,6 +313,15 @@ export async function expectKmVisible(
 ): Promise<void> {
   qaTestKmLog(`expect visible km=${opts.kilometraje} placa=${opts.vehiclePlaca}`);
   const row = kmHistorialRow(page, opts.vehiclePlaca, opts.kilometraje);
+  await expect(row.first()).toBeVisible({ timeout: KM_ROW_TIMEOUT_MS });
+}
+
+export async function expectKmMantVisible(
+  page: Page,
+  opts: { vehiclePlaca: string; kmMantenimiento: number; tag?: string },
+): Promise<void> {
+  qaTestKmLog(`expect visible km mant=${opts.kmMantenimiento} placa=${opts.vehiclePlaca}`);
+  const row = kmHistorialRowByMant(page, opts.vehiclePlaca, opts.kmMantenimiento);
   await expect(row.first()).toBeVisible({ timeout: KM_ROW_TIMEOUT_MS });
 }
 
