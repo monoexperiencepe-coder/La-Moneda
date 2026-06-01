@@ -231,12 +231,13 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   useEffect(() => {
     if (!import.meta.env.DEV || !isAuthenticated) return;
-    if (!empresaRealtimeId) {
-      console.warn(
-        '[realtime] Sin empresa_id: la suscripción realtime no arranca. Revisa profile.empresa_id o VITE_EMPRESA_ID.',
-      );
-    }
-  }, [isAuthenticated, empresaRealtimeId]);
+    console.info('[realtime:session]', {
+      empresaRealtimeId: empresaRealtimeId || null,
+      profileEmpresaId: profile?.empresa_id ?? null,
+      role: profile?.role ?? null,
+      bootstrapComplete: registros.registrosBootstrapComplete,
+    });
+  }, [isAuthenticated, empresaRealtimeId, profile?.empresa_id, profile?.role, registros.registrosBootstrapComplete]);
 
   const realtimeHandlers = useMemo(
     () => ({
@@ -267,6 +268,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       refreshControlFechasViews: registros.refreshControlFechasViews,
       reloadKilometrajesOnly: registros.reloadKilometrajesOnly,
       reloadControlFechasLatest: registros.reloadControlFechasLatest,
+      reloadGastosOnly: registros.reloadGastosOnly,
+      reloadIngresosOnly: registros.reloadIngresosOnly,
+      reloadGastosFinancialSummary: registros.reloadGastosFinancialSummary,
     }),
     [
       registros.upsertGasto,
@@ -294,6 +298,9 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       registros.refreshControlFechasViews,
       registros.reloadKilometrajesOnly,
       registros.reloadControlFechasLatest,
+      registros.reloadGastosOnly,
+      registros.reloadIngresosOnly,
+      registros.reloadGastosFinancialSummary,
     ],
   );
 
@@ -309,8 +316,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 
   const { connected: registrosRealtimeConnected } = useEmpresaRegistrosRealtime({
-    enabled:
-      isAuthenticated && registros.registrosBootstrapComplete && Boolean(empresaRealtimeId),
+    enabled: isAuthenticated && Boolean(empresaRealtimeId),
     empresaId: empresaRealtimeId,
     permissionUser,
     handlers: realtimeHandlers,

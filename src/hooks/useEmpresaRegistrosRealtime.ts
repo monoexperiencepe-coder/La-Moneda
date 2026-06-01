@@ -3,15 +3,19 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
   realtimeLogCleanup,
-  realtimeLogEvent,
+  realtimeLogStatus,
   realtimeLogSubscribe,
-  realtimeLogUpdate,
   realtimeRegistry,
 } from '../utils/realtimeDebug';
 import {
+  createRemoteDbChangeHandler,
+  type RemoteDbEvent,
+  type RemoteDbPayload,
+  type RemoteDbTable,
+} from '../utils/handleRemoteDbChange';
+import {
   mapCajaNegocioVehiculoRow,
   mapConductorRow,
-  mapControlFechaRow,
   mapGastoCajaRow,
   mapGastoRow,
   mapIngresoRow,
@@ -47,10 +51,8 @@ import {
 /** Historial del sistema: recargar lista al insertar un log (local o remoto). */
 export const AUDIT_LOGS_REALTIME_EVENT = 'la-moneda:audit-logs-changed';
 
-type RealtimePayload = {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: Record<string, unknown> | null;
-  old: Record<string, unknown> | null;
+type RealtimePayload = RemoteDbPayload & {
+  eventType: RemoteDbEvent;
 };
 
 export type EmpresaRealtimeHandlers = {
@@ -76,22 +78,20 @@ export type EmpresaRealtimeHandlers = {
   removeGastoCajaLocal: (id: number) => void;
   upsertCajaNegocio: (row: CajaNegocioVehiculo) => void;
   removeCajaNegocioLocal: (id: number) => void;
-  /** Resumen RPC de controles + historial paginado de controles de fecha. */
   refreshControlFechasViews: () => void | Promise<void>;
-  /** Refetch completo de kilometrajes (realtime / consistencia). */
   reloadKilometrajesOnly: () => void | Promise<void>;
-  /** Refetch resumen documentación (realtime / consistencia). */
   reloadControlFechasLatest: () => void | Promise<void>;
+  reloadGastosOnly: () => void | Promise<void>;
+  reloadIngresosOnly: () => void | Promise<void>;
+  reloadGastosFinancialSummary?: (opts?: { silent?: boolean }) => Promise<void>;
 };
 
 type Options = {
   enabled: boolean;
-  /** Preferir `profile.empresa_id`; fallback `VITE_EMPRESA_ID`. */
   empresaId: string | null | undefined;
   permissionUser: PermissionUser | null;
   handlers: EmpresaRealtimeHandlers;
   onRemoteActivity?: (info: { count: number }) => void;
-  /** Llamado en cada INSERT/UPDATE/DELETE remoto (refetch historiales, etc.). */
   onRemoteMutation?: () => void;
 };
 
@@ -110,23 +110,27 @@ const EMPRESA_TABLES = [
   'inversiones_vehiculo',
   'gastos_caja',
   'caja_negocio_vehiculo',
-] as const;
+] as const satisfies readonly RemoteDbTable[];
 
 function parsePayload(payload: {
   eventType?: string;
   event?: string;
   new: Record<string, unknown>;
   old: Record<string, unknown>;
-}): RealtimePayload {
+}): RealtimePayload | null {
   const rawType = payload.eventType ?? payload.event ?? '';
+  if (rawType !== 'INSERT' && rawType !== 'UPDATE' && rawType !== 'DELETE') return null;
   return {
-    eventType: rawType as RealtimePayload['eventType'],
+    eventType: rawType,
     new: payload.new ?? null,
     old: payload.old ?? null,
   };
 }
 
-function idFromRow(row: Record<string, unknown> | null, numeric: boolean): string | number | null {
+function idFromRow(
+  row: Record<string, unknown> | null,
+  numeric: boolean,
+): string | number | null {
   if (!row) return null;
   const raw = row.id ?? row.ID;
   if (raw == null || raw === '') return null;
@@ -151,14 +155,8 @@ export function useEmpresaRegistrosRealtime({
   handlersRef.current = handlers;
   const batchRef = useRef({ count: 0 });
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const controlFechasDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const kilometrajesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRemoteMutationRef = useRef(onRemoteMutation);
   onRemoteMutationRef.current = onRemoteMutation;
-
-  const notifyRemoteMutation = useRef(() => {
-    onRemoteMutationRef.current?.();
-  });
 
   const scheduleBatch = useRef(() => {
     batchRef.current.count += 1;
@@ -184,26 +182,16 @@ export function useEmpresaRegistrosRealtime({
     };
   }, [onRemoteActivity]);
 
-  const scheduleControlFechasRefresh = useRef(() => {
-    if (controlFechasDebounceRef.current) clearTimeout(controlFechasDebounceRef.current);
-    controlFechasDebounceRef.current = setTimeout(() => {
-      controlFechasDebounceRef.current = null;
-      void handlersRef.current.reloadControlFechasLatest?.();
-      void handlersRef.current.refreshControlFechasViews();
-    }, 400);
-  });
-
-  const scheduleKilometrajesRefresh = useRef(() => {
-    if (kilometrajesDebounceRef.current) clearTimeout(kilometrajesDebounceRef.current);
-    kilometrajesDebounceRef.current = setTimeout(() => {
-      kilometrajesDebounceRef.current = null;
-      void handlersRef.current.reloadKilometrajesOnly?.();
-    }, 400);
-  });
-
   useEffect(() => {
     const empresaId = (empresaIdInput ?? '').trim();
     if (!enabled || !empresaId) {
+      if (import.meta.env.DEV) {
+        console.warn('[realtime:disabled]', {
+          enabled,
+          empresaId: empresaId || null,
+          reason: !enabled ? 'enabled=false' : 'sin empresa_id',
+        });
+      }
       setConnected(false);
       return;
     }
@@ -211,270 +199,181 @@ export function useEmpresaRegistrosRealtime({
     const empresaFilter = `empresa_id=eq.${empresaId}`;
     const channelName = `empresa-registros-${empresaId}`;
 
-    const handleGastos = (payload: RealtimePayload) => {
-      const { eventType } = payload;
-      if (eventType === 'DELETE') {
-        const id = idFromRow(payload.old, false);
-        if (typeof id === 'string' && id) {
-          realtimeLogUpdate({
-            channel: channelName,
-            table: 'gastos',
-            event: 'DELETE',
-            rowId: id,
-            empresaId,
-          });
-          handlersRef.current.removeGastoLocal(id, { source: 'realtime' });
-          scheduleBatch.current();
-        }
-        return;
-      }
-      const raw = payload.new;
-      if (!raw) return;
-      const mapped = mapGastoRow(raw);
-      realtimeLogUpdate({
-        channel: channelName,
-        table: 'gastos',
-        event: eventType,
-        rowId: mapped.id,
-        empresaId,
-        extra: { tipo_gasto: mapped.tipo_gasto },
-      });
-      const visible = canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null);
-      if (import.meta.env.DEV) {
-        void import('../audit/techAuditDiagnostics').then(({ logRealtimeAudit }) => {
-          logRealtimeAudit({
-            eventType,
-            table: 'gastos',
-            recordId: mapped.id,
-            tipo_gasto: mapped.tipo_gasto,
-            refreshTriggered: false,
-            handler: visible ? 'upsertGasto' : 'removeGastoLocal',
-            visibleToCurrentUser: visible,
-          });
-        });
-      }
-      if (!visible) {
-        handlersRef.current.removeGastoLocal(mapped.id, { source: 'realtime' });
-      } else {
-        handlersRef.current.upsertGasto(mapped, { source: 'realtime' });
-      }
-      scheduleBatch.current();
-    };
-
-    const canFinanzasSecundarias = canUseInversiones(permissionUser);
-
-    const handleIngresos = (payload: RealtimePayload) => {
-      if (!canUseIngresos(permissionUser)) return;
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, false);
-        if (typeof id === 'string' && id) {
-          handlersRef.current.removeIngresoLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertIngreso(mapIngresoRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleConductores = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, false);
-        if (typeof id === 'string' && id) {
-          handlersRef.current.removeConductorLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertConductor(mapConductorRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleUnidades = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, false);
-        if (typeof id === 'string' && id) {
-          handlersRef.current.removeUnidadLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertUnidad(mapUnidadRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleVehiculos = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeVehicleLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertVehicle(mapVehiculoRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleControlFechas = () => {
-      scheduleControlFechasRefresh.current();
-      scheduleBatch.current();
-    };
-
-    const handleKilometrajes = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeKilometrajeLocal(id);
-          scheduleBatch.current();
-          scheduleKilometrajesRefresh.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        const mapped = mapKilometrajeRow(payload.new);
-        if (import.meta.env.DEV) {
-          void import('../audit/techAuditDiagnostics').then(({ logKmRealtime }) => {
-            logKmRealtime(payload.eventType, mapped, 'merge');
-          });
-        }
-        handlersRef.current.mergeKilometraje(mapped);
-        scheduleBatch.current();
-        scheduleKilometrajesRefresh.current();
-      }
-    };
-
-    const handlePendientes = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removePendienteLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.mergePendiente(mapPendienteRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleRegistrosTiempo = (payload: RealtimePayload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeRegistroTiempoLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertRegistroTiempo(mapRegistroTiempoRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleInversiones = (payload: RealtimePayload) => {
-      if (!canFinanzasSecundarias) return;
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeInversionVehiculoLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertInversionVehiculo(mapInversionVehiculoRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleGastosCaja = (payload: RealtimePayload) => {
-      if (!canFinanzasSecundarias) return;
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeGastoCajaLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertGastoCaja(mapGastoCajaRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const handleCajaNegocio = (payload: RealtimePayload) => {
-      if (!canFinanzasSecundarias) return;
-      if (payload.eventType === 'DELETE') {
-        const id = idFromRow(payload.old, true);
-        if (typeof id === 'number') {
-          handlersRef.current.removeCajaNegocioLocal(id);
-          scheduleBatch.current();
-        }
-        return;
-      }
-      if (payload.new) {
-        handlersRef.current.upsertCajaNegocio(mapCajaNegocioVehiculoRow(payload.new));
-        scheduleBatch.current();
-      }
-    };
-
-    const tableHandlers: Record<(typeof EMPRESA_TABLES)[number], (p: RealtimePayload) => void> = {
-      gastos: handleGastos,
-      ingresos: handleIngresos,
-      conductores: handleConductores,
-      unidades: handleUnidades,
-      vehiculos: handleVehiculos,
-      control_fechas: handleControlFechas,
-      kilometrajes: handleKilometrajes,
-      pendientes: handlePendientes,
-      registros_tiempo: handleRegistrosTiempo,
-      inversiones_vehiculo: handleInversiones,
-      gastos_caja: handleGastosCaja,
-      caja_negocio_vehiculo: handleCajaNegocio,
-    };
-
-    realtimeLogSubscribe({
-      channel: channelName,
+    const handleRemoteDbChange = createRemoteDbChangeHandler(
+      {
+        reloadGastosOnly: () => Promise.resolve(handlersRef.current.reloadGastosOnly()),
+        reloadIngresosOnly: () => Promise.resolve(handlersRef.current.reloadIngresosOnly()),
+        reloadKilometrajesOnly: () => Promise.resolve(handlersRef.current.reloadKilometrajesOnly()),
+        reloadControlFechasLatest: () => Promise.resolve(handlersRef.current.reloadControlFechasLatest()),
+        refreshControlFechasViews: () => Promise.resolve(handlersRef.current.refreshControlFechasViews()),
+        reloadGastosFinancialSummary: handlersRef.current.reloadGastosFinancialSummary,
+        onAuditLogsRemote: () => {
+          window.dispatchEvent(new CustomEvent(AUDIT_LOGS_REALTIME_EVENT));
+        },
+        bumpRemoteTick: () => onRemoteMutationRef.current?.(),
+      },
       empresaId,
-      extra: { tables: [...EMPRESA_TABLES] },
-    });
+    );
+
+    const applyIncremental = (table: (typeof EMPRESA_TABLES)[number], parsed: RealtimePayload) => {
+      const h = handlersRef.current;
+      const { eventType } = parsed;
+      const canFinanzasSecundarias = canUseInversiones(permissionUser);
+
+      switch (table) {
+        case 'gastos': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, false);
+            if (typeof id === 'string' && id) h.removeGastoLocal(id, { source: 'realtime' });
+            return;
+          }
+          if (!parsed.new) return;
+          const mapped = mapGastoRow(parsed.new);
+          const visible = canViewGastoTipo(permissionUser, mapped.tipo_gasto ?? null);
+          if (visible) h.upsertGasto(mapped, { source: 'realtime' });
+          else h.removeGastoLocal(mapped.id, { source: 'realtime' });
+          return;
+        }
+        case 'ingresos': {
+          if (!canUseIngresos(permissionUser)) return;
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, false);
+            if (typeof id === 'string' && id) h.removeIngresoLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertIngreso(mapIngresoRow(parsed.new));
+          return;
+        }
+        case 'kilometrajes': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeKilometrajeLocal(id);
+            return;
+          }
+          if (parsed.new) h.mergeKilometraje(mapKilometrajeRow(parsed.new));
+          return;
+        }
+        case 'control_fechas':
+          return;
+        case 'conductores': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, false);
+            if (typeof id === 'string' && id) h.removeConductorLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertConductor(mapConductorRow(parsed.new));
+          return;
+        }
+        case 'unidades': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, false);
+            if (typeof id === 'string' && id) h.removeUnidadLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertUnidad(mapUnidadRow(parsed.new));
+          return;
+        }
+        case 'vehiculos': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeVehicleLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertVehicle(mapVehiculoRow(parsed.new));
+          return;
+        }
+        case 'pendientes': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removePendienteLocal(id);
+            return;
+          }
+          if (parsed.new) h.mergePendiente(mapPendienteRow(parsed.new));
+          return;
+        }
+        case 'registros_tiempo': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeRegistroTiempoLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertRegistroTiempo(mapRegistroTiempoRow(parsed.new));
+          return;
+        }
+        case 'inversiones_vehiculo': {
+          if (!canFinanzasSecundarias) return;
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeInversionVehiculoLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertInversionVehiculo(mapInversionVehiculoRow(parsed.new));
+          return;
+        }
+        case 'gastos_caja': {
+          if (!canFinanzasSecundarias) return;
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeGastoCajaLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertGastoCaja(mapGastoCajaRow(parsed.new));
+          return;
+        }
+        case 'caja_negocio_vehiculo': {
+          if (!canFinanzasSecundarias) return;
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            if (typeof id === 'number') h.removeCajaNegocioLocal(id);
+            return;
+          }
+          if (parsed.new) h.upsertCajaNegocio(mapCajaNegocioVehiculoRow(parsed.new));
+          return;
+        }
+        default:
+          return;
+      }
+    };
+
     realtimeRegistry.register(channelName);
 
     let channel = supabase.channel(channelName);
 
     for (const table of EMPRESA_TABLES) {
+      realtimeLogSubscribe({ channel: channelName, table, empresaId });
       channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table, filter: empresaFilter },
         (payload) => {
           const parsed = parsePayload(payload);
-          if (!parsed.eventType) return;
-          notifyRemoteMutation.current();
-          realtimeLogEvent({
-            channel: channelName,
+          if (!parsed) return;
+
+          const rowId = idFromRow(
+            parsed.new ?? parsed.old,
+            table === 'gastos' || table === 'ingresos' || table === 'conductores' || table === 'unidades'
+              ? false
+              : true,
+          );
+
+          handleRemoteDbChange({
             table,
             event: parsed.eventType,
-            rowId: idFromRow(parsed.new ?? parsed.old, table === 'gastos' ? false : true),
-            empresaId,
+            payload: parsed,
+            rowId,
           });
-          tableHandlers[table](parsed);
+
+          applyIncremental(table, parsed);
+          scheduleBatch.current();
         },
       );
     }
 
     if (canViewFinancialAuditLogs(permissionUser)) {
+      realtimeLogSubscribe({
+        channel: channelName,
+        table: 'financial_audit_logs',
+        empresaId,
+      });
       channel = channel.on(
         'postgres_changes',
         {
@@ -483,8 +382,15 @@ export function useEmpresaRegistrosRealtime({
           table: 'financial_audit_logs',
           filter: empresaFilter,
         },
-        () => {
-          window.dispatchEvent(new CustomEvent(AUDIT_LOGS_REALTIME_EVENT));
+        (payload) => {
+          const parsed = parsePayload(payload);
+          if (!parsed) return;
+          handleRemoteDbChange({
+            table: 'financial_audit_logs',
+            event: 'INSERT',
+            payload: parsed,
+            rowId: idFromRow(parsed.new, true),
+          });
           scheduleBatch.current();
         },
       );
@@ -492,19 +398,24 @@ export function useEmpresaRegistrosRealtime({
 
     channel.subscribe((status) => {
       setConnected(status === 'SUBSCRIBED');
-      realtimeLogSubscribe({
+      realtimeLogStatus({
         channel: channelName,
         empresaId,
-        extra: { status },
+        status,
+        extra: { tables: [...EMPRESA_TABLES, 'financial_audit_logs'] },
       });
+      if (import.meta.env.DEV && status !== 'SUBSCRIBED') {
+        console.warn('[realtime:status] canal no suscrito — revisar publication SQL y RLS', {
+          status,
+          empresaId,
+        });
+      }
     });
 
     channelRef.current = channel;
 
     return () => {
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
-      if (controlFechasDebounceRef.current) clearTimeout(controlFechasDebounceRef.current);
-      if (kilometrajesDebounceRef.current) clearTimeout(kilometrajesDebounceRef.current);
       setConnected(false);
       realtimeLogCleanup({ channel: channelName, empresaId });
       realtimeRegistry.unregister(channelName);
