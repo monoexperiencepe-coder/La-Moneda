@@ -400,6 +400,7 @@ export function useEmpresaRegistrosRealtime({
     let subscribed = false;
     let retryCount = 0;
     let activeChannel: RealtimeChannel | null = null;
+    let debugIngresosChannel: RealtimeChannel | null = null;
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -894,6 +895,42 @@ export function useEmpresaRegistrosRealtime({
 
         subscribeActiveChannel(channel);
 
+        if (import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === '1') {
+          debugIngresosChannel = supabase
+            .channel('debug-ingresos-publication')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'ingresos',
+              },
+              (payload) => {
+                console.warn('[debug:ingresos:any]', payload);
+                console.warn(
+                  '[debug:ingresos:any:json]',
+                  JSON.stringify(
+                    {
+                      eventType: payload.eventType,
+                      newEmpresaId: (payload.new as Record<string, unknown> | undefined)
+                        ?.empresa_id,
+                      oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
+                        ?.empresa_id,
+                      id:
+                        (payload.new as Record<string, unknown> | undefined)?.id ??
+                        (payload.old as Record<string, unknown> | undefined)?.id,
+                    },
+                    null,
+                    2,
+                  ),
+                );
+              },
+            )
+            .subscribe((status, err) => {
+              console.warn('[debug:ingresos:status]', status, err ?? null);
+            });
+        }
+
         logRealtimeSubscribeDone({
           channel: channelName,
           empresaId,
@@ -1013,6 +1050,10 @@ export function useEmpresaRegistrosRealtime({
       }
       activeChannel = null;
       channelRef.current = null;
+      if (debugIngresosChannel) {
+        void supabase.removeChannel(debugIngresosChannel);
+        debugIngresosChannel = null;
+      }
     };
 
     return () => {
