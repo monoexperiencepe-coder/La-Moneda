@@ -1376,6 +1376,7 @@ export async function insertGasto(
     .select('*')
     .single();
   if (error) {
+    console.error('[gasto:create:error]', { stage: 'supabase_insert', message: error.message, error });
     console.error('[gastos insert]', error.message);
     return null;
   }

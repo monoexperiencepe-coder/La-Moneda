@@ -256,6 +256,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     if (searchParams.get('registrar') !== '1') return;
     const raw = searchParams.get('vehicleId');
     const vid = raw ? Number(raw) : NaN;
+    console.warn('[gasto:create:open_modal]', {
+      source: 'url_registrar_param',
+      role: profile?.role ?? null,
+      userId: user?.id ?? null,
+      vehicleId: Number.isFinite(vid) && vid > 0 ? vid : null,
+      isFinancialOperador,
+    });
     setPrefillVehicleId(Number.isFinite(vid) && vid > 0 ? vid : null);
     setGastoFormKey((k) => k + 1);
     setRegistrarOpen(true);
@@ -263,7 +270,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     next.delete('registrar');
     next.delete('vehicleId');
     setSearchParams(next, { replace: true });
-  }, [isInversionesPage, searchParams, setSearchParams]);
+  }, [isInversionesPage, searchParams, setSearchParams, profile?.role, user?.id, isFinancialOperador]);
 
   useEffect(() => {
     if (isInversionesPage) return;
@@ -296,6 +303,13 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   }, [searchParams, isInversionesPage, parrillaTabs]);
 
   const openRegistrarModal = () => {
+    console.warn('[gasto:create:open_modal]', {
+      source: 'header_button',
+      role: profile?.role ?? null,
+      userId: user?.id ?? null,
+      isFinancialOperador,
+      registrarOpenBefore: registrarOpen,
+    });
     setPrefillVehicleId(null);
     setGastoFormKey((k) => k + 1);
     setRegistrarOpen(true);
@@ -1376,14 +1390,27 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const handleRegistrarGasto = useCallback(
     async (data: Omit<Gasto, 'id' | 'createdAt'>) => {
-      const created = await addGasto(data);
-      if (!created) return;
-      setHistorialPage(0);
-      bumpHistorial();
-      if (!gastoVisibleEnHistorial(created)) {
-        toast.info('Registro guardado, pero no aparece por el filtro actual.');
+      try {
+        const created = await addGasto(data);
+        if (!created) {
+          console.error('[gasto:create:error]', { reason: 'addGasto_returned_null', payload: data });
+          toast.error('No se pudo guardar el gasto. Revisa la consola ([gasto:create:error]).');
+          return;
+        }
+        console.warn('[gasto:create:success]', created);
+        setHistorialPage(0);
+        bumpHistorial();
+        if (!gastoVisibleEnHistorial(created)) {
+          toast.info('Registro guardado, pero no aparece por el filtro actual.');
+        }
+        closeRegistrarModal();
+      } catch (error) {
+        console.error('[gasto:create:error]', error);
+        toast.error(
+          error instanceof Error ? error.message : 'Error al guardar el gasto. Revisa la consola.',
+        );
+        throw error;
       }
-      closeRegistrarModal();
     },
     [addGasto, gastoVisibleEnHistorial, closeRegistrarModal, toast, bumpHistorial],
   );

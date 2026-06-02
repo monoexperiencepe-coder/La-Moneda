@@ -61,6 +61,7 @@ import {
   buildSubtipoSelectOptions,
 } from '../../constants/gastosSubtipos';
 import { todayStr } from '../../utils/formatting';
+import { useAuth } from '../../context/AuthContext';
 
 /** Orden visual (arriba → abajo) para llevar al usuario al primer error. */
 const EXPENSE_VALIDATION_SCROLL_ORDER: (keyof FormState)[] = [
@@ -217,10 +218,26 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   finanzaPreset = null,
   onLoadingChange,
 }) => {
+  const { user, role } = useAuth();
   const [form, setForm] = useState<FormState>(() => initialExpenseForm(finanzaPreset));
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [periodoOpen, setPeriodoOpen] = useState(false);
+
+  const logSubmitClick = () => {
+    const isSubmitting = loading;
+    const disabled = isSubmitting;
+    console.warn('[gasto:create:click]', {
+      role,
+      userId: user?.id ?? null,
+      disabled,
+      isSubmitting,
+      env: import.meta.env.MODE,
+    });
+    if (disabled) {
+      console.warn('[gasto:create:disabled_reason]', { reason: 'isSubmitting', isSubmitting: true });
+    }
+  };
 
   useEffect(() => {
     onLoadingChange?.(loading);
@@ -382,12 +399,97 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     return newErrors;
   };
 
+  const buildGastoPayload = (): Omit<Gasto, 'id' | 'createdAt'> => {
+    const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
+    const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
+    const esGlobal = catFin === 'gastos_globales' || catFin === 'operativo_flota_general';
+    const esRep = catFin === 'representacion_interna';
+    const esFinanciero = tipoGastoUsaSubtipoFinancieroCanon(catFin);
+    const esAdministrativo = tipoGastoUsaSubtipoAdministrativoCanon(catFin);
+    const subtipoFinCanon = esFinanciero
+      ? (normalizeFinancieroPrestamoSubtipo(form.subtipoFinancieroCanon)
+        ?? form.subtipoFinancieroCanon.trim())
+      : '';
+    const subtipoAdminCanon = esAdministrativo
+      ? (normalizeAdministrativoSubtipo(form.subtipoAdministrativoCanon)
+        ?? form.subtipoAdministrativoCanon.trim())
+      : '';
+    const factDerived = esFinanciero
+      ? getDefaultFactTipoSubtipoForFinancieroSubtipo(subtipoFinCanon)
+      : esAdministrativo
+        ? getDefaultFactTipoSubtipoForAdministrativoSubtipo(subtipoAdminCanon)
+        : null;
+    const factTipo = esRep
+      ? REPRESENTACION_INTERNA_FACT_TIPO
+      : factDerived?.tipo ?? form.tipo;
+    const factSub = esRep
+      ? REPRESENTACION_INTERNA_FACT_SUBTIPO
+      : (factDerived?.subTipo ?? form.subTipo) || null;
+    const esInversion = catFin === 'inversion_compra';
+    const subtipoFin = esRep
+      ? form.subtipoRepresentacion.trim()
+      : esFinanciero
+        ? subtipoFinCanon
+        : esAdministrativo
+          ? subtipoAdminCanon
+          : tipoGastoUsaSubtipoOperativo(catFin)
+          ? form.subtipoOperativoCanon.trim()
+          : esInversion
+            ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
+            : (form.subTipo || null)
+              ? form.subTipo.trim()
+              : null;
+    const motivoFin = esRep
+      ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
+      : esFinanciero
+        ? getFinancieroPrestamoSubtipoLabel(subtipoFin)
+        : esAdministrativo
+          ? getAdministrativoSubtipoLabel(subtipoFin)
+          : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
+          ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
+          : esInversion && form.subtipoInversionCanon.trim()
+            ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
+            : (form.subTipo || form.tipo);
+    const rawM = Number(Number(form.monto).toFixed(2));
+    return {
+      fecha: form.fecha,
+      fechaRegistro: todayStr(),
+      vehicleId: esGlobal ? null : form.vehicleId.trim() ? Number(form.vehicleId) : null,
+      tipo: factTipo,
+      subTipo: factSub,
+      fechaDesde: form.fechaDesde.trim() || null,
+      fechaHasta: form.fechaHasta.trim() || null,
+      metodoPago: form.metodoPago,
+      metodoPagoDetalle: form.metodoPagoDetalle.trim(),
+      celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
+      categoria: inferCategoriaFromTipoGasto(factTipo),
+      motivo: motivoFin,
+      signo: '-',
+      monto: rawM,
+      pagadoA: form.pagadoA.trim(),
+      comentarios: form.comentarios,
+      tipo_gasto: catFin,
+      subtipo_gasto: subtipoFin,
+      es_global_flota: esGlobal,
+      origen_clasificacion: 'registro_ui',
+      clasificacion_manual: true,
+      clasificacion_confianza: 1,
+      requiere_revision: false,
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    logSubmitClick();
     if (loading) return;
+    console.warn('[gasto:create:before_validate]', { ...form });
     const newErrors = buildExpenseValidationErrors();
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
+      console.warn('[gasto:create:validation_blocked]', {
+        reason: 'client_validation',
+        errors: newErrors,
+      });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => scrollToFirstExpenseValidationError(newErrors));
       });
@@ -395,86 +497,14 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     }
     setLoading(true);
     try {
-      const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
-      const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
-      const esGlobal = catFin === 'gastos_globales' || catFin === 'operativo_flota_general';
-      const esRep = catFin === 'representacion_interna';
-      const esFinanciero = tipoGastoUsaSubtipoFinancieroCanon(catFin);
-      const esAdministrativo = tipoGastoUsaSubtipoAdministrativoCanon(catFin);
-      const subtipoFinCanon = esFinanciero
-        ? (normalizeFinancieroPrestamoSubtipo(form.subtipoFinancieroCanon)
-          ?? form.subtipoFinancieroCanon.trim())
-        : '';
-      const subtipoAdminCanon = esAdministrativo
-        ? (normalizeAdministrativoSubtipo(form.subtipoAdministrativoCanon)
-          ?? form.subtipoAdministrativoCanon.trim())
-        : '';
-      const factDerived = esFinanciero
-        ? getDefaultFactTipoSubtipoForFinancieroSubtipo(subtipoFinCanon)
-        : esAdministrativo
-          ? getDefaultFactTipoSubtipoForAdministrativoSubtipo(subtipoAdminCanon)
-          : null;
-      const factTipo = esRep
-        ? REPRESENTACION_INTERNA_FACT_TIPO
-        : factDerived?.tipo ?? form.tipo;
-      const factSub = esRep
-        ? REPRESENTACION_INTERNA_FACT_SUBTIPO
-        : (factDerived?.subTipo ?? form.subTipo) || null;
-      const esInversion = catFin === 'inversion_compra';
-      const subtipoFin = esRep
-        ? form.subtipoRepresentacion.trim()
-        : esFinanciero
-          ? subtipoFinCanon
-          : esAdministrativo
-            ? subtipoAdminCanon
-            : tipoGastoUsaSubtipoOperativo(catFin)
-            ? form.subtipoOperativoCanon.trim()
-            : esInversion
-              ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
-              : (form.subTipo || null)
-                ? form.subTipo.trim()
-                : null;
-      const motivoFin = esRep
-        ? (subtipoFin ? getRepresentacionInternaSubtipoLabel(subtipoFin) : REPRESENTACION_INTERNA_FACT_SUBTIPO)
-        : esFinanciero
-          ? getFinancieroPrestamoSubtipoLabel(subtipoFin)
-          : esAdministrativo
-            ? getAdministrativoSubtipoLabel(subtipoFin)
-            : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
-            ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
-            : esInversion && form.subtipoInversionCanon.trim()
-              ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
-              : (form.subTipo || form.tipo);
-      const rawM = Number(Number(form.monto).toFixed(2));
-      await Promise.resolve(
-        onSubmit({
-          fecha: form.fecha,
-          fechaRegistro: todayStr(),
-          vehicleId: esGlobal ? null : form.vehicleId.trim() ? Number(form.vehicleId) : null,
-          tipo: factTipo,
-          subTipo: factSub,
-          fechaDesde: form.fechaDesde.trim() || null,
-          fechaHasta: form.fechaHasta.trim() || null,
-          metodoPago: form.metodoPago,
-          metodoPagoDetalle: form.metodoPagoDetalle.trim(),
-          celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
-          categoria: inferCategoriaFromTipoGasto(factTipo),
-          motivo: motivoFin,
-          signo: '-',
-          monto: rawM,
-          pagadoA: form.pagadoA.trim(),
-          comentarios: form.comentarios,
-          tipo_gasto: catFin,
-          subtipo_gasto: subtipoFin,
-          es_global_flota: esGlobal,
-          origen_clasificacion: 'registro_ui',
-          clasificacion_manual: true,
-          clasificacion_confianza: 1,
-          requiere_revision: false,
-        }),
-      );
+      const payload = buildGastoPayload();
+      console.warn('[gasto:create:before_insert]', payload);
+      const created = await Promise.resolve(onSubmit(payload));
+      console.warn('[gasto:create:success]', created ?? payload);
       setForm(initialExpenseForm(finanzaPreset));
       setErrors({});
+    } catch (error) {
+      console.error('[gasto:create:error]', error);
     } finally {
       setLoading(false);
     }
@@ -1015,7 +1045,14 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               >
                 Limpiar todo
               </Button>
-              <Button type="submit" loading={loading} icon={<PlusCircle size={16} />} variant="danger">
+              <Button
+                type="submit"
+                loading={loading}
+                icon={<PlusCircle size={16} />}
+                variant="danger"
+                title={loading ? 'Guardando gasto…' : undefined}
+                onClick={logSubmitClick}
+              >
                 {finanzaPreset === 'inversion_compra' ? 'Registrar inversión' : 'Registrar gasto'}
               </Button>
             </div>
