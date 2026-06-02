@@ -63,6 +63,7 @@ import {
   logRealtimeRawPayload,
   logRealtimeSubscribeDone,
   logRealtimeSubscribeStart,
+  logRealtimeSubscribeMode,
   logRealtimeUnmounted,
 } from '../utils/realtimeBootLog';
 
@@ -156,25 +157,51 @@ function empresaIdFromPostgresPayload(payload: {
   return String(row?.empresa_id ?? '').trim();
 }
 
+function usesManualEmpresaFilter(
+  table: (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
+): boolean {
+  return MANUAL_EMPRESA_FILTER_TABLES.has(
+    table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
+  );
+}
+
+function logTableSubscribeMode(
+  table: (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
+  empresaId: string,
+): void {
+  const manual = usesManualEmpresaFilter(table);
+  logRealtimeSubscribeMode({
+    table,
+    mode: manual ? 'manual_empresa_filter' : 'supabase_channel_filter',
+    hasSupabaseFilter: !manual,
+    empresaId,
+  });
+}
+
 function rejectManualEmpresaMismatch(
   table: string,
   subscriptionEmpresaId: string,
   payload: { new: Record<string, unknown>; old: Record<string, unknown> },
   eventType: string,
 ): boolean {
-  if (!MANUAL_EMPRESA_FILTER_TABLES.has(table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs')) {
+  if (!usesManualEmpresaFilter(table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs')) {
     return false;
   }
-  const rowEmpresaId = empresaIdFromPostgresPayload(payload);
-  if (!rowEmpresaId) return false;
-  if (rowEmpresaId === subscriptionEmpresaId) return false;
-  realtimeLogEmpresaMismatch({
-    table,
-    event: eventType,
-    empresaId: subscriptionEmpresaId,
-    extra: { rowEmpresaId, filterMode: 'manual_handler' },
-  });
-  return true;
+  const rowEmpresaId = String(
+    payload.new?.empresa_id ?? payload.old?.empresa_id ?? '',
+  ).trim();
+  if (rowEmpresaId !== subscriptionEmpresaId) {
+    if (rowEmpresaId) {
+      realtimeLogEmpresaMismatch({
+        table,
+        event: eventType,
+        empresaId: subscriptionEmpresaId,
+        extra: { rowEmpresaId, filterMode: 'manual_handler' },
+      });
+    }
+    return true;
+  }
+  return false;
 }
 
 function parsePayload(payload: {
@@ -301,7 +328,8 @@ export function useEmpresaRegistrosRealtime({
     logRealtimeMounted({
       channel: channelName,
       empresaId,
-      filter: empresaFilter,
+      manualFilterTables: [...MANUAL_EMPRESA_FILTER_TABLES],
+      channelFilterNote: 'solo vehiculos/conductores/etc — operativas sin filter en canal',
       tableCount: EMPRESA_TABLES.length,
     });
 
@@ -530,7 +558,7 @@ export function useEmpresaRegistrosRealtime({
         hasNew: Boolean(payload.new && Object.keys(payload.new).length),
         hasOld: Boolean(payload.old && Object.keys(payload.old).length),
         rowEmpresaId: empresaIdFromPostgresPayload(payload) || null,
-        filterMode: MANUAL_EMPRESA_FILTER_TABLES.has(
+        filterMode: usesManualEmpresaFilter(
           table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
         )
           ? 'manual'
@@ -570,14 +598,14 @@ export function useEmpresaRegistrosRealtime({
       let ch = supabase.channel(channelName);
 
       for (const table of EMPRESA_TABLES) {
-        const manualFilter = MANUAL_EMPRESA_FILTER_TABLES.has(table);
-        realtimeLogSubscribe({ channel: channelName, table, empresaId });
-        if (isRealtimeDebugEnv()) {
-          console.info('[realtime:subscribe:config]', {
-            table,
-            filter: manualFilter ? 'manual (sin channel filter)' : empresaFilter,
-          });
-        }
+        const manualFilter = usesManualEmpresaFilter(table);
+        logTableSubscribeMode(table, empresaId);
+        realtimeLogSubscribe({
+          channel: channelName,
+          table,
+          empresaId,
+          hasSupabaseFilter: !manualFilter,
+        });
         ch = ch.on(
           'postgres_changes',
           manualFilter
@@ -595,17 +623,13 @@ export function useEmpresaRegistrosRealtime({
       }
 
       if (canViewFinancialAuditLogs(permissionUserRef.current)) {
+        logTableSubscribeMode('financial_audit_logs', empresaId);
         realtimeLogSubscribe({
           channel: channelName,
           table: 'financial_audit_logs',
           empresaId,
+          hasSupabaseFilter: false,
         });
-        if (isRealtimeDebugEnv()) {
-          console.info('[realtime:subscribe:config]', {
-            table: 'financial_audit_logs',
-            filter: 'manual (sin channel filter)',
-          });
-        }
         ch = ch.on(
           'postgres_changes',
           {
@@ -650,8 +674,8 @@ export function useEmpresaRegistrosRealtime({
       logRealtimeSubscribeStart({
         channel: channelName,
         empresaId,
-        filter: empresaFilter,
-        filterMode: 'manual for ingresos/gastos/kilometrajes/control_fechas/financial_audit_logs',
+        manualFilterTables: [...MANUAL_EMPRESA_FILTER_TABLES],
+        channelFilterTables: EMPRESA_TABLES.filter((t) => !usesManualEmpresaFilter(t)),
         tables: [...EMPRESA_TABLES],
         hasSession: socketInfo.hasSession,
         sessionUserId: socketInfo.sessionUserId,

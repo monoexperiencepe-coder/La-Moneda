@@ -21,11 +21,14 @@ function stamp(): string {
   return new Date().toISOString().slice(11, 23);
 }
 
-/** @deprecated use logRealtimeSubscribeStart per-table from hook */
-export function realtimeLogSubscribe(meta: RealtimeDebugMeta): void {
+/** @deprecated use logRealtimeSubscribeMode from hook */
+export function realtimeLogSubscribe(
+  meta: RealtimeDebugMeta & { hasSupabaseFilter?: boolean },
+): void {
   if (!isRealtimeDebugEnv()) return;
+  const manual = meta.hasSupabaseFilter === false;
   console.info(
-    `[realtime:subscribe] table=${meta.table ?? '?'} empresa_id=${meta.empresaId ?? '?'}`,
+    `[realtime:subscribe] table=${meta.table ?? '?'} mode=${manual ? 'manual_empresa_filter' : 'supabase_channel_filter'} hasSupabaseFilter=${!manual}`,
   );
 }
 

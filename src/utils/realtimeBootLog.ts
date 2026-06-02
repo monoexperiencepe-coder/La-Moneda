@@ -115,6 +115,23 @@ export function logRealtimeUnmounted(meta: Record<string, unknown>): void {
   console.info('[realtime:unmounted]', meta);
 }
 
+export function logRealtimeSubscribeMode(meta: {
+  table: string;
+  mode: 'manual_empresa_filter' | 'supabase_channel_filter';
+  hasSupabaseFilter: boolean;
+  empresaId?: string;
+}): void {
+  if (!isRealtimeDebugEnv()) return;
+  const payload = {
+    table: meta.table,
+    mode: meta.mode,
+    hasSupabaseFilter: meta.hasSupabaseFilter,
+    empresaId: meta.empresaId ?? null,
+  };
+  console.info('[realtime:subscribe:mode]', payload);
+  console.info('[realtime:subscribe:mode:json]', JSON.stringify(payload, null, 2));
+}
+
 export function logRealtimeSubscribeStart(meta: Record<string, unknown>): void {
   if (!isRealtimeDebugEnv()) return;
   emitDiagnosticView('[realtime:subscribe:start]', meta, 'info');
