@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
   realtimeLogCleanup,
+  realtimeLogEmpresaMismatch,
   realtimeLogSubscribe,
   realtimeRegistry,
 } from '../utils/realtimeDebug';
@@ -46,10 +47,6 @@ import {
   canViewGastoTipo,
   type PermissionUser,
 } from '../utils/permissions';
-import {
-  mountRealtimeDebugUnfilteredChannel,
-  unmountRealtimeDebugUnfilteredChannel,
-} from '../utils/realtimeDebugUnfilteredChannel';
 import {
   ensureRealtimeSocketReady,
   getRealtimeSocketDiag,
@@ -144,6 +141,41 @@ const EMPRESA_TABLES = [
   'gastos_caja',
   'caja_negocio_vehiculo',
 ] as const satisfies readonly RemoteDbTable[];
+
+/** Sin filter en postgres_changes — filtro manual en handler (bug Realtime filter). */
+const MANUAL_EMPRESA_FILTER_TABLES = new Set<
+  (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs'
+>(['ingresos', 'gastos', 'kilometrajes', 'control_fechas', 'financial_audit_logs']);
+
+function empresaIdFromPostgresPayload(payload: {
+  new: Record<string, unknown>;
+  old: Record<string, unknown>;
+}): string {
+  const row =
+    payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old;
+  return String(row?.empresa_id ?? '').trim();
+}
+
+function rejectManualEmpresaMismatch(
+  table: string,
+  subscriptionEmpresaId: string,
+  payload: { new: Record<string, unknown>; old: Record<string, unknown> },
+  eventType: string,
+): boolean {
+  if (!MANUAL_EMPRESA_FILTER_TABLES.has(table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs')) {
+    return false;
+  }
+  const rowEmpresaId = empresaIdFromPostgresPayload(payload);
+  if (!rowEmpresaId) return false;
+  if (rowEmpresaId === subscriptionEmpresaId) return false;
+  realtimeLogEmpresaMismatch({
+    table,
+    event: eventType,
+    empresaId: subscriptionEmpresaId,
+    extra: { rowEmpresaId, filterMode: 'manual_handler' },
+  });
+  return true;
+}
 
 function parsePayload(payload: {
   eventType?: string;
@@ -279,7 +311,6 @@ export function useEmpresaRegistrosRealtime({
     let subscribed = false;
     let retryCount = 0;
     let activeChannel: RealtimeChannel | null = null;
-    let debugUnfilteredChannel: RealtimeChannel | null = null;
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -477,49 +508,88 @@ export function useEmpresaRegistrosRealtime({
       }, delayMs);
     };
 
+    const processPostgresPayload = (
+      table: (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
+      payload: {
+        eventType?: string;
+        event?: string;
+        new: Record<string, unknown>;
+        old: Record<string, unknown>;
+      },
+    ) => {
+      const rawType = payload.eventType ?? payload.event ?? '';
+      if (
+        rejectManualEmpresaMismatch(table, empresaId, payload, rawType)
+      ) {
+        return;
+      }
+
+      logRealtimeRawPayload({
+        table,
+        rawEventType: rawType,
+        hasNew: Boolean(payload.new && Object.keys(payload.new).length),
+        hasOld: Boolean(payload.old && Object.keys(payload.old).length),
+        rowEmpresaId: empresaIdFromPostgresPayload(payload) || null,
+        filterMode: MANUAL_EMPRESA_FILTER_TABLES.has(
+          table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
+        )
+          ? 'manual'
+          : 'channel',
+      });
+
+      const parsed = parsePayload(payload);
+      if (!parsed) {
+        logRealtimeParseMiss({ table, rawEventType: rawType, payload });
+        return;
+      }
+
+      const rowId = idFromRow(
+        parsed.new ?? parsed.old,
+        table === 'gastos' ||
+          table === 'ingresos' ||
+          table === 'conductores' ||
+          table === 'unidades'
+          ? false
+          : true,
+      );
+
+      handleRemoteDbChange({
+        table: table as RemoteDbTable,
+        event: parsed.eventType,
+        payload: parsed,
+        rowId,
+      });
+
+      if (table !== 'financial_audit_logs') {
+        applyIncremental(table as (typeof EMPRESA_TABLES)[number], parsed);
+      }
+      scheduleBatch.current();
+    };
+
     const buildEmpresaChannel = (): RealtimeChannel => {
       let ch = supabase.channel(channelName);
 
       for (const table of EMPRESA_TABLES) {
+        const manualFilter = MANUAL_EMPRESA_FILTER_TABLES.has(table);
         realtimeLogSubscribe({ channel: channelName, table, empresaId });
+        if (isRealtimeDebugEnv()) {
+          console.info('[realtime:subscribe:config]', {
+            table,
+            filter: manualFilter ? 'manual (sin channel filter)' : empresaFilter,
+          });
+        }
         ch = ch.on(
           'postgres_changes',
-          { event: '*', schema: 'public', table, filter: empresaFilter },
+          manualFilter
+            ? { event: '*', schema: 'public', table }
+            : { event: '*', schema: 'public', table, filter: empresaFilter },
           (payload) => {
-            const rawType = payload.eventType ?? (payload as { event?: string }).event ?? '';
-            logRealtimeRawPayload({
-              table,
-              rawEventType: rawType,
-              hasNew: Boolean(payload.new && Object.keys(payload.new).length),
-              hasOld: Boolean(payload.old && Object.keys(payload.old).length),
-              rowEmpresaId:
-                (payload.new as Record<string, unknown> | undefined)?.empresa_id ??
-                (payload.old as Record<string, unknown> | undefined)?.empresa_id ??
-                null,
+            processPostgresPayload(table, {
+              eventType: payload.eventType,
+              event: (payload as { event?: string }).event,
+              new: (payload.new ?? {}) as Record<string, unknown>,
+              old: (payload.old ?? {}) as Record<string, unknown>,
             });
-
-            const parsed = parsePayload(payload);
-            if (!parsed) {
-              logRealtimeParseMiss({ table, rawEventType: rawType, payload });
-              return;
-            }
-
-            const rowId = idFromRow(
-              parsed.new ?? parsed.old,
-              table === 'gastos' || table === 'ingresos' || table === 'conductores' || table === 'unidades'
-                ? false
-                : true,
-            );
-
-            handleRemoteDbChange({
-              table,
-              event: parsed.eventType,
-              payload: parsed,
-              rowId,
-            });
-
-            applyIncremental(table, parsed);
-            scheduleBatch.current();
           },
         );
       }
@@ -530,24 +600,25 @@ export function useEmpresaRegistrosRealtime({
           table: 'financial_audit_logs',
           empresaId,
         });
+        if (isRealtimeDebugEnv()) {
+          console.info('[realtime:subscribe:config]', {
+            table: 'financial_audit_logs',
+            filter: 'manual (sin channel filter)',
+          });
+        }
         ch = ch.on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'financial_audit_logs',
-            filter: empresaFilter,
           },
           (payload) => {
-            const parsed = parsePayload(payload);
-            if (!parsed) return;
-            handleRemoteDbChange({
-              table: 'financial_audit_logs',
-              event: 'INSERT',
-              payload: parsed,
-              rowId: idFromRow(parsed.new, true),
+            processPostgresPayload('financial_audit_logs', {
+              eventType: payload.eventType ?? 'INSERT',
+              new: (payload.new ?? {}) as Record<string, unknown>,
+              old: (payload.old ?? {}) as Record<string, unknown>,
             });
-            scheduleBatch.current();
           },
         );
       }
@@ -580,6 +651,7 @@ export function useEmpresaRegistrosRealtime({
         channel: channelName,
         empresaId,
         filter: empresaFilter,
+        filterMode: 'manual for ingresos/gastos/kilometrajes/control_fechas/financial_audit_logs',
         tables: [...EMPRESA_TABLES],
         hasSession: socketInfo.hasSession,
         sessionUserId: socketInfo.sessionUserId,
@@ -597,13 +669,6 @@ export function useEmpresaRegistrosRealtime({
       }
 
       subscribeActiveChannel(channel);
-
-      debugUnfilteredChannel = mountRealtimeDebugUnfilteredChannel({
-        adminEmpresaId: empresaId,
-        adminUserId: bootMeta?.userId ?? null,
-        adminRole: bootMeta?.role ?? permissionUserRef.current?.role ?? null,
-        filteredChannel: channelName,
-      });
 
       logRealtimeSubscribeDone({
         channel: channelName,
@@ -678,8 +743,6 @@ export function useEmpresaRegistrosRealtime({
         });
         void supabase.removeChannel(ch);
       }
-      void unmountRealtimeDebugUnfilteredChannel(debugUnfilteredChannel);
-      debugUnfilteredChannel = null;
       activeChannel = null;
       channelRef.current = null;
     };
