@@ -213,6 +213,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     removeGastoLocal,
     applyGastoMovedLocal,
     subscribeGastoHistorialSync,
+    filterGastosExcludingRemoved,
     registrosRemoteTick,
     toast,
     addGasto,
@@ -475,8 +476,11 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     )
       .then(({ rows, total }) => {
         if (canceled) return;
-        setHistorialRows(rows);
-        setHistorialTotal(total);
+        const visibleRows = filterGastosExcludingRemoved(rows);
+        setHistorialRows(visibleRows);
+        setHistorialTotal(
+          visibleRows.length === rows.length ? total : Math.max(0, total - (rows.length - visibleRows.length)),
+        );
       })
       .finally(() => {
         if (!canceled) setHistorialLoading(false);
@@ -496,6 +500,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     historialScope,
     historialSearchDebounced,
     historialServerSearch,
+    filterGastosExcludingRemoved,
   ]);
 
   useEffect(() => {
@@ -544,7 +549,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
         }
         if (!isCurrent) return;
 
-        const sortedRows = sortGastosHistorialByActivity(rows);
+        const sortedRows = sortGastosHistorialByActivity(filterGastosExcludingRemoved(rows));
         setHistorialFullRowsByTipo((prev) => ({ ...prev, [tipo]: sortedRows }));
 
         if (error && error !== 'Cancelado') {
@@ -590,7 +595,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       ac.abort();
       historialFullLoadingRef.current[tipo] = false;
     };
-  }, [tab, gastosDataPending, tenantEmpresaId, historialFullRetryTick]);
+  }, [tab, gastosDataPending, tenantEmpresaId, historialFullRetryTick, filterGastosExcludingRemoved]);
 
   /** Si el usuario pidió historial completo pero el prefetch abortó, relanzar carga. */
   useEffect(() => {
@@ -1015,6 +1020,18 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
 
   const removeGastoFromHistorialLocal = useCallback((id: string) => {
     const sid = String(id);
+    setHistorialPinnedRows((prev) => {
+      if (!prev.has(sid)) return prev;
+      const next = new Map(prev);
+      next.delete(sid);
+      return next;
+    });
+    setHistorialPinnedAt((prev) => {
+      if (!prev.has(sid)) return prev;
+      const next = new Map(prev);
+      next.delete(sid);
+      return next;
+    });
     setHistorialRows((prev) => {
       const next = prev.filter((g) => String(g.id) !== sid);
       if (next.length !== prev.length) {
@@ -1022,16 +1039,20 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       }
       return next;
     });
-    if (activeTipoGasto) {
-      setHistorialFullRowsByTipo((prev) => {
-        const rows = prev[activeTipoGasto];
-        if (!rows?.length) return prev;
-        const nextRows = rows.filter((g) => String(g.id) !== sid);
-        if (nextRows.length === rows.length) return prev;
-        return { ...prev, [activeTipoGasto]: nextRows };
-      });
-    }
-  }, [activeTipoGasto]);
+    setHistorialFullRowsByTipo((prev) => {
+      let changed = false;
+      const next: Record<string, Gasto[]> = { ...prev };
+      for (const [tipo, rows] of Object.entries(prev)) {
+        if (!rows?.length) continue;
+        const filtered = rows.filter((g) => String(g.id) !== sid);
+        if (filtered.length !== rows.length) {
+          next[tipo] = filtered;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
 
   const syncHistorialRowLocal = useCallback(
     (gasto: Gasto, opts?: { kind?: 'created' | 'sync' }) => {

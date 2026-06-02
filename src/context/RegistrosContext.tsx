@@ -133,6 +133,8 @@ interface RegistrosContextValue {
   ) => void;
   /** Sincroniza historial paginado (Gastos.tsx) con mutaciones locales. */
   subscribeGastoHistorialSync: (listener: (event: GastoHistorialSyncEvent) => void) => () => void;
+  /** Excluye ids eliminados recientemente (realtime DELETE / tombstones). */
+  filterGastosExcludingRemoved: (rows: Gasto[]) => Gasto[];
   /** Actualiza o inserta un ingreso en el estado local (misma orden que fetch). */
   upsertIngreso: (i: Ingreso) => void;
   deleteDescuento: (id: number) => void;
@@ -917,6 +919,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       applyGastoRemovedLocal: registros.applyGastoRemovedLocal,
       applyGastoMovedLocal: registros.applyGastoMovedLocal,
       subscribeGastoHistorialSync: registros.subscribeGastoHistorialSync,
+      filterGastosExcludingRemoved: registros.filterGastosExcludingRemoved,
       registrosRemoteTick: registros.registrosRemoteTick,
       bumpRegistrosRemoteSync: registros.bumpRegistrosRemoteSync,
       upsertIngreso: registros.upsertIngreso,

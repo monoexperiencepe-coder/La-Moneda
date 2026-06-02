@@ -215,12 +215,12 @@ function parsePayload(payload: {
   new: Record<string, unknown>;
   old: Record<string, unknown>;
 }): RealtimePayload | null {
-  const rawType = payload.eventType ?? payload.event ?? '';
+  const rawType = (payload.eventType ?? payload.event ?? '').toUpperCase();
   if (rawType !== 'INSERT' && rawType !== 'UPDATE' && rawType !== 'DELETE') return null;
   return {
     eventType: rawType,
-    new: payload.new ?? null,
-    old: payload.old ?? null,
+    new: rawType === 'DELETE' ? null : (payload.new ?? null),
+    old: rawType === 'DELETE' ? (payload.old ?? {}) : (payload.old ?? null),
   };
 }
 
@@ -498,7 +498,11 @@ export function useEmpresaRegistrosRealtime({
         case 'gastos': {
           if (eventType === 'DELETE') {
             const id = idFromRow(parsed.old, false);
-            if (typeof id === 'string' && id) h.removeGastoLocal(id, { source: 'realtime' });
+            console.warn('[realtime:gastos:delete:local]', { id, old: parsed.old });
+            if (typeof id === 'string' && id) {
+              h.removeGastoLocal(id, { source: 'realtime' });
+            }
+            void Promise.resolve(h.reloadGastosOnly());
             return;
           }
           if (!parsed.new) return;
@@ -642,7 +646,7 @@ export function useEmpresaRegistrosRealtime({
         old: Record<string, unknown>;
       },
     ) => {
-      const rawType = payload.eventType ?? payload.event ?? '';
+      const rawType = (payload.eventType ?? payload.event ?? '').toUpperCase();
       if (
         rejectManualEmpresaMismatch(table, empresaId, payload, rawType)
       ) {
@@ -678,6 +682,10 @@ export function useEmpresaRegistrosRealtime({
           : true,
       );
 
+      if (table !== 'financial_audit_logs') {
+        applyIncremental(table as (typeof EMPRESA_TABLES)[number], parsed);
+      }
+
       handleRemoteDbChange({
         table: table as RemoteDbTable,
         event: parsed.eventType,
@@ -685,9 +693,6 @@ export function useEmpresaRegistrosRealtime({
         rowId,
       });
 
-      if (table !== 'financial_audit_logs') {
-        applyIncremental(table as (typeof EMPRESA_TABLES)[number], parsed);
-      }
       scheduleBatch.current();
     };
 
@@ -704,6 +709,9 @@ export function useEmpresaRegistrosRealtime({
             table,
           },
           (payload) => {
+            if (table === 'gastos' && payload.eventType === 'DELETE') {
+              console.warn('[fallback:gastos:delete:old]', payload.old);
+            }
             console.warn(`[fallback:${table}:any]`, payload);
             console.warn(
               `[fallback:${table}:json]`,

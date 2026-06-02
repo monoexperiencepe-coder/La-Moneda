@@ -263,6 +263,8 @@ export const useRegistros = () => {
   const [isLoadingGastosSummary, setIsLoadingGastosSummary] = useState(false);
   const reloadGastosSummaryRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
   const historialSyncListenersRef = useRef(new Set<(event: GastoHistorialSyncEvent) => void>());
+  const removedGastoIdsRef = useRef(new Set<string>());
+  const lastReloadDeletedGastoIdRef = useRef<string | null>(null);
   const summaryReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [registrosRemoteTick, setRegistrosRemoteTick] = useState(0);
 
@@ -522,20 +524,26 @@ export const useRegistros = () => {
 
   const applyGastoRemovedLocal = useCallback(
     (id: string, before?: Gasto | null, opts?: ApplyGastoLocalOpts) => {
+      const sid = String(id);
+      removedGastoIdsRef.current.add(sid);
+      lastReloadDeletedGastoIdRef.current = sid;
       let snapshot = before ?? null;
       setGastos((prev) => {
-        if (!snapshot) snapshot = prev.find((g) => String(g.id) === String(id)) ?? null;
-        return prev.filter((g) => String(g.id) !== String(id));
+        if (!snapshot) snapshot = prev.find((g) => String(g.id) === sid) ?? null;
+        return prev.filter((g) => String(g.id) !== sid);
       });
+      setCajaNegocioVehiculo((prev) =>
+        prev.filter((r) => String(r.origenGastoId ?? '') !== sid),
+      );
       if (snapshot) {
         patchFinancialSummary(
           (s) => patchSummaryRemoveGasto(s, snapshot!, (t) => includeTipoInSummaryPatch(t)),
           opts,
         );
       }
-      notifyGastoHistorialSync({ kind: 'removed', id: String(id), before: snapshot });
+      notifyGastoHistorialSync({ kind: 'removed', id: sid, before: snapshot });
       devLogGastoLocalMutation('removed', {
-        id,
+        id: sid,
         fromTipo: snapshot?.tipo_gasto,
         deltaMonto: snapshot ? -snapshot.monto : 0,
         source: opts?.source,
@@ -545,6 +553,19 @@ export const useRegistros = () => {
     },
     [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
   );
+
+  const filterGastosExcludingRemoved = useCallback((rows: Gasto[]): Gasto[] => {
+    const tombstones = removedGastoIdsRef.current;
+    if (tombstones.size === 0) return rows;
+    return rows.filter((g) => !tombstones.has(String(g.id)));
+  }, []);
+
+  const purgeRemovedGastoTombstones = useCallback((freshRows: Gasto[]) => {
+    const freshIds = new Set(freshRows.map((g) => String(g.id)));
+    for (const id of removedGastoIdsRef.current) {
+      if (!freshIds.has(id)) removedGastoIdsRef.current.delete(id);
+    }
+  }, []);
 
   const applyGastoUpdatedLocal = useCallback(
     (before: Gasto, after: Gasto, opts?: ApplyGastoLocalOpts) => {
@@ -605,8 +626,21 @@ export const useRegistros = () => {
 
   /** Recarga bootstrap (recientes + tipos críticos) + summary BD. */
   const reloadGastosOnly = useCallback(async () => {
-    await Promise.all([loadGastosBootstrap(), reloadGastosFinancialSummary()]);
-  }, [loadGastosBootstrap, reloadGastosFinancialSummary]);
+    const checkDeletedId = lastReloadDeletedGastoIdRef.current;
+    const rows = await loadGastosBootstrap();
+    await reloadGastosFinancialSummary({ silent: true });
+    purgeRemovedGastoTombstones(rows);
+    console.warn('[reloadGastosOnly:done]', {
+      rows: rows.length,
+      containsDeletedId: checkDeletedId
+        ? rows.some((g) => String(g.id) === checkDeletedId)
+        : undefined,
+      checkDeletedId,
+    });
+    if (checkDeletedId && !rows.some((g) => String(g.id) === checkDeletedId)) {
+      lastReloadDeletedGastoIdRef.current = null;
+    }
+  }, [loadGastosBootstrap, purgeRemovedGastoTombstones, reloadGastosFinancialSummary]);
 
   const reloadGastosFull = useCallback(async () => {
     await loadGastosFullFromSupabase();
@@ -1502,6 +1536,7 @@ export const useRegistros = () => {
     applyGastoRemovedLocal,
     applyGastoMovedLocal,
     subscribeGastoHistorialSync,
+    filterGastosExcludingRemoved,
     registrosRemoteTick,
     bumpRegistrosRemoteSync,
     upsertIngreso,
