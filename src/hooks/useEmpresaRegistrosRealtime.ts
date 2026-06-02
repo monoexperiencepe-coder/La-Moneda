@@ -924,6 +924,13 @@ export function useEmpresaRegistrosRealtime({
                     2,
                   ),
                 );
+                processPostgresPayload('ingresos', {
+                  eventType: payload.eventType,
+                  event: (payload as { event?: string }).event,
+                  new: (payload.new ?? {}) as Record<string, unknown>,
+                  old: (payload.old ?? {}) as Record<string, unknown>,
+                });
+                scheduleBatch.current();
               },
             )
             .subscribe((status, err) => {
