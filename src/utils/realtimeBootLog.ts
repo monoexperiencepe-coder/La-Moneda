@@ -27,6 +27,13 @@ export function isRealtimeDebugEnv(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === '1';
 }
 
+/** Traza obligatoria en DEV — siempre console.warn (visible con filtro Warnings). */
+export function rtMandatoryLog(label: string, payload: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  console.warn(label, payload);
+  console.warn(`${label}:json`, JSON.stringify(payload, null, 2));
+}
+
 export function isSupabaseClientConfigured(): boolean {
   return Boolean(
     (import.meta.env.VITE_SUPABASE_URL ?? '').trim() &&
@@ -121,15 +128,12 @@ export function logRealtimeSubscribeMode(meta: {
   hasSupabaseFilter: boolean;
   empresaId?: string;
 }): void {
-  if (!isRealtimeDebugEnv()) return;
-  const payload = {
+  rtMandatoryLog('[realtime:subscribe:mode]', {
     table: meta.table,
     mode: meta.mode,
     hasSupabaseFilter: meta.hasSupabaseFilter,
     empresaId: meta.empresaId ?? null,
-  };
-  console.info('[realtime:subscribe:mode]', payload);
-  console.info('[realtime:subscribe:mode:json]', JSON.stringify(payload, null, 2));
+  });
 }
 
 export function logRealtimeSubscribeStart(meta: Record<string, unknown>): void {
@@ -148,8 +152,7 @@ export function logRealtimeStatus(meta: Record<string, unknown>): void {
 }
 
 export function logRealtimeRawPayload(meta: Record<string, unknown>): void {
-  if (!isRealtimeDebugEnv()) return;
-  console.info('[realtime:raw]', meta);
+  rtMandatoryLog('[realtime:raw]', meta);
 }
 
 export function logRealtimeParseMiss(meta: Record<string, unknown>): void {

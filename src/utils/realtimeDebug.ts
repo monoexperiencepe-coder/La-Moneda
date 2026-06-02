@@ -4,6 +4,7 @@ import {
   logRealtimeStatus,
   logRealtimeSubscribeDone,
   logRealtimeSubscribeStart,
+  rtMandatoryLog,
 } from './realtimeBootLog';
 
 /** Logs DEV para sincronización realtime (Supabase postgres_changes). */
@@ -42,11 +43,13 @@ export function realtimeLogStatus(meta: RealtimeDebugMeta & { status: string }):
 }
 
 export function realtimeLogEvent(meta: RealtimeDebugMeta): void {
-  if (!isRealtimeDebugEnv()) return;
-  console.info(
-    `[realtime:event] table=${meta.table ?? '?'} event=${meta.event ?? '?'} id=${meta.rowId ?? '?'} empresa_id=${meta.empresaId ?? '?'}`,
-    meta.extra ?? '',
-  );
+  rtMandatoryLog('[realtime:event]', {
+    table: meta.table ?? null,
+    event: meta.event ?? null,
+    rowId: meta.rowId ?? null,
+    empresaId: meta.empresaId ?? null,
+    extra: meta.extra ?? null,
+  });
 }
 
 export function realtimeLogUpdate(meta: RealtimeDebugMeta): void {

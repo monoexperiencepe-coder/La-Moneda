@@ -228,7 +228,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 
   const profileLoaded = !authLoading && profile != null;
-  const realtimeEnabled = isAuthenticated && Boolean(empresaRealtimeId);
+  const realtimeEnabled =
+    !authLoading && profileLoaded && isAuthenticated && Boolean(empresaRealtimeId);
 
   useEffect(() => {
     logRealtimeBoot({
