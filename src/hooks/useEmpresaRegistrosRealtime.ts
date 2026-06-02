@@ -688,13 +688,42 @@ export function useEmpresaRegistrosRealtime({
     };
 
     const buildEmpresaChannel = (): RealtimeChannel => {
+
       console.warn('[channel:minimal:start]');
-
-      const ch = supabase.channel(channelName);
-
-      console.warn('[channel:minimal:created]');
-
+    
+      const existing =
+        supabase
+          .getChannels()
+          .find(
+            c =>
+              c.topic === channelName
+          );
+    
+      if (existing) {
+    
+        console.warn(
+          '[channel:reuse]'
+        );
+    
+        return existing;
+    
+      }
+    
+      console.warn(
+        '[channel:create]'
+      );
+    
+      const ch =
+        supabase.channel(
+          channelName
+        );
+    
+      console.warn(
+        '[channel:minimal:created]'
+      );
+    
       return ch;
+    
     };
 
     const attachEmpresaChannelListeners = (ch: RealtimeChannel): void => {
@@ -714,15 +743,18 @@ export function useEmpresaRegistrosRealtime({
 
       let channel = ch;
 
-      for (const table of EMPRESA_TABLES) {
+      const ONLY_TABLES = [
+        'vehiculos',
+        'ingresos',
+        'kilometrajes',
+        'control_fechas',
+      ] as const;
+
+      for (const table of ONLY_TABLES) {
+        console.warn('[listener:before]', table);
+
         const manualFilter = usesManualEmpresaFilter(table);
-        logTableSubscribeMode(table, empresaId);
-        realtimeLogSubscribe({
-          channel: channelName,
-          table,
-          empresaId,
-          hasSupabaseFilter: !manualFilter,
-        });
+
         attachSafe(table, () => {
           channel = channel.on(
             'postgres_changes',
@@ -739,33 +771,8 @@ export function useEmpresaRegistrosRealtime({
             },
           );
         });
-      }
 
-      if (canViewFinancialAuditLogs(permissionUserRef.current)) {
-        logTableSubscribeMode('financial_audit_logs', empresaId);
-        realtimeLogSubscribe({
-          channel: channelName,
-          table: 'financial_audit_logs',
-          empresaId,
-          hasSupabaseFilter: false,
-        });
-        attachSafe('financial_audit_logs', () => {
-          channel = channel.on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'financial_audit_logs',
-            },
-            (payload) => {
-              processPostgresPayload('financial_audit_logs', {
-                eventType: payload.eventType ?? 'INSERT',
-                new: (payload.new ?? {}) as Record<string, unknown>,
-                old: (payload.old ?? {}) as Record<string, unknown>,
-              });
-            },
-          );
-        });
+        console.warn('[listener:after]', table);
       }
     };
 
