@@ -22,7 +22,8 @@ if (import.meta.env.DEV) {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  // TEMP: StrictMode desactivado — diagnóstico realtime (doble mount cancela effect)
+  // <React.StrictMode>
+  <App />,
+  // </React.StrictMode>,
 )

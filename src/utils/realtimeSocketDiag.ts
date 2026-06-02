@@ -83,50 +83,80 @@ function invokeConnect(): void {
   }
 }
 
-/** setAuth → connect → esperar open. */
+function rtSocketStep(tag: string, extra?: Record<string, unknown>): void {
+  console.warn(tag, { ...getRealtimeSocketDiag(), ...extra });
+}
+
+/** getSession → connect → esperar open (setAuth manual omitido — validación). */
 export async function ensureRealtimeSocketReady(): Promise<RealtimeSocketReadyResult> {
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token ?? null;
+  try {
+    rtSocketStep('[realtime:socket:enter]');
 
-  logRealtimeSocket('before_connect', {
-    hasSession: Boolean(sessionData.session),
-    sessionUserId: sessionData.session?.user?.id ?? null,
-    sessionError: sessionErr?.message ?? null,
-    tokenPresent: Boolean(token),
-  });
+    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token ?? null;
 
-  if (token) {
-    await supabase.realtime.setAuth(token);
-  } else {
-    await supabase.realtime.setAuth();
+    rtSocketStep('[realtime:socket:after_session]', {
+      hasSession: Boolean(sessionData.session),
+      sessionUserId: sessionData.session?.user?.id ?? null,
+      sessionError: sessionErr?.message ?? null,
+      tokenPresent: Boolean(token),
+    });
+
+    try {
+      console.warn('[realtime:socket:set_auth:skipped_plain]');
+      console.log('RT_STEP_1');
+    } catch (e) {
+      console.error('[RT_AFTER_SKIP_FAIL]', e, e instanceof Error ? e.stack : undefined);
+    }
+
+    console.log('RT_STEP_2');
+
+    console.warn('[realtime:socket:before_connect]');
+
+    try {
+      supabase.realtime.connect();
+      console.warn('[realtime:socket:after_connect_call]');
+    } catch (e) {
+      console.error('[RT_CONNECT_FAIL]', e, e instanceof Error ? e.stack : undefined);
+    }
+
+    console.log('RT_STEP_3');
+
+    console.warn('[realtime:socket:before_wait]');
+
+    const waitResult = await waitForRealtimeSocketOpen();
+
+    console.warn('[realtime:socket:after_wait]', waitResult);
+
+    const socketStateFinal =
+      typeof supabase.realtime.connectionState === 'function'
+        ? String(supabase.realtime.connectionState())
+        : null;
+
+    const result: RealtimeSocketReadyResult = {
+      hasSession: Boolean(sessionData.session),
+      sessionUserId: sessionData.session?.user?.id ?? null,
+      socketOpen: waitResult.opened,
+      socketState: socketStateFinal,
+    };
+
+    if (!waitResult.opened) {
+      console.error('[realtime:socket:timeout]', {
+        ...result,
+        waitReason: waitResult.reason ?? null,
+        waitedMs: waitResult.waitedMs,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error(
+      '[realtime:socket:fatal]',
+      error,
+      error instanceof Error ? error.stack : undefined,
+    );
+    throw error;
   }
-
-  if (!supabase.realtime.isConnected()) {
-    invokeConnect();
-  }
-
-  const wait = await waitForRealtimeSocketOpen({ timeoutMs: 8000 });
-
-  logRealtimeSocket('after-connect', {
-    hasSession: Boolean(sessionData.session),
-    sessionUserId: sessionData.session?.user?.id ?? null,
-    tokenPresent: Boolean(token),
-    socketOpen: wait.opened,
-    waitReason: wait.reason ?? null,
-    waitedMs: wait.waitedMs,
-  });
-
-  const socketState =
-    typeof supabase.realtime.connectionState === 'function'
-      ? String(supabase.realtime.connectionState())
-      : null;
-
-  return {
-    hasSession: Boolean(sessionData.session),
-    sessionUserId: sessionData.session?.user?.id ?? null,
-    socketOpen: wait.opened,
-    socketState,
-  };
 }
 
 /** Desconectar, limpiar canales, re-autenticar y reconectar. */

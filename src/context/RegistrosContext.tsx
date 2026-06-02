@@ -222,14 +222,15 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     [permissionUser, registros.gastos],
   );
 
-  const empresaRealtimeId = useMemo(
+  const stableEmpresaId = useMemo(
     () => resolveEmpresaRealtimeId(profile?.empresa_id),
     [profile?.empresa_id],
   );
 
   const profileLoaded = !authLoading && profile != null;
+  const realtimeUserId = profile?.id ?? user?.id ?? null;
   const realtimeEnabled =
-    !authLoading && profileLoaded && isAuthenticated && Boolean(empresaRealtimeId);
+    !authLoading && profileLoaded && isAuthenticated && Boolean(stableEmpresaId);
 
   useEffect(() => {
     logRealtimeBoot({
@@ -238,7 +239,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       profileLoaded,
       authLoading,
       profileEmpresaId: profile?.empresa_id ?? null,
-      empresaRealtimeId,
+      empresaRealtimeId: stableEmpresaId,
       enabled: realtimeEnabled,
       role: profile?.role ?? role ?? null,
       userId: profile?.id ?? user?.id ?? null,
@@ -248,7 +249,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
     isAuthenticated,
     authLoading,
     profileLoaded,
-    empresaRealtimeId,
+    stableEmpresaId,
     profile?.empresa_id,
     profile?.role,
     profile?.id,
@@ -340,7 +341,8 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const { connected: registrosRealtimeConnected } = useEmpresaRegistrosRealtime({
     enabled: realtimeEnabled,
-    empresaId: empresaRealtimeId,
+    empresaId: stableEmpresaId,
+    userId: realtimeUserId,
     permissionUser,
     handlers: realtimeHandlers,
     onRemoteActivity: handleRemoteRegistrosActivity,
