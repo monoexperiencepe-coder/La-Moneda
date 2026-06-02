@@ -47,6 +47,10 @@ import {
   type PermissionUser,
 } from '../utils/permissions';
 import {
+  mountRealtimeDebugUnfilteredChannel,
+  unmountRealtimeDebugUnfilteredChannel,
+} from '../utils/realtimeDebugUnfilteredChannel';
+import {
   ensureRealtimeSocketReady,
   getRealtimeSocketDiag,
   logRealtimeSocket,
@@ -275,6 +279,7 @@ export function useEmpresaRegistrosRealtime({
     let subscribed = false;
     let retryCount = 0;
     let activeChannel: RealtimeChannel | null = null;
+    let debugUnfilteredChannel: RealtimeChannel | null = null;
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -593,6 +598,13 @@ export function useEmpresaRegistrosRealtime({
 
       subscribeActiveChannel(channel);
 
+      debugUnfilteredChannel = mountRealtimeDebugUnfilteredChannel({
+        adminEmpresaId: empresaId,
+        adminUserId: bootMeta?.userId ?? null,
+        adminRole: bootMeta?.role ?? permissionUserRef.current?.role ?? null,
+        filteredChannel: channelName,
+      });
+
       logRealtimeSubscribeDone({
         channel: channelName,
         empresaId,
@@ -666,6 +678,8 @@ export function useEmpresaRegistrosRealtime({
         });
         void supabase.removeChannel(ch);
       }
+      void unmountRealtimeDebugUnfilteredChannel(debugUnfilteredChannel);
+      debugUnfilteredChannel = null;
       activeChannel = null;
       channelRef.current = null;
     };
