@@ -50,6 +50,7 @@ import {
   ensureRealtimeSocketReady,
   getRealtimeSocketDiag,
   logRealtimeSocket,
+  reconnectRealtimeSocket,
 } from '../utils/realtimeSocketDiag';
 import {
   isRealtimeDebugEnv,
@@ -310,27 +311,6 @@ export function useEmpresaRegistrosRealtime({
       }
     };
 
-    const scheduleSubscribeRetry = (reason: string) => {
-      if (cancelled || retryCount >= 3 || !activeChannel) return;
-      retryCount += 1;
-      const delayMs = 1500 * retryCount;
-      console.warn('[realtime:retry:scheduled]', {
-        reason,
-        retryCount,
-        delayMs,
-        channel: channelName,
-        ...getRealtimeSocketDiag(),
-      });
-      retryTimer = setTimeout(() => {
-        if (cancelled || !activeChannel) return;
-        console.warn('[realtime:retry]', { retryCount, reason, channel: channelName });
-        if (!supabase.realtime.isConnected()) {
-          supabase.realtime.connect();
-        }
-        activeChannel.subscribe(emitSubscribeStatus);
-      }, delayMs);
-    };
-
     const handleRemoteDbChange = createRemoteDbChangeHandler(
       {
         reloadGastosOnly: () => Promise.resolve(handlersRef.current.reloadGastosOnly()),
@@ -468,112 +448,178 @@ export function useEmpresaRegistrosRealtime({
       }
     };
 
-    realtimeRegistry.register(channelName);
-
-    let channel = supabase.channel(channelName);
-
-    for (const table of EMPRESA_TABLES) {
-      realtimeLogSubscribe({ channel: channelName, table, empresaId });
-      channel = channel.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table, filter: empresaFilter },
-        (payload) => {
-          const rawType = payload.eventType ?? (payload as { event?: string }).event ?? '';
-          logRealtimeRawPayload({
-            table,
-            rawEventType: rawType,
-            hasNew: Boolean(payload.new && Object.keys(payload.new).length),
-            hasOld: Boolean(payload.old && Object.keys(payload.old).length),
-            rowEmpresaId:
-              (payload.new as Record<string, unknown> | undefined)?.empresa_id ??
-              (payload.old as Record<string, unknown> | undefined)?.empresa_id ??
-              null,
-          });
-
-          const parsed = parsePayload(payload);
-          if (!parsed) {
-            logRealtimeParseMiss({ table, rawEventType: rawType, payload });
-            return;
-          }
-
-          const rowId = idFromRow(
-            parsed.new ?? parsed.old,
-            table === 'gastos' || table === 'ingresos' || table === 'conductores' || table === 'unidades'
-              ? false
-              : true,
-          );
-
-          handleRemoteDbChange({
-            table,
-            event: parsed.eventType,
-            payload: parsed,
-            rowId,
-          });
-
-          applyIncremental(table, parsed);
-          scheduleBatch.current();
-        },
-      );
-    }
-
-    if (canViewFinancialAuditLogs(permissionUserRef.current)) {
-      realtimeLogSubscribe({
+    const scheduleSubscribeRetry = (reason: string) => {
+      if (cancelled || retryCount >= 3 || !activeChannel) return;
+      retryCount += 1;
+      const delayMs = 1500 * retryCount;
+      console.warn('[realtime:retry:scheduled]', {
+        reason,
+        retryCount,
+        delayMs,
         channel: channelName,
-        table: 'financial_audit_logs',
-        empresaId,
+        ...getRealtimeSocketDiag(),
       });
-      channel = channel.on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'financial_audit_logs',
-          filter: empresaFilter,
-        },
-        (payload) => {
-          const parsed = parsePayload(payload);
-          if (!parsed) return;
-          handleRemoteDbChange({
-            table: 'financial_audit_logs',
-            event: 'INSERT',
-            payload: parsed,
-            rowId: idFromRow(parsed.new, true),
-          });
-          scheduleBatch.current();
-        },
-      );
-    }
+      retryTimer = setTimeout(() => {
+        void (async () => {
+          if (cancelled || !activeChannel) return;
+          console.warn('[realtime:retry]', { retryCount, reason, channel: channelName });
+          if (!supabase.realtime.isConnected()) {
+            const reopened = await reconnectRealtimeSocket(`retry_${reason}`);
+            if (!reopened || cancelled) return;
+          }
+          activeChannel.subscribe(emitSubscribeStatus);
+        })();
+      }, delayMs);
+    };
 
-    logRealtimeSubscribeDone({
-      channel: channelName,
-      empresaId,
-      listeners:
-        EMPRESA_TABLES.length +
-        (canViewFinancialAuditLogs(permissionUserRef.current) ? 1 : 0),
-    });
+    const buildEmpresaChannel = (): RealtimeChannel => {
+      let ch = supabase.channel(channelName);
+
+      for (const table of EMPRESA_TABLES) {
+        realtimeLogSubscribe({ channel: channelName, table, empresaId });
+        ch = ch.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table, filter: empresaFilter },
+          (payload) => {
+            const rawType = payload.eventType ?? (payload as { event?: string }).event ?? '';
+            logRealtimeRawPayload({
+              table,
+              rawEventType: rawType,
+              hasNew: Boolean(payload.new && Object.keys(payload.new).length),
+              hasOld: Boolean(payload.old && Object.keys(payload.old).length),
+              rowEmpresaId:
+                (payload.new as Record<string, unknown> | undefined)?.empresa_id ??
+                (payload.old as Record<string, unknown> | undefined)?.empresa_id ??
+                null,
+            });
+
+            const parsed = parsePayload(payload);
+            if (!parsed) {
+              logRealtimeParseMiss({ table, rawEventType: rawType, payload });
+              return;
+            }
+
+            const rowId = idFromRow(
+              parsed.new ?? parsed.old,
+              table === 'gastos' || table === 'ingresos' || table === 'conductores' || table === 'unidades'
+                ? false
+                : true,
+            );
+
+            handleRemoteDbChange({
+              table,
+              event: parsed.eventType,
+              payload: parsed,
+              rowId,
+            });
+
+            applyIncremental(table, parsed);
+            scheduleBatch.current();
+          },
+        );
+      }
+
+      if (canViewFinancialAuditLogs(permissionUserRef.current)) {
+        realtimeLogSubscribe({
+          channel: channelName,
+          table: 'financial_audit_logs',
+          empresaId,
+        });
+        ch = ch.on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'financial_audit_logs',
+            filter: empresaFilter,
+          },
+          (payload) => {
+            const parsed = parsePayload(payload);
+            if (!parsed) return;
+            handleRemoteDbChange({
+              table: 'financial_audit_logs',
+              event: 'INSERT',
+              payload: parsed,
+              rowId: idFromRow(parsed.new, true),
+            });
+            scheduleBatch.current();
+          },
+        );
+      }
+
+      return ch;
+    };
+
+    const subscribeActiveChannel = (ch: RealtimeChannel) => {
+      activeChannel = ch;
+      channelRef.current = ch;
+      ch.subscribe((status, err) => {
+        emitSubscribeStatus(status, err);
+        if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+          scheduleSubscribeRetry(status);
+        }
+      });
+    };
 
     void (async () => {
-      const sessionInfo = await ensureRealtimeSocketReady();
+      let socketInfo = await ensureRealtimeSocketReady();
       if (cancelled) return;
+
+      if (!socketInfo.socketOpen) {
+        const reopened = await reconnectRealtimeSocket('initial_socket_closed');
+        if (cancelled) return;
+        socketInfo = { ...socketInfo, socketOpen: reopened, socketState: reopened ? 'open' : 'closed' };
+      }
 
       logRealtimeSubscribeStart({
         channel: channelName,
         empresaId,
         filter: empresaFilter,
         tables: [...EMPRESA_TABLES],
-        hasSession: sessionInfo.hasSession,
-        sessionUserId: sessionInfo.sessionUserId,
+        hasSession: socketInfo.hasSession,
+        sessionUserId: socketInfo.sessionUserId,
+        socketOpen: socketInfo.socketOpen,
         ...getRealtimeSocketDiag(),
       });
 
-      activeChannel = channel;
-      channelRef.current = channel;
-      channel.subscribe((status, err) => {
-        emitSubscribeStatus(status, err);
-        if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-          scheduleSubscribeRetry(status);
-        }
+      if (cancelled) return;
+
+      realtimeRegistry.register(channelName);
+      const channel = buildEmpresaChannel();
+      if (cancelled) {
+        void supabase.removeChannel(channel);
+        return;
+      }
+
+      subscribeActiveChannel(channel);
+
+      logRealtimeSubscribeDone({
+        channel: channelName,
+        empresaId,
+        listeners:
+          EMPRESA_TABLES.length +
+          (canViewFinancialAuditLogs(permissionUserRef.current) ? 1 : 0),
+        ...getRealtimeSocketDiag(),
       });
+
+      setTimeout(() => {
+        void (async () => {
+          if (cancelled || subscribed) return;
+          if (supabase.realtime.isConnected()) return;
+
+          console.warn('[realtime:watchdog:3s] socket sigue closed — reconnect + nuevo canal');
+          const reopened = await reconnectRealtimeSocket('watchdog_3s');
+          if (cancelled || !reopened) return;
+
+          if (activeChannel) {
+            await supabase.removeChannel(activeChannel);
+          }
+          if (cancelled) return;
+
+          const freshChannel = buildEmpresaChannel();
+          subscribeActiveChannel(freshChannel);
+        })();
+      }, 3000);
 
       watchdogTimer = setTimeout(() => {
         if (cancelled) return;
@@ -590,11 +636,14 @@ export function useEmpresaRegistrosRealtime({
         console.warn('[realtime:watchdog:json]', JSON.stringify(watchdogPayload, null, 2));
 
         if (!subscribed) {
-          if (!supabase.realtime.isConnected()) {
-            console.warn('[realtime:watchdog] socket desconectado — forzando connect()');
-            supabase.realtime.connect();
-          }
-          scheduleSubscribeRetry('watchdog_not_subscribed');
+          void (async () => {
+            if (cancelled) return;
+            if (!supabase.realtime.isConnected()) {
+              await reconnectRealtimeSocket('watchdog_5s');
+            }
+            if (cancelled || !activeChannel) return;
+            scheduleSubscribeRetry('watchdog_not_subscribed');
+          })();
         }
       }, 5000);
     })();

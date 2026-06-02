@@ -10,4 +10,13 @@ if (!url || !anonKey) {
 }
 
 /** Cliente público (anon). No usar service_role en el frontend. */
-export const supabase = createClient(url, anonKey);
+export const supabase = createClient(url, anonKey, {
+  realtime: {
+    logger:
+      import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === '1'
+        ? (kind: string, msg: string, data?: unknown) => {
+            console.info('[realtime:transport]', { kind, msg, data });
+          }
+        : undefined,
+  },
+});
