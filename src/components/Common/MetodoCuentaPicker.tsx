@@ -99,9 +99,10 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
       {cuentas.length > 0 && (
         <div>
           <p className="label mb-2">
-            Cuenta {metodoPago === 'Yape' && <span className="text-gray-400 font-normal">(10)</span>}
-            {metodoPago === 'Plin' && <span className="text-gray-400 font-normal">(8)</span>}
-            {metodoPago === 'Transferencia' && <span className="text-gray-400 font-normal">(5)</span>}
+            Cuenta{' '}
+            {cuentas.length > 0 && (
+              <span className="text-gray-400 font-normal">({cuentas.length})</span>
+            )}
           </p>
           <div className="max-h-44 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50/80 p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {cuentas.map(row => {

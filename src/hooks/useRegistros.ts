@@ -252,6 +252,12 @@ export const useRegistros = () => {
   gastosAuditRef.current = gastos;
   const ingresosAuditRef = useRef(ingresos);
   ingresosAuditRef.current = ingresos;
+  const cajaNegocioAuditRef = useRef(cajaNegocioVehiculo);
+  cajaNegocioAuditRef.current = cajaNegocioVehiculo;
+  const gastosCajaAuditRef = useRef(gastosCaja);
+  gastosCajaAuditRef.current = gastosCaja;
+  const descuentosAuditRef = useRef(descuentos);
+  descuentosAuditRef.current = descuentos;
   const permissionUserAuditRef = useRef<ReturnType<typeof permissionUserFromAuth> | null>(null);
   const { isAuthenticated, profile, user } = useAuth();
 
@@ -358,6 +364,17 @@ export const useRegistros = () => {
     const q = historyQueryRef.current;
     if (q) await loadControlFechasHistory(q.filters, q.page);
   }, [loadControlFechasHistory, profile?.empresa_id]);
+
+  const removeControlFechaLocal = useCallback((id: number) => {
+    setControlFechas((prev) => prev.filter((c) => c.id !== id));
+    setControlFechasHistory((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      if (next.length !== prev.length) {
+        setControlFechasHistoryTotal((t) => (t != null ? Math.max(0, t - 1) : t));
+      }
+      return next;
+    });
+  }, []);
 
   /** Bootstrap: recientes + tipos críticos completos (pendiente, globales). */
   const loadGastosBootstrap = useCallback(async (): Promise<Gasto[]> => {
@@ -1473,6 +1490,9 @@ export const useRegistros = () => {
         getKilometrajes: () => kilometrajesRef.current,
         getGastos: () => gastosAuditRef.current,
         getIngresos: () => ingresosAuditRef.current,
+        getCajaNegocioVehiculo: () => cajaNegocioAuditRef.current,
+        getGastosCaja: () => gastosCajaAuditRef.current,
+        getDescuentos: () => descuentosAuditRef.current,
         getPermissionUser: () => permissionUserAuditRef.current,
       });
     });
@@ -1555,6 +1575,7 @@ export const useRegistros = () => {
     removeInversionVehiculoLocal,
     upsertGastoCaja,
     removeGastoCajaLocal,
+    removeControlFechaLocal,
     upsertCajaNegocio,
     removeCajaNegocioLocal,
     refreshControlFechasViews,

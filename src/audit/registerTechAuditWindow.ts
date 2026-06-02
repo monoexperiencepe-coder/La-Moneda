@@ -1,4 +1,5 @@
 import type { TechAuditContext } from './techAuditDiagnostics';
+import { auditUtilidadVehiculos, type AuditUtilidadVehiculosInput } from './auditUtilidadVehiculos';
 import {
   auditConductores,
   auditKmQaFlow,
@@ -45,6 +46,7 @@ declare global {
     auditAdministrativosSubtipos: () => void;
     auditOperativosSubtipos: () => void;
     auditAmountPermissions: () => ReturnType<typeof auditAmountPermissions>;
+    auditUtilidadVehiculos: () => ReturnType<typeof auditUtilidadVehiculos>;
   }
 }
 
@@ -79,9 +81,21 @@ export function registerTechAuditWindow(ctx: TechAuditContext): void {
     return result;
   };
 
+  window.auditUtilidadVehiculos = () => {
+    const payload: AuditUtilidadVehiculosInput = {
+      vehicles: ctx.getVehicles(),
+      ingresos: ctx.getIngresos?.() ?? [],
+      gastos: ctx.getGastos(),
+      cajaNegocioVehiculo: ctx.getCajaNegocioVehiculo?.() ?? [],
+      gastosCaja: ctx.getGastosCaja?.() ?? [],
+      descuentos: ctx.getDescuentos?.() ?? [],
+    };
+    return auditUtilidadVehiculos(payload);
+  };
+
   registerDataQualityWindow({ getGastos: ctx.getGastos });
 
   console.info(
-    '[tech-audit] DEV: runTechAudit() | auditSubtipoFactFull() | auditFinancierosSubtipos() | auditAdministrativosSubtipos() | auditOperativosSubtipos() | auditSubtipoFactMap() | auditSubtipoFactData() | auditDataQualitySubtipos()',
+    '[tech-audit] DEV: runTechAudit() | auditUtilidadVehiculos() | auditSubtipoFactFull() | auditFinancierosSubtipos() | …',
   );
 }

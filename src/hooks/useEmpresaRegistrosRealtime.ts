@@ -100,6 +100,7 @@ export type EmpresaRealtimeHandlers = {
   removeGastoCajaLocal: (id: number) => void;
   upsertCajaNegocio: (row: CajaNegocioVehiculo) => void;
   removeCajaNegocioLocal: (id: number) => void;
+  removeControlFechaLocal: (id: number) => void;
   refreshControlFechasViews: () => void | Promise<void>;
   reloadKilometrajesOnly: () => void | Promise<void>;
   reloadControlFechasLatest: () => void | Promise<void>;
@@ -472,6 +473,23 @@ export function useEmpresaRegistrosRealtime({
       }
     };
 
+    const refreshControlFechasAfterRemoteEvent = (reason: string) => {
+      const h = handlersRef.current;
+      console.warn('[realtime:control_fechas:refresh:start]', { reason });
+      void (async () => {
+        try {
+          await Promise.resolve(h.reloadControlFechasLatest());
+          await Promise.resolve(h.refreshControlFechasViews());
+          console.warn('[realtime:control_fechas:refresh:done]', { reason });
+        } catch (err) {
+          console.warn('[realtime:control_fechas:refresh:done]', {
+            reason,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })();
+    };
+
     const handleRemoteDbChange = createRemoteDbChangeHandler(
       {
         reloadGastosOnly: () => Promise.resolve(handlersRef.current.reloadGastosOnly()),
@@ -531,8 +549,16 @@ export function useEmpresaRegistrosRealtime({
           if (parsed.new) h.mergeKilometraje(mapKilometrajeRow(parsed.new));
           return;
         }
-        case 'control_fechas':
+        case 'control_fechas': {
+          if (eventType === 'DELETE') {
+            const id = idFromRow(parsed.old, true);
+            console.warn('[realtime:control_fechas:delete:local]', { id, old: parsed.old });
+            if (typeof id === 'number') {
+              h.removeControlFechaLocal(id);
+            }
+          }
           return;
+        }
         case 'conductores': {
           if (eventType === 'DELETE') {
             const id = idFromRow(parsed.old, false);
@@ -686,6 +712,10 @@ export function useEmpresaRegistrosRealtime({
         applyIncremental(table as (typeof EMPRESA_TABLES)[number], parsed);
       }
 
+      if (table === 'control_fechas') {
+        refreshControlFechasAfterRemoteEvent('postgres_payload');
+      }
+
       handleRemoteDbChange({
         table: table as RemoteDbTable,
         event: parsed.eventType,
@@ -712,24 +742,54 @@ export function useEmpresaRegistrosRealtime({
             if (table === 'gastos' && payload.eventType === 'DELETE') {
               console.warn('[fallback:gastos:delete:old]', payload.old);
             }
-            console.warn(`[fallback:${table}:any]`, payload);
-            console.warn(
-              `[fallback:${table}:json]`,
-              JSON.stringify(
-                {
-                  eventType: payload.eventType,
-                  newEmpresaId: (payload.new as Record<string, unknown> | undefined)
-                    ?.empresa_id,
-                  oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
-                    ?.empresa_id,
-                  id:
-                    (payload.new as Record<string, unknown> | undefined)?.id ??
-                    (payload.old as Record<string, unknown> | undefined)?.id,
-                },
-                null,
-                2,
-              ),
-            );
+            if (table === 'control_fechas') {
+              console.warn('[fallback:control_fechas:any]', payload);
+              console.warn(
+                '[fallback:control_fechas:json]',
+                JSON.stringify(
+                  {
+                    eventType: payload.eventType,
+                    newEmpresaId: (payload.new as Record<string, unknown> | undefined)
+                      ?.empresa_id,
+                    oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
+                      ?.empresa_id,
+                    id:
+                      (payload.new as Record<string, unknown> | undefined)?.id ??
+                      (payload.old as Record<string, unknown> | undefined)?.id,
+                    vehicleId:
+                      (payload.new as Record<string, unknown> | undefined)?.vehicle_id ??
+                      (payload.old as Record<string, unknown> | undefined)?.vehicle_id,
+                    tipo:
+                      (payload.new as Record<string, unknown> | undefined)?.tipo ??
+                      (payload.old as Record<string, unknown> | undefined)?.tipo,
+                  },
+                  null,
+                  2,
+                ),
+              );
+              if (payload.eventType === 'DELETE') {
+                console.warn('[fallback:control_fechas:delete:old]', payload.old);
+              }
+            } else {
+              console.warn(`[fallback:${table}:any]`, payload);
+              console.warn(
+                `[fallback:${table}:json]`,
+                JSON.stringify(
+                  {
+                    eventType: payload.eventType,
+                    newEmpresaId: (payload.new as Record<string, unknown> | undefined)
+                      ?.empresa_id,
+                    oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
+                      ?.empresa_id,
+                    id:
+                      (payload.new as Record<string, unknown> | undefined)?.id ??
+                      (payload.old as Record<string, unknown> | undefined)?.id,
+                  },
+                  null,
+                  2,
+                ),
+              );
+            }
 
             processPostgresPayload(table, {
               eventType: payload.eventType,

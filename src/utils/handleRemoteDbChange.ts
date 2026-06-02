@@ -66,7 +66,10 @@ export function createRemoteDbChangeHandler(
       } else if (table === 'kilometrajes') {
         await handlers.reloadKilometrajesOnly();
       } else if (table === 'control_fechas') {
+        console.warn('[realtime:control_fechas:refresh:start]', { reason });
         await handlers.reloadControlFechasLatest();
+        await handlers.refreshControlFechasViews?.();
+        console.warn('[realtime:control_fechas:refresh:done]', { reason });
       } else if (table === 'financial_audit_logs') {
         handlers.onAuditLogsRemote();
       }

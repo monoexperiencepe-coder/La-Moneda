@@ -252,6 +252,9 @@ export type TechAuditContext = {
   getKilometrajes: () => KilometrajeRegistro[];
   getGastos: () => Gasto[];
   getIngresos?: () => Ingreso[];
+  getCajaNegocioVehiculo?: () => import('../data/types').CajaNegocioVehiculo[];
+  getGastosCaja?: () => import('../data/types').GastoCaja[];
+  getDescuentos?: () => import('../data/types').Descuento[];
   getPermissionUser: () => PermissionUser | null;
 };
 
