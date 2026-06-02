@@ -192,6 +192,9 @@ function rejectManualEmpresaMismatch(
   const rowEmpresaId = String(
     payload.new?.empresa_id ?? payload.old?.empresa_id ?? '',
   ).trim();
+  if (eventType === 'DELETE' && !rowEmpresaId) {
+    return false;
+  }
   if (rowEmpresaId !== subscriptionEmpresaId) {
     if (rowEmpresaId) {
       realtimeLogEmpresaMismatch({
@@ -400,7 +403,7 @@ export function useEmpresaRegistrosRealtime({
     let subscribed = false;
     let retryCount = 0;
     let activeChannel: RealtimeChannel | null = null;
-    let debugIngresosChannel: RealtimeChannel | null = null;
+    const fallbackChannels: RealtimeChannel[] = [];
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -688,6 +691,55 @@ export function useEmpresaRegistrosRealtime({
       scheduleBatch.current();
     };
 
+    const mountTableFallbackChannel = (
+      table: 'ingresos' | 'gastos' | 'kilometrajes' | 'control_fechas',
+    ) => {
+      const channel = supabase
+        .channel(`fallback-${table}-${empresaId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table,
+          },
+          (payload) => {
+            console.warn(`[fallback:${table}:any]`, payload);
+            console.warn(
+              `[fallback:${table}:json]`,
+              JSON.stringify(
+                {
+                  eventType: payload.eventType,
+                  newEmpresaId: (payload.new as Record<string, unknown> | undefined)
+                    ?.empresa_id,
+                  oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
+                    ?.empresa_id,
+                  id:
+                    (payload.new as Record<string, unknown> | undefined)?.id ??
+                    (payload.old as Record<string, unknown> | undefined)?.id,
+                },
+                null,
+                2,
+              ),
+            );
+
+            processPostgresPayload(table, {
+              eventType: payload.eventType,
+              event: (payload as { event?: string }).event,
+              new: (payload.new ?? {}) as Record<string, unknown>,
+              old: (payload.old ?? {}) as Record<string, unknown>,
+            });
+
+            scheduleBatch.current();
+          },
+        )
+        .subscribe((status, err) => {
+          console.warn(`[fallback:${table}:status]`, status, err ?? null);
+        });
+
+      return channel;
+    };
+
     const buildEmpresaChannel = (): RealtimeChannel => {
 
       console.warn('[channel:minimal:start]');
@@ -895,47 +947,13 @@ export function useEmpresaRegistrosRealtime({
 
         subscribeActiveChannel(channel);
 
-        if (import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === '1') {
-          debugIngresosChannel = supabase
-            .channel('debug-ingresos-publication')
-            .on(
-              'postgres_changes',
-              {
-                event: '*',
-                schema: 'public',
-                table: 'ingresos',
-              },
-              (payload) => {
-                console.warn('[debug:ingresos:any]', payload);
-                console.warn(
-                  '[debug:ingresos:any:json]',
-                  JSON.stringify(
-                    {
-                      eventType: payload.eventType,
-                      newEmpresaId: (payload.new as Record<string, unknown> | undefined)
-                        ?.empresa_id,
-                      oldEmpresaId: (payload.old as Record<string, unknown> | undefined)
-                        ?.empresa_id,
-                      id:
-                        (payload.new as Record<string, unknown> | undefined)?.id ??
-                        (payload.old as Record<string, unknown> | undefined)?.id,
-                    },
-                    null,
-                    2,
-                  ),
-                );
-                processPostgresPayload('ingresos', {
-                  eventType: payload.eventType,
-                  event: (payload as { event?: string }).event,
-                  new: (payload.new ?? {}) as Record<string, unknown>,
-                  old: (payload.old ?? {}) as Record<string, unknown>,
-                });
-                scheduleBatch.current();
-              },
-            )
-            .subscribe((status, err) => {
-              console.warn('[debug:ingresos:status]', status, err ?? null);
-            });
+        for (const table of [
+          'ingresos',
+          'gastos',
+          'kilometrajes',
+          'control_fechas',
+        ] as const) {
+          fallbackChannels.push(mountTableFallbackChannel(table));
         }
 
         logRealtimeSubscribeDone({
@@ -1057,10 +1075,10 @@ export function useEmpresaRegistrosRealtime({
       }
       activeChannel = null;
       channelRef.current = null;
-      if (debugIngresosChannel) {
-        void supabase.removeChannel(debugIngresosChannel);
-        debugIngresosChannel = null;
+      for (const ch of fallbackChannels) {
+        void supabase.removeChannel(ch);
       }
+      fallbackChannels.length = 0;
     };
 
     return () => {
