@@ -14,6 +14,33 @@ function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   return id || null;
 }
 
+/** Filas únicas por id (evita doble conteo). */
+export function dedupeConductoresById(conductores: readonly Conductor[]): Conductor[] {
+  const seen = new Set<string>();
+  const out: Conductor[] = [];
+  for (const c of conductores) {
+    const key = String(c.id ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
+export async function countConductoresRows(tenantEmpresaId?: string | null): Promise<number> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return 0;
+  const { count, error } = await supabase
+    .from('conductores')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', empresaId);
+  if (error) {
+    console.error('[conductores count]', error.message, error);
+    return 0;
+  }
+  return count ?? 0;
+}
+
 /** @param tenantEmpresaId Preferir `profile.empresa_id` (RLS). `EMPRESA_ID` solo filtro cliente legacy. */
 export async function fetchConductores(tenantEmpresaId?: string | null): Promise<Conductor[]> {
   const empresaId = resolveTenantId(tenantEmpresaId);
@@ -29,7 +56,7 @@ export async function fetchConductores(tenantEmpresaId?: string | null): Promise
   }
   const rows = (data ?? []).map((r) => mapConductorRow(r as Record<string, unknown>));
   logConductorIdDiagnostics(rows);
-  return rows;
+  return dedupeConductoresById(rows);
 }
 
 export async function insertConductor(

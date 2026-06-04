@@ -8,6 +8,7 @@ import { RegistrosProvider, useRegistrosContext } from './context/RegistrosConte
 import { UndoManagerProvider } from './context/UndoManagerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import SectionGuard from './components/Common/SectionGuard';
+import CopilotAuditBootstrap from './modules/copilot/CopilotAuditBootstrap';
 
 // Auth
 const Login = lazy(() => import('./pages/Auth/Login'));
@@ -46,6 +47,7 @@ const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const AIPage = lazy(() => import('./pages/AIPage'));
 const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
+const CopilotDebug = lazy(() => import('./pages/Admin/CopilotDebug'));
 const SubtipoConciliacion = lazy(() => import('./pages/Admin/SubtipoConciliacion'));
 
 /** Spinner mientras se verifica la sesión de Supabase. */
@@ -77,8 +79,9 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 /** Solo accesible para admin. */
 const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAdmin } = useAuth();
-  if (!isAdmin) return <Navigate to="/" replace />;
+  const { isAdmin, isLoading, isAuthenticated } = useAuth();
+  if (isLoading) return <RoutePageSkeleton />;
+  if (!isAuthenticated || !isAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
@@ -183,6 +186,14 @@ const AppContent: React.FC = () => {
                           path="/admin/conciliacion-subtipos"
                           element={<SubtipoConciliacion />}
                         />
+                        <Route
+                          path="/copilot-debug"
+                          element={
+                            <AdminOnly>
+                              <CopilotDebug />
+                            </AdminOnly>
+                          }
+                        />
 
                         {/* Catch all */}
                         <Route path="*" element={<Navigate to="/" replace />} />
@@ -209,6 +220,7 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
+      <CopilotAuditBootstrap />
       <UndoManagerProvider>
         <RegistrosProvider>
           <AppContent />

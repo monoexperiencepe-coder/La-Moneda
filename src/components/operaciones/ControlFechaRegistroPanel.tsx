@@ -34,12 +34,15 @@ export interface ControlFechaRegistroPanelProps {
   historialSearchMode?: 'default' | 'documentacion';
   /** En módulo Documentación: formulario de registro visible al cargar. */
   formExpandedDefault?: boolean;
+  /** Permite separar registro (arriba) e historial (abajo) en Documentación. */
+  layoutSection?: 'both' | 'registro-only' | 'historial-only';
 }
 
 const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   prefilledVehicleId = null,
   historialSearchMode = 'default',
   formExpandedDefault = false,
+  layoutSection = 'both',
 }) => {
   const {
     vehicles,
@@ -341,9 +344,13 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   );
 
   const histTipoOpts = [{ value: '', label: 'Todos los tipos' }, ...TIPOS_CONTROL_FECHA_OPTIONS];
+  const showRegistro = layoutSection === 'both' || layoutSection === 'registro-only';
+  const showHistorial = layoutSection === 'both' || layoutSection === 'historial-only';
 
   return (
     <div className="space-y-3">
+      {showRegistro ? (
+      <>
       <button
         type="button"
         onClick={() => setOpenRegistroCard((v) => !v)}
@@ -377,7 +384,10 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
           </div>
         </Card>
       )}
+      </>
+      ) : null}
 
+      {showHistorial ? (
       <Card>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -657,6 +667,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
         ) : null}
         </div>
       </Card>
+      ) : null}
       <EditarControlFechaModal
         record={editingControl}
         isOpen={editingControl != null}

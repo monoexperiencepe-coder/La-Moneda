@@ -17,6 +17,7 @@ export type ConductorEditDraft = {
   direccion: string;
   numeroEmergencia: string;
   fechaVencimientoContrato: string;
+  fechaInicioContrato: string;
   documentoFirmado: 'unset' | 'true' | 'false';
   comentarios: string;
   estado: 'VIGENTE' | 'SUSPENDIDO';
@@ -36,6 +37,7 @@ export function conductorToDraft(c: Conductor): ConductorEditDraft {
     cochera: conductorFieldForEdit(c.cochera),
     direccion: conductorFieldForEdit(c.direccion),
     numeroEmergencia: conductorFieldForEdit(c.numeroEmergencia),
+    fechaInicioContrato: conductorFieldForEdit(c.fechaInicioContrato),
     fechaVencimientoContrato: conductorFieldForEdit(c.fechaVencimientoContrato),
     documentoFirmado:
       c.documentoFirmado === true ? 'true' : c.documentoFirmado === false ? 'false' : 'unset',
@@ -84,6 +86,7 @@ export function draftToConductorPatch(
     cochera: sanitizeConductorFieldForSave(d.cochera),
     direccion: sanitizeConductorFieldForSave(d.direccion),
     numeroEmergencia: sanitizeConductorFieldForSave(d.numeroEmergencia),
+    fechaInicioContrato: sanitizeConductorFieldForSave(d.fechaInicioContrato),
     fechaVencimientoContrato: sanitizeConductorFieldForSave(d.fechaVencimientoContrato),
     documentoFirmado: docFirm,
     comentarios: sanitizeConductorFieldForSave(d.comentarios) ?? '',

@@ -13,19 +13,14 @@ import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
 import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha, CajaNegocioVehiculo } from '../../data/types';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import { UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
+import { useUtilidadRealVehiculo } from '../../hooks/useUtilidadRealCalculos';
 import {
   rollupInteligentePorVehiculoTodoPeriodo,
   computeFinancialFleetAlerts,
 } from '../../utils/financialFleetAnalytics';
 import type { FinancialKPIData } from '../../utils/calculations';
-
-const EMPTY_INTEL_KPI: FinancialKPIData = {
-  gastos_operativos: 0,
-  gastos_financieros: 0,
-  gastos_administrativos: 0,
-  utilidad_operativa: 0,
-  utilidad_neta_simple: 0,
-};
+import { useEnsureGastosFullForUtilidad } from '../../hooks/useEnsureGastosFullForUtilidad';
 import Badge from '../../components/Common/Badge';
 import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
@@ -34,6 +29,14 @@ import AsignarConductorModal from '../../components/vehiculos/AsignarConductorMo
 import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
 import { useAuth } from '../../context/AuthContext';
 import { canMutateVehiculos } from '../../utils/permissions';
+
+const EMPTY_INTEL_KPI: FinancialKPIData = {
+  gastos_operativos: 0,
+  gastos_financieros: 0,
+  gastos_administrativos: 0,
+  utilidad_operativa: 0,
+  utilidad_neta_simple: 0,
+};
 
 const DOC_TIPOS = DOC_MODULE_COLUMNS.map((c) => c.tipo);
 type DocPivot = Partial<Record<TipoControlFecha, string>>;
@@ -56,12 +59,19 @@ function parseTab(t: string | null): TabId {
 
 const VehiculoDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const vid = Number(id);
   const { formatGlobalAmount } = useAmountDisplay();
+  useEnsureGastosFullForUtilidad();
+  const {
+    ingresosTotal: utilidadIngresosTotal,
+    gastosTotal: utilidadGastosTotal,
+    utilidadReal,
+    gastosReadyForUtilidad,
+    isLoadingGastosFull,
+  } = useUtilidadRealVehiculo(vid, 'VehiculoDetalle');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseTab(searchParams.get('tab'));
-
-  const vid = Number(id);
   const { user } = useAuth();
   const canAssign = canMutateVehiculos(user);
   const [showAsignarConductor, setShowAsignarConductor] = useState(false);
@@ -118,11 +128,17 @@ const VehiculoDetalle: React.FC = () => {
     [vehicleInversiones],
   );
 
-  const totalIngresos = vehicleIngresos.reduce((s, i) => s + ingresoMontoPEN(i), 0);
+  const totalIngresos = gastosReadyForUtilidad
+    ? utilidadIngresosTotal
+    : vehicleIngresos.reduce((s, i) => s + ingresoMontoPEN(i), 0);
+  const totalGastosTodos = gastosReadyForUtilidad
+    ? utilidadGastosTotal
+    : vehicleGastos.reduce((s, g) => s + g.monto, 0);
   const totalGastosOperativos = vehicleGastosOperativos.reduce((s, g) => s + g.monto, 0);
   const totalCajaNegocio = vehicleCajaNegocio.reduce((s, c) => s + c.monto, 0);
   const totalDescuentos = vehicleDescuentos.reduce((s, d) => s + d.monto, 0);
-  const utilidad = totalIngresos - totalGastosOperativos + totalDescuentos;
+  const margenOperativo = totalIngresos - totalGastosOperativos + totalDescuentos;
+  const utilidadRealFormatted = gastosReadyForUtilidad ? formatGlobalAmount(utilidadReal) : '…';
 
   const rollupIntelVehiculo = useMemo(() => {
     if (!vehicle) return null;
@@ -245,6 +261,14 @@ const VehiculoDetalle: React.FC = () => {
         </div>
       </div>
 
+      {!gastosReadyForUtilidad ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-950">
+          {isLoadingGastosFull
+            ? 'Cargando histórico completo de gastos para utilidad real…'
+            : 'Preparando histórico completo de gastos…'}
+        </p>
+      ) : null}
+
       <div
         className="flex gap-1 overflow-x-auto pb-1 border-b border-gray-200 -mx-1 px-1"
         role="tablist"
@@ -275,20 +299,31 @@ const VehiculoDetalle: React.FC = () => {
                 <p className="text-lg font-bold text-emerald-900 tabular-nums">{formatGlobalAmount(totalIngresos)}</p>
               </div>
               <div className="rounded-xl border border-red-100 bg-red-50/80 p-4">
-                <p className="text-[11px] font-medium text-red-800">Gastos operativos</p>
-                <p className="text-lg font-bold text-red-900 tabular-nums">{formatGlobalAmount(totalGastosOperativos)}</p>
+                <p className="text-[11px] font-medium text-red-800">Gastos (total)</p>
+                <p className="text-lg font-bold text-red-900 tabular-nums">{formatGlobalAmount(totalGastosTodos)}</p>
+              </div>
+              <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-4" title={UTILIDAD_REAL_TOOLTIP}>
+                <p className="text-[11px] font-medium text-violet-800">Utilidad real</p>
+                <p
+                  className={`text-lg font-bold tabular-nums ${
+                    !gastosReadyForUtilidad ? 'text-slate-500' : utilidadReal >= 0 ? 'text-violet-900' : 'text-red-800'
+                  }`}
+                >
+                  {utilidadRealFormatted}
+                </p>
+                <p className="text-[10px] text-violet-700 mt-1">{UTILIDAD_REAL_TOOLTIP}</p>
               </div>
               <div className="rounded-xl border border-teal-100 bg-teal-50/80 p-4">
-                <p className="text-[11px] font-medium text-teal-900">Caja negocio / utilidad</p>
+                <p className="text-[11px] font-medium text-teal-900">Histórico importado (referencial)</p>
                 <p className="text-lg font-bold text-teal-950 tabular-nums">{formatGlobalAmount(totalCajaNegocio)}</p>
-                <p className="text-[10px] text-teal-800 mt-1">No suma a gastos ni a ingresos de arriendo</p>
+                <p className="text-[10px] text-teal-800 mt-1">Excel caja negocio · no es la utilidad principal</p>
               </div>
-              <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-4">
-                <p className="text-[11px] font-medium text-violet-800">Utilidad operativa</p>
-                <p className={`text-lg font-bold tabular-nums ${utilidad >= 0 ? 'text-violet-900' : 'text-red-800'}`}>
-                  {formatGlobalAmount(utilidad)}
+              <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-4">
+                <p className="text-[11px] font-medium text-amber-900">Margen operativo</p>
+                <p className={`text-lg font-bold tabular-nums ${margenOperativo >= 0 ? 'text-amber-950' : 'text-red-800'}`}>
+                  {formatGlobalAmount(margenOperativo)}
                 </p>
-                <p className="text-[10px] text-violet-700 mt-1">Ingresos − gastos operativos + rebajes</p>
+                <p className="text-[10px] text-amber-800 mt-1">Ingresos − gastos operativos + rebajes</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <p className="text-[11px] font-medium text-gray-600">Último registro</p>
@@ -415,22 +450,34 @@ const VehiculoDetalle: React.FC = () => {
 
         {tab === 'finanzas' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
               <div className="rounded-lg border p-3 bg-emerald-50/50 border-emerald-100">
                 <span className="text-gray-600">Ingresos</span>
                 <p className="font-bold text-emerald-800 tabular-nums">{formatGlobalAmount(totalIngresos)}</p>
               </div>
               <div className="rounded-lg border p-3 bg-red-50/50 border-red-100">
-                <span className="text-gray-600">Gastos operativos</span>
-                <p className="font-bold text-red-800 tabular-nums">{formatGlobalAmount(totalGastosOperativos)}</p>
+                <span className="text-gray-600">Gastos (total)</span>
+                <p className="font-bold text-red-800 tabular-nums">{formatGlobalAmount(totalGastosTodos)}</p>
+              </div>
+              <div className="rounded-lg border p-3 bg-violet-50/50 border-violet-100" title={UTILIDAD_REAL_TOOLTIP}>
+                <span className="text-gray-600">Utilidad real</span>
+                <p
+                  className={`font-bold tabular-nums ${
+                    !gastosReadyForUtilidad ? 'text-slate-500' : utilidadReal >= 0 ? 'text-violet-900' : 'text-red-700'
+                  }`}
+                >
+                  {utilidadRealFormatted}
+                </p>
               </div>
               <div className="rounded-lg border p-3 bg-teal-50/50 border-teal-100">
-                <span className="text-gray-600">Caja negocio</span>
+                <span className="text-gray-600">Histórico importado (referencial)</span>
                 <p className="font-bold text-teal-900 tabular-nums">{formatGlobalAmount(totalCajaNegocio)}</p>
               </div>
-              <div className="rounded-lg border p-3 bg-white border-gray-200">
-                <span className="text-gray-600">Utilidad operativa</span>
-                <p className={`font-bold tabular-nums ${utilidad >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatGlobalAmount(utilidad)}</p>
+              <div className="rounded-lg border p-3 bg-amber-50/50 border-amber-100">
+                <span className="text-gray-600">Margen operativo</span>
+                <p className={`font-bold tabular-nums ${margenOperativo >= 0 ? 'text-amber-950' : 'text-red-700'}`}>
+                  {formatGlobalAmount(margenOperativo)}
+                </p>
               </div>
             </div>
             <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
@@ -536,9 +583,9 @@ const VehiculoDetalle: React.FC = () => {
             </div>
             <div className="rounded-xl border border-teal-100 bg-teal-50/30 overflow-hidden">
               <div className="px-4 py-3 border-b border-teal-100 bg-teal-50/80">
-                <h3 className="text-sm font-bold text-teal-950">Caja negocio / utilidad registrada</h3>
+                <h3 className="text-sm font-bold text-teal-950">Histórico importado (referencial)</h3>
                 <p className="text-xs text-teal-900/85 mt-0.5">
-                  Movimientos separados de gastos operativos. No editar desde esta tabla (gestión vía base o script).
+                  Excel caja negocio por vehículo. No es la utilidad principal del sistema.
                 </p>
               </div>
               <div className="overflow-x-auto">

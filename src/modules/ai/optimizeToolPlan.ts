@@ -81,6 +81,40 @@ export function loadingLabelForTool(
       return 'Desglosando categorías…';
     case 'getVehiculosConMasGasto':
       return year ? `Comparando gastos por vehículo${yearSuffix}…` : 'Analizando gastos por vehículo…';
+    case 'getTopVehiculosUtilidad':
+      return 'Calculando ranking de utilidad por vehículo…';
+    case 'getConteoConductores':
+      return 'Consultando conductores…';
+    case 'getAlertasAutomaticas':
+      return 'Revisando alertas automáticas…';
+    case 'getDocumentosResumen':
+      return 'Consultando documentación…';
+    case 'getPendientesResumen':
+      return 'Consultando pendientes del equipo…';
+    case 'getDetalleAlertas':
+      return 'Listando detalle de alertas…';
+    case 'getUtilidadVehiculo':
+      return 'Calculando utilidad del vehículo…';
+    case 'getIngresosVehiculo':
+      return 'Consultando ingresos del vehículo…';
+    case 'getGastosVehiculo':
+      return 'Consultando gastos del vehículo…';
+    case 'getUtilidadVehiculoDetalle':
+      return 'Analizando utilidad del vehículo…';
+    case 'getGastosVehiculoDesglose':
+      return 'Desglosando gastos del vehículo…';
+    case 'getDocumentosPorRango':
+      return 'Consultando vencimientos…';
+    case 'getDocumentosVehiculo':
+      return 'Consultando documentación del vehículo…';
+    case 'getTopVehiculosUtilidad':
+      return 'Calculando ranking de utilidad…';
+    case 'getFlotaResumen':
+      return 'Consultando resumen de flota…';
+    case 'getVehiculoPorNumero':
+      return 'Consultando vehículo…';
+    case 'getConductorPorNumero':
+      return 'Consultando conductor…';
     case 'getRankingInversionVehiculos':
       return 'Revisando inversiones vehiculares…';
     case 'getInversionesNoVehiculares':
@@ -107,6 +141,9 @@ export function loadingLabelForMessage(message: string): string {
     return year ? `Comparando meses de ${year}…` : 'Comparando meses…';
   }
   if (/\banomal/.test(m)) return year ? `Detectando anomalías en ${year}…` : 'Detectando anomalías…';
+  if (/\branking\b.*\butilidad\b|\butilidad\b.*\b(top|ranking)\b|\bmejores veh[ií]culos\b|\brentabilidad\b.*\bveh[ií]culo/.test(m)) {
+    return 'Calculando ranking de utilidad por vehículo…';
+  }
   if (/\butilidad\b|\brentabil/.test(m)) {
     return year ? `Calculando utilidad operativa ${year}…` : 'Calculando utilidad operativa…';
   }
@@ -114,6 +151,7 @@ export function loadingLabelForMessage(message: string): string {
   if (/\bingreso/.test(m)) return year ? `Consultando ingresos ${year}…` : 'Consultando ingresos…';
   if (/\bgasto/.test(m)) return year ? `Consultando gastos ${year}…` : 'Consultando gastos…';
   if (/\binvers/.test(m)) return 'Revisando inversiones…';
-  if (/\bveh[ií]culo|\bcarro|\bplaca|\bflota/.test(m)) return 'Analizando flota…';
+  if (/\bconductores?\b|\bchofer/.test(m)) return 'Consultando conductores…';
+  if (/\balertas?\b|qu[eé] hacer hoy/.test(m)) return 'Revisando alertas automáticas…';
   return 'Analizando…';
 }

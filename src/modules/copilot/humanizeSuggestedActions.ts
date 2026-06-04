@@ -112,8 +112,10 @@ export function humanizeSuggestedAction(action: AiSuggestedAction): AiSuggestedA
     human = humanizeGastosAction(cp, action.label);
   } else if (copilotAction === 'navigate_inversiones' || copilotAction === 'navigate_inversiones_generales') {
     human = humanizeInversionAction(cp);
+  } else if (copilotAction === 'navigate_pendientes_equipo') {
+    human = { label: 'Ver pendientes', description: 'Abrir pendientes del equipo' };
   } else if (copilotAction === 'navigate_pendientes_ia') {
-    human = { label: 'Ver pendientes', description: 'Gastos por clasificar' };
+    human = { label: 'Ver pendientes IA', description: 'Gastos por clasificar' };
   }
 
   if (!human) return action;

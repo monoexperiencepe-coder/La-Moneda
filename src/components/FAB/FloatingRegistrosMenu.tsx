@@ -1,53 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-
-type MenuItem = {
-  emoji: string;
-  label: string;
-  hint: string;
-  path: string;
-};
-
-/** Mismos accesos que «Acciones rápidas» en Inicio; ingreso/gasto abren siempre el formulario detallado. */
-const MENU_ITEMS: MenuItem[] = [
-  {
-    emoji: '💵',
-    label: 'Registrar ingreso',
-    hint: 'Formulario completo (Finanzas)',
-    path: '/finanzas/ingresos?registrar=1',
-  },
-  {
-    emoji: '💸',
-    label: 'Registrar gasto',
-    hint: 'Formulario completo (Finanzas)',
-    path: '/finanzas/gastos?registrar=1',
-  },
-  {
-    emoji: '🛠️',
-    label: 'Kilometraje',
-    hint: 'Control de km',
-    path: '/operaciones/mantenimiento',
-  },
-  {
-    emoji: '📋',
-    label: 'Vencimiento',
-    hint: 'Documento / fecha',
-    path: '/operaciones/docs',
-  },
-  {
-    emoji: '📌',
-    label: 'Pendiente',
-    hint: 'Tarea operativa',
-    path: '/operaciones/pendientes',
-  },
-];
+import { REGISTROS_ACCESOS, filterRegistrosAccesos } from '../../config/registrosAccesos';
+import { permissionUserFromAuth } from '../../utils/permissions';
 
 const FloatingRegistrosMenu: React.FC = () => {
   const navigate = useNavigate();
-  const { isFinancialOperador } = useAuth();
+  const { isFinancialOperador, user, profile } = useAuth();
   const [open, setOpen] = useState(false);
+
+  const menuItems = useMemo(
+    () => filterRegistrosAccesos(REGISTROS_ACCESOS, permissionUserFromAuth(user, profile?.email)),
+    [user, profile?.email],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -77,27 +43,39 @@ const FloatingRegistrosMenu: React.FC = () => {
 
       {open ? (
         <div
-          className="fixed bottom-[5.5rem] right-4 z-[40] w-[min(19rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200/95 bg-white shadow-xl shadow-slate-900/12 animate-fade-in sm:right-6 sm:bottom-24"
+          className="fixed z-[40] flex max-h-[min(72vh,28rem)] w-[calc(100vw-24px)] max-w-[420px] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white shadow-xl shadow-slate-900/12 animate-fade-in
+            right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]
+            sm:right-6 sm:bottom-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
           role="menu"
           aria-label="Registros y accesos"
         >
-          <p className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Registros y accesos
-          </p>
-          <ul className="max-h-[min(70vh,22rem)] overflow-y-auto p-1.5">
-            {MENU_ITEMS.map((item) => (
-              <li key={item.path}>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              Registros y accesos
+            </p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Cerrar menú de registros"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+            {menuItems.map((item) => (
+              <li key={item.id}>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => go(item.path)}
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
+                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
                 >
-                  <span className="text-xl leading-none shrink-0 pt-0.5" aria-hidden>
+                  <span className="shrink-0 text-xl leading-none pt-0.5" aria-hidden>
                     {item.emoji}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-bold text-slate-900">{item.label}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-slate-900">{item.menuLabel}</span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">{item.hint}</span>
                   </span>
                 </button>
@@ -115,10 +93,11 @@ const FloatingRegistrosMenu: React.FC = () => {
         aria-label={open ? 'Cerrar menú de registros' : 'Abrir menú de registros'}
         data-fab="registros-principal"
         className={`
-          fixed bottom-6 right-4 z-[40] flex h-14 w-14 items-center justify-center rounded-full
+          fixed z-[40] flex h-14 w-14 items-center justify-center rounded-full
           text-white shadow-lg shadow-slate-900/25 transition-all duration-200
           focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500
-          sm:right-6
+          right-3 bottom-[max(1.25rem,env(safe-area-inset-bottom,0px))]
+          sm:right-6 sm:bottom-6
           ${open
             ? 'bg-slate-700 hover:bg-slate-600 rotate-0'
             : 'bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 hover:scale-105 active:scale-95'}

@@ -18,21 +18,39 @@ const OPERADOR_ALLOWED_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getPendientesConSugerencia',
   // Flota operativa (sin montos ni reportes financieros)
   'getFlotaResumen',
+  'getConteoConductores',
+  'getAlertasAutomaticas',
+  'getDocumentosResumen',
+  'getPendientesResumen',
+  'getDetalleAlertas',
+  'getDocumentosPorRango',
+  'getDocumentosVehiculo',
   'getVehiculosDisponibles',
   'getConductoresAsignados',
   'getVehiculosSinConductor',
   'getVehiculoPorPlaca',
   'getConductorPorVehiculo',
+  'getVehiculoPorNumero',
+  'getConductorPorNumero',
 ]);
 
 /** Consultas de flota: vehículos, conductores, disponibilidad. No incluye montos ni reportes. */
 export const FLEET_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getFlotaResumen',
+  'getConteoConductores',
+  'getAlertasAutomaticas',
+  'getDocumentosResumen',
+  'getPendientesResumen',
+  'getDetalleAlertas',
+  'getDocumentosPorRango',
+  'getDocumentosVehiculo',
   'getVehiculosDisponibles',
   'getConductoresAsignados',
   'getVehiculosSinConductor',
   'getVehiculoPorPlaca',
   'getConductorPorVehiculo',
+  'getVehiculoPorNumero',
+  'getConductorPorNumero',
 ]);
 
 const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
@@ -40,6 +58,14 @@ const FINANCE_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getIngresosPeriodo',
   'getIngresosHistoricosPorMes',
   'getVehiculosConMasGasto',
+  'getTopVehiculosUtilidad',
+  'getUtilidadVehiculo',
+  'getIngresosVehiculo',
+  'getGastosVehiculo',
+  'getUtilidadVehiculoDetalle',
+  'getGastosVehiculoDesglose',
+  'getDocumentosPorRango',
+  'getDocumentosVehiculo',
   'getPrestamosActivos',
   'getHistorialVehiculo',
   // Inversiones vehiculares (datos de adquisición)
@@ -75,6 +101,7 @@ export function canExecuteAiTool(user: PermissionUser | null | undefined, tool: 
   }
   if (tool === 'getIngresosPeriodo') return canUseIngresos(user);
   if (tool === 'getIngresosHistoricosPorMes') return canUseIngresos(user);
+  if (tool === 'getIngresosVehiculo') return canUseIngresos(user);
   if (tool === 'getResumenFinancieroPeriodo') return canUseReports(user);
   if (tool === 'getPrestamosActivos') return canUseFinanciamiento(user);
   if (FINANCE_TOOLS.has(tool)) return canUseReports(user) || canUseFinanciamiento(user);

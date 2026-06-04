@@ -265,6 +265,10 @@ export const useRegistros = () => {
   const [hasLoadedGastosOnce, setHasLoadedGastosOnce] = useState(false);
   const [gastosLoadScope, setGastosLoadScope] = useState<'recent' | 'full'>('recent');
   const [isLoadingGastosFull, setIsLoadingGastosFull] = useState(false);
+  const gastosLoadScopeRef = useRef(gastosLoadScope);
+  gastosLoadScopeRef.current = gastosLoadScope;
+  const empresaIdAuditRef = useRef<string | null>(profile?.empresa_id ?? null);
+  empresaIdAuditRef.current = profile?.empresa_id ?? null;
   const [gastosFinancialSummary, setGastosFinancialSummary] = useState<GastosFinancialSummary | null>(null);
   const [isLoadingGastosSummary, setIsLoadingGastosSummary] = useState(false);
   const reloadGastosSummaryRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
@@ -1494,6 +1498,8 @@ export const useRegistros = () => {
         getGastosCaja: () => gastosCajaAuditRef.current,
         getDescuentos: () => descuentosAuditRef.current,
         getPermissionUser: () => permissionUserAuditRef.current,
+        getGastosLoadScope: () => gastosLoadScopeRef.current,
+        getEmpresaId: () => empresaIdAuditRef.current,
       });
     });
   }, []);

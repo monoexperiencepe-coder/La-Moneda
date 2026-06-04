@@ -122,12 +122,11 @@ export const calculateVehicleRentability = (
   gastos: Gasto[],
   descuentos: Descuento[] = [],
 ): VehicleRentability[] => {
-  const gastosOp = gastosOperativosSolamente(gastos);
   return vehicles
     .filter(v => v.activo)
     .map(vehicle => {
       const vehicleIngresos = ingresos.filter(i => i.vehicleId === vehicle.id);
-      const vehicleGastos = gastosOp.filter(g => g.vehicleId === vehicle.id);
+      const vehicleGastos = gastos.filter(g => g.vehicleId === vehicle.id);
       const vehicleDescuentos = descuentos.filter(d => d.vehicleId === vehicle.id);
 
       const totalIngresos = vehicleIngresos.reduce((sum, i) => sum + ingresoMontoPEN(i), 0);
@@ -139,7 +138,8 @@ export const calculateVehicleRentability = (
         totalIngresos,
         totalGastos,
         totalDescuentos,
-        margen: totalIngresos - totalGastos + totalDescuentos,
+        /** Utilidad real: ingresos − todos los gastos del vehículo (sin descuentos). */
+        margen: totalIngresos - totalGastos,
       };
     })
     .sort((a, b) => b.margen - a.margen);

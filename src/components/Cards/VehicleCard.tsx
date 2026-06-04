@@ -6,7 +6,9 @@ import { conductorAsignadoLabel } from '../../utils/fleetPanel';
 import { UserCog } from 'lucide-react';
 import { todayStr, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import { calcularUtilidadRealVehiculo, UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
+import type { Moneda } from '../../data/types';
+import type { VehicleInversionDisplay } from '../../utils/vehicleInversionDisplay';
 import { Eye, Edit } from 'lucide-react';
 
 interface VehicleCardProps {
@@ -14,13 +16,16 @@ interface VehicleCardProps {
   ingresos: Ingreso[];
   gastos: Gasto[];
   documentaciones: Documentacion[];
-  /** Costo histórico de adquisición (USD); null si no hay fila en inversiones_vehiculo. */
+  /** Inversión inicial (inversiones_generales_vehiculo o fallback inversiones_vehiculo). */
+  inversionDisplay?: VehicleInversionDisplay | null;
+  /** @deprecated Usar inversionDisplay */
   inversionTotalUsd?: number | null;
   /** Orden en el inventario (1-based), para enumerar la flota. */
   listaIndice?: number;
   conductores?: Conductor[];
   canAssignConductor?: boolean;
   onAsignarConductor?: () => void;
+  gastosReadyForUtilidad?: boolean;
 }
 
 const VehicleCard: React.FC<VehicleCardProps> = ({
@@ -28,11 +33,13 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   ingresos,
   gastos,
   documentaciones,
+  inversionDisplay,
   inversionTotalUsd,
   listaIndice,
   conductores = [],
   canAssignConductor = false,
   onAsignarConductor,
+  gastosReadyForUtilidad = true,
 }) => {
   const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
@@ -41,16 +48,12 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     .filter(i => i.vehicleId === vehicle.id && i.fecha === todayStr())
     .reduce((s, i) => s + ingresoMontoPEN(i), 0);
 
-  const monthIngresos = ingresos
-    .filter(i => i.vehicleId === vehicle.id)
-    .reduce((s, i) => s + ingresoMontoPEN(i), 0);
-
-  const monthGastos = gastosOperativosSolamente(gastos)
-    .filter(g => g.vehicleId === vehicle.id)
-    .reduce((s, g) => s + g.monto, 0);
-
-  const margen = monthIngresos - monthGastos;
-  const rentability = monthIngresos > 0 ? (margen / monthIngresos) * 100 : 0;
+  const utilidadCalc = gastosReadyForUtilidad
+    ? calcularUtilidadRealVehiculo(vehicle.id, ingresos, gastos)
+    : null;
+  const monthIngresos = utilidadCalc?.ingresosTotal ?? 0;
+  const utilidadReal = utilidadCalc?.utilidadReal ?? 0;
+  const rentability = monthIngresos > 0 ? (utilidadReal / monthIngresos) * 100 : 0;
   const stars = Math.max(1, Math.min(5, Math.round(rentability / 20)));
 
   // Check document alerts
@@ -78,6 +81,13 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   };
 
   const gradient = marcaColors[vehicle.marca] ?? 'from-gray-200/40 to-gray-100/20';
+
+  const inversionResolved: { monto: number; moneda: Moneda } | null =
+    inversionDisplay != null
+      ? { monto: inversionDisplay.monto, moneda: inversionDisplay.moneda }
+      : inversionTotalUsd != null
+        ? { monto: inversionTotalUsd, moneda: 'USD' }
+        : null;
 
   return (
     <div
@@ -123,11 +133,17 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-2 mb-2.5">
-          {inversionTotalUsd != null && (
+          {inversionResolved != null && (
             <div className="bg-amber-50/90 rounded-lg p-2 backdrop-blur-sm border border-amber-100 col-span-2">
-              <p className="text-[9px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión adquisición (hist.)</p>
-              <p className="text-xs font-bold text-amber-950 tabular-nums">{formatGlobalAmount(inversionTotalUsd, 'USD')}</p>
-              <p className="text-[9px] text-amber-800/90 mt-0.5">No es gasto operativo mensual</p>
+              <p className="text-[9px] text-amber-800 uppercase tracking-wide mb-0.5">Inversión / valor compra</p>
+              <p className="text-xs font-bold text-amber-950 tabular-nums">
+                {formatGlobalAmount(inversionResolved.monto, inversionResolved.moneda === 'USD' ? 'USD' : undefined)}
+              </p>
+              <p className="text-[9px] text-amber-800/90 mt-0.5">
+                {inversionDisplay?.source === 'inversiones_vehiculo'
+                  ? 'Histórico Excel'
+                  : 'Inversiones generales'}
+              </p>
             </div>
           )}
           <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm">
@@ -138,15 +154,19 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">💰 MES</p>
             <p className="text-xs font-bold text-gray-900">{formatGlobalAmount(monthIngresos)}</p>
           </div>
-          <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm col-span-2">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📈 MARGEN</p>
+          <div className="bg-white/70 rounded-lg p-2 backdrop-blur-sm col-span-2" title={UTILIDAD_REAL_TOOLTIP}>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">📈 Utilidad real</p>
             <div className="flex items-center justify-between">
-              <p className={`text-xs font-bold ${margen >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {formatGlobalAmount(margen)}
+              <p
+                className={`text-xs font-bold ${
+                  !gastosReadyForUtilidad ? 'text-gray-400' : utilidadReal >= 0 ? 'text-emerald-600' : 'text-red-500'
+                }`}
+              >
+                {gastosReadyForUtilidad ? formatGlobalAmount(utilidadReal) : '…'}
               </p>
               <div className="flex-1 ml-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${margen >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
+                  className={`h-full rounded-full ${utilidadReal >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
                   style={{ width: `${Math.min(100, Math.abs(rentability))}%` }}
                 />
               </div>

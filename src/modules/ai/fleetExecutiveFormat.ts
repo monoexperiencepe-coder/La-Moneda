@@ -7,6 +7,13 @@ import { normalizePlaca } from '../../utils/normalizePlaca';
 
 export const FLEET_AI_TOOLS: ReadonlySet<AiToolName> = new Set([
   'getFlotaResumen',
+  'getConteoConductores',
+  'getAlertasAutomaticas',
+  'getDocumentosResumen',
+  'getPendientesResumen',
+  'getDetalleAlertas',
+  'getDocumentosPorRango',
+  'getDocumentosVehiculo',
   'getVehiculosDisponibles',
   'getVehiculosSinConductor',
   'getConductoresAsignados',
@@ -83,40 +90,93 @@ function vehiculosFromPayload(data: Record<string, unknown>): VehiculoEjecutivoL
 }
 
 function buildNarrativaFlotaResumen(d: Record<string, unknown>): string {
-  const total = Number(d.total ?? 0);
+  const total = Number(d.totalVehiculos ?? d.total ?? 0);
   const activos = Number(d.activos ?? 0);
   const inactivos = Number(d.inactivos ?? 0);
-  const disponibles = Number(d.disponibles ?? d.sinConductor ?? 0);
+  const sinConductor = Number(d.sinConductor ?? d.disponibles ?? 0);
+  const conConductor = Number(
+    d.vehiculosConConductor ?? Math.max(0, activos - sinConductor),
+  );
   const parts = [
-    `La empresa tiene ${total} vehículo${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}.`,
+    `La flota tiene ${total} vehículo${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}.`,
     `${activos} activo${activos !== 1 ? 's' : ''}${inactivos > 0 ? ` y ${inactivos} inactivo${inactivos !== 1 ? 's' : ''}` : ''}.`,
+    `${conConductor} con conductor asignado${sinConductor > 0 ? `; ${sinConductor} sin conductor` : ''}.`,
   ];
-  if (disponibles > 0) {
-    parts.push(
-      `${disponibles} unidad${disponibles !== 1 ? 'es' : ''} activa${disponibles !== 1 ? 's' : ''} sin conductor asignado.`,
-    );
-  } else {
-    parts.push('No hay unidades activas libres en este momento.');
-  }
   return parts.join(' ');
 }
 
 function formatFlotaResumen(data: Record<string, unknown>): Record<string, unknown> {
+  const sinConductor = Number(data.sinConductor ?? data.disponibles ?? 0);
+  const conConductor = Number(
+    data.vehiculosConConductor ??
+      Math.max(0, Number(data.activos ?? 0) - sinConductor),
+  );
   return {
     totales: {
-      total: data.total,
+      totalVehiculos: data.totalVehiculos ?? data.total,
       activos: data.activos,
       inactivos: data.inactivos,
-      disponibles: data.disponibles,
-      sin_conductor: data.sinConductor,
-      conductores_vigentes: data.conductoresVigentes,
-      asignados: data.asignados,
+      vehiculosConConductor: conConductor,
+      sin_conductor: sinConductor,
+      conductores_asignados: data.conductoresAsignados ?? data.asignados,
     },
     narrativa_sugerida: buildNarrativaFlotaResumen(data),
     _formato_respuesta: {
-      summary: '1–2 frases con cifras. Sin IDs ni JSON.',
+      summary: '1–2 frases con cifras de VEHÍCULOS (totalVehiculos, vehiculosConConductor, sinConductor). No confundir con totalConductores.',
       listado: 'Si aplica, bullets solo con • (no guiones -). Máximo 10 ítems + pie "+ N adicionales".',
     },
+  };
+}
+
+function formatConteoConductores(data: Record<string, unknown>): Record<string, unknown> {
+  const total = Number(data.totalConductores ?? 0);
+  const activos = Number(data.activos ?? 0);
+  const inactivos = Number(data.inactivos ?? 0);
+  const asignados = Number(data.conductoresAsignados ?? NaN);
+  const sinVehiculo = Number(data.vehiculosSinConductor ?? NaN);
+  let narrativa = `Hay ${total} conductor${total !== 1 ? 'es' : ''} registrado${total !== 1 ? 's' : ''}`;
+  if (Number.isFinite(asignados)) {
+    narrativa += `. Actualmente ${asignados} están asignados a vehículos`;
+    if (Number.isFinite(sinVehiculo) && sinVehiculo > 0) {
+      narrativa += ` y ${sinVehiculo} vehículo${sinVehiculo !== 1 ? 's' : ''} está${sinVehiculo === 1 ? '' : 'n'} libre`;
+    }
+    narrativa += '.';
+  } else {
+    narrativa += ` (${activos} vigente${activos !== 1 ? 's' : ''}${inactivos > 0 ? `, ${inactivos} no vigente${inactivos !== 1 ? 's' : ''}` : ''}).`;
+  }
+  return {
+    totales: {
+      totalConductores: total,
+      activos,
+      inactivos,
+      conductores_asignados: data.conductoresAsignados,
+      conductores_sin_vehiculo: data.conductoresSinVehiculo,
+      vehiculos_sin_conductor: data.vehiculosSinConductor,
+    },
+    narrativa_sugerida: narrativa,
+    _formato_respuesta: {
+      summary: 'Conteo de CONDUCTORES (totalConductores). No usar totalVehiculos como sinónimo.',
+    },
+  };
+}
+
+function formatAlertasAutomaticas(data: Record<string, unknown>): Record<string, unknown> {
+  const total = Number(data.totalAlertasAutomaticas ?? data.count ?? 0);
+  return {
+    totales: {
+      totalAlertasAutomaticas: total,
+      documentosVencidos: data.documentosVencidos,
+      documentosPorVencer: data.documentosPorVencer,
+      sinIngresosRecientes: data.sinIngresosRecientes,
+      kmSinMantenimiento: data.kmSinMantenimiento,
+      pendientesAltaPrioridad: data.pendientesAltaPrioridad,
+    },
+    preview: data.preview,
+    narrativa_sugerida:
+      total === 0
+        ? 'No hay alertas automáticas activas en este momento.'
+        : `Hay ${total} alerta${total !== 1 ? 's' : ''} automática${total !== 1 ? 's' : ''} (docs, ingresos, km).`,
+    _formato_respuesta: { summary: 'Desglose por tipo de alerta. Usar cifras del tool.' },
   };
 }
 
@@ -207,6 +267,45 @@ function formatVehiculoPorPlaca(data: Record<string, unknown>): Record<string, u
   };
 }
 
+function formatDetalleAlertas(data: Record<string, unknown>): Record<string, unknown> {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const filas = items.slice(0, FLEET_LISTADO_MAX_VISIBLE).map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return {
+      vehiculo: row.vehiculo ?? row.numeroUnidad ?? row.vehicleId,
+      placa: row.placa,
+      motivo: row.motivo ?? row.detail,
+      diasRestantes: row.diasRestantes ?? null,
+    };
+  });
+  const count = Number(data.count ?? filas.length);
+  const { lineas_visibles, adicionales, pie_listado } = buildListadoEjecutivo(
+    filas.map((f) => {
+      const dias =
+        f.diasRestantes != null && Number.isFinite(Number(f.diasRestantes))
+          ? Number(f.diasRestantes) < 0
+            ? ` (${Math.abs(Number(f.diasRestantes))} d vencido)`
+            : ` (${f.diasRestantes} d)`
+          : '';
+      return `• #${f.vehiculo} ${f.placa} — ${f.motivo}${dias}`;
+    }),
+    count,
+  );
+  return {
+    tipo: data.tipo,
+    dias: data.dias,
+    cantidad: count,
+    filas,
+    lineas_listado: lineas_visibles,
+    unidades_adicionales: adicionales,
+    pie_listado,
+    _formato_respuesta: {
+      summary: 'Listado por vehículo: placa, motivo y diasRestantes. Bullets •. Sin IDs internos.',
+      campos: 'vehiculo, placa, motivo, diasRestantes',
+    },
+  };
+}
+
 function formatConductorPorVehiculo(data: Record<string, unknown>): Record<string, unknown> {
   if (Array.isArray(data.coincidencias_nombre) && data.coincidencias_nombre.length > 0) {
     const nombres = (data.coincidencias_nombre as Array<Record<string, unknown>>)
@@ -265,6 +364,12 @@ export function formatFleetToolPayloadForLlm(
   switch (tool) {
     case 'getFlotaResumen':
       return { ...base, ...formatFlotaResumen(data), _instruccion_interpretacion: FLEET_INTERPRETATION };
+    case 'getConteoConductores':
+      return { ...base, ...formatConteoConductores(data), _instruccion_interpretacion: FLEET_INTERPRETATION };
+    case 'getAlertasAutomaticas':
+      return { ...base, ...formatAlertasAutomaticas(data), _instruccion_interpretacion: FLEET_INTERPRETATION };
+    case 'getDetalleAlertas':
+      return { ...base, ...formatDetalleAlertas(data), _instruccion_interpretacion: FLEET_INTERPRETATION };
     case 'getVehiculosDisponibles':
       return {
         ...base,

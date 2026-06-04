@@ -2,6 +2,7 @@ import type { AiSuggestedAction, AiToolName } from '../ai/types';
 import type { CopilotActionId, CopilotNavigateParams } from './copilotActions';
 import { executeCopilotAction } from './copilotActions';
 import type { PermissionUser } from '../../utils/permissions';
+import { canViewSection } from '../../utils/permissions';
 import { messageImpliesMaintenance } from '../ai/maintenanceSubtipos';
 
 function extractYear(text: string): string | null {
@@ -77,6 +78,55 @@ export function enrichCopilotSuggestedActions(opts: {
   const year = extractYear(message) ?? undefined;
   const month = extractMonth(message) ?? undefined;
   const actions: AiSuggestedAction[] = [];
+  const wantsFlotaOps =
+    toolsUsed.includes('getFlotaResumen') ||
+    toolsUsed.includes('getConteoConductores') ||
+    toolsUsed.includes('getAlertasAutomaticas') ||
+    toolsUsed.includes('getVehiculoPorNumero') ||
+    toolsUsed.includes('getConductorPorNumero') ||
+    toolsUsed.includes('getVehiculosDisponibles') ||
+    toolsUsed.includes('getConductoresAsignados') ||
+    toolsUsed.includes('getVehiculosSinConductor');
+
+  if (wantsFlotaOps) {
+    if (toolsUsed.includes('getConteoConductores') && canViewSection(user, 'operaciones')) {
+      actions.push(
+        makeNavigateAction(
+          'Ver conductores',
+          'Abrir listado de conductores.',
+          'navigate_conductores',
+          {},
+        ),
+      );
+    }
+    if (
+      (toolsUsed.includes('getFlotaResumen') ||
+        toolsUsed.includes('getVehiculosDisponibles') ||
+        toolsUsed.includes('getVehiculosSinConductor')) &&
+      canViewSection(user, 'vehiculos')
+    ) {
+      actions.push(
+        makeNavigateAction(
+          'Ver flota',
+          'Abrir inventario de vehículos.',
+          'navigate_flota_inventario',
+          {},
+        ),
+      );
+    }
+    if (toolsUsed.includes('getAlertasAutomaticas')) {
+      actions.push(
+        makeNavigateAction(
+          'Ver alertas',
+          'Abrir Qué hacer hoy.',
+          'navigate_home_alertas',
+          { view: 'alertas' },
+        ),
+      );
+    }
+    return actions;
+  }
+
   const hasNavigateIntent =
     /\b(muestr|muéstr|muestra|ver|abre|abrir|ll[eé]v|naveg|ir a|mostrar)\b/.test(text);
 
@@ -94,11 +144,27 @@ export function enrichCopilotSuggestedActions(opts: {
     text.includes('inversi') ||
     toolsUsed.includes('getRankingInversionVehiculos') ||
     toolsUsed.includes('getDetalleInversionVehiculo');
-  const wantsPendientes =
-    text.includes('pendiente') ||
+  const wantsPendientesRevision =
     text.includes('clasificar') ||
     toolsUsed.includes('getPendientesRevision') ||
     toolsUsed.includes('getPendientesConSugerencia');
+  const wantsPendientesEquipo =
+    toolsUsed.includes('getPendientesResumen') ||
+    (text.includes('pendiente') && /\bequipo|operativ/.test(text));
+
+  if ((hasNavigateIntent || wantsPendientesEquipo) && wantsPendientesEquipo) {
+    const probe = executeCopilotAction(user, 'navigate_pendientes_equipo', {});
+    if (probe.ok) {
+      actions.push(
+        makeNavigateAction(
+          'Ver pendientes',
+          'Abrir pendientes del equipo.',
+          'navigate_pendientes_equipo',
+          {},
+        ),
+      );
+    }
+  }
 
   if ((hasNavigateIntent || wantsIngresos) && wantsIngresos && !wantsGastos) {
     const params: CopilotNavigateParams = {};
@@ -173,7 +239,7 @@ export function enrichCopilotSuggestedActions(opts: {
     }
   }
 
-  if ((hasNavigateIntent || wantsPendientes) && wantsPendientes) {
+  if ((hasNavigateIntent || wantsPendientesRevision) && wantsPendientesRevision) {
     const probe = executeCopilotAction(user, 'navigate_pendientes_ia', {});
     if (probe.ok) {
       actions.push(

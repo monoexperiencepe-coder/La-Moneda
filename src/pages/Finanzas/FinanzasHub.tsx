@@ -7,12 +7,11 @@ import {
   formatGlobalIngresosDisplay,
 } from '../../utils/financialGlobalKpis';
 import { resolveGastosGlobalTotalState } from '../../utils/gastosFinancialSummary';
-import {
-  sumUtilidadHistoricaTotal,
-  UTILIDAD_HISTORICA_TOOLTIP,
-} from '../../utils/utilidadOperativa';
+import { sumUtilidadHistoricaTotal } from '../../utils/utilidadOperativa';
+import { UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
 import SmartClock from '../../components/Common/SmartClock';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
+import { useUtilidadRealCalculos } from '../../hooks/useUtilidadRealCalculos';
 
 /** Ocultar resultado neto en hub hasta que la data operativa esté ordenada. */
 const SHOW_RESULTADO_NETO_EN_HUB = false;
@@ -33,6 +32,9 @@ type HubCardOption = {
 const FinanzasHub: React.FC = () => {
   const navigate = useNavigate();
   const { formatGlobalAmount, canViewGlobal } = useAmountDisplay();
+  const { totalFlota, gastosReadyForUtilidad, isLoadingGastosFull } = useUtilidadRealCalculos({
+    pantalla: 'FinanzasHub.sumUtilidadRealFlota',
+  });
   const {
     ingresos,
     gastos,
@@ -40,6 +42,7 @@ const FinanzasHub: React.FC = () => {
     gastosLoadScope,
     isLoadingGastosSummary,
     cajaNegocioVehiculo,
+    vehicles,
   } = useRegistrosContext();
   const localGastosTotal = useMemo(() => gastos.reduce((s, g) => s + g.monto, 0), [gastos]);
   const gastosGlobalState = useMemo(
@@ -59,7 +62,12 @@ const FinanzasHub: React.FC = () => {
   const totalIngresosTabla = canViewGlobal
     ? formatGlobalIngresosDisplay(ingresos, formatGlobalAmount)
     : formatGlobalAmount(0);
-  const utilidadHistoricaDisplay = formatGlobalAmount(sumUtilidadHistoricaTotal(cajaNegocioVehiculo));
+  const utilidadRealDisplay = gastosReadyForUtilidad
+    ? formatGlobalAmount(totalFlota)
+    : isLoadingGastosFull
+      ? '…'
+      : '…';
+  const utilidadHistoricaReferencial = sumUtilidadHistoricaTotal(cajaNegocioVehiculo);
   const gastosSourceLabel =
     gastosGlobalState.source === 'rpc' ? 'BD' : gastosGlobalState.source === 'loading' ? '' : 'Vista rápida';
 
@@ -70,9 +78,18 @@ const FinanzasHub: React.FC = () => {
       total: gastosGlobalState.total,
       local: localGastosTotal,
       summary: gastosFinancialSummary?.totalGastos ?? null,
-      utilidadHistorica: sumUtilidadHistoricaTotal(cajaNegocioVehiculo),
+      utilidadReal: gastosReadyForUtilidad ? totalFlota : null,
+      gastosReadyForUtilidad,
+      historicoReferencial: utilidadHistoricaReferencial,
     });
-  }, [gastosGlobalState, localGastosTotal, gastosFinancialSummary, cajaNegocioVehiculo]);
+  }, [
+    gastosGlobalState,
+    localGastosTotal,
+    gastosFinancialSummary,
+    utilidadHistoricaReferencial,
+    gastosReadyForUtilidad,
+    totalFlota,
+  ]);
 
   const options: HubCardOption[] = [
     {
@@ -98,16 +115,16 @@ const FinanzasHub: React.FC = () => {
       statColor: 'text-red-500',
     },
     {
-      id: 'utilidad-historica',
-      title: 'Utilidad histórica',
-      desc: 'Importada desde Excel (caja negocio por vehículo)',
+      id: 'utilidad-operativa',
+      title: 'Utilidad por vehículo',
+      desc: 'Ingresos − gastos registrados por unidad (utilidad real)',
       emoji: '📈',
       path: '/finanzas/utilidad-operativa',
       gradient: 'from-emerald-500/10 to-green-500/10',
       border: 'border-emerald-200 hover:border-emerald-400',
-      stat: utilidadHistoricaDisplay,
+      stat: utilidadRealDisplay,
       statColor: 'text-emerald-800',
-      statTitle: UTILIDAD_HISTORICA_TOOLTIP,
+      statTitle: UTILIDAD_REAL_TOOLTIP,
     },
     {
       id: 'inversiones',

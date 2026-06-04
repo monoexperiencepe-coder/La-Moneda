@@ -1,29 +1,66 @@
-import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Filter, Plus } from 'lucide-react';
 import VehicleCard from '../../components/Cards/VehicleCard';
 import RegistrarVehiculoForm from '../../components/vehiculos/RegistrarVehiculoForm';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAuth } from '../../context/AuthContext';
-import { totalInversionUsdForVehicle } from '../../services/inversionesVehiculoService';
+import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
+import {
+  buildInversionGeneralesIndex,
+  resolveVehicleInversionDisplay,
+} from '../../utils/vehicleInversionDisplay';
 import { canMutateVehiculos } from '../../utils/permissions';
 import type { Vehicle } from '../../data/types';
+import { useEnsureGastosFullForUtilidad } from '../../hooks/useEnsureGastosFullForUtilidad';
 
 const Inventario: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user, profile } = useAuth();
   const { vehicles, conductores, ingresos, gastos, documentaciones, inversionesVehiculo } =
     useRegistrosContext();
+  const { gastosReadyForUtilidad } = useEnsureGastosFullForUtilidad();
   const [showAll, setShowAll] = useState(false);
   const [showRegistrar, setShowRegistrar] = useState(false);
   const [assignVehicle, setAssignVehicle] = useState<Vehicle | null>(null);
+  const [inversionesGenerales, setInversionesGenerales] = useState<Awaited<
+    ReturnType<typeof fetchInversionesGeneralesVehiculo>
+  >>([]);
   const canRegister = canMutateVehiculos(user);
+
+  useEffect(() => {
+    if (searchParams.get('registrar') !== '1' || !canRegister) return;
+    setShowRegistrar(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('registrar');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, canRegister]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchInversionesGeneralesVehiculo(profile?.empresa_id).then((rows) => {
+      if (!cancelled) setInversionesGenerales(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.empresa_id, vehicles.length]);
+
+  const generalesIndex = useMemo(
+    () => buildInversionGeneralesIndex(inversionesGenerales),
+    [inversionesGenerales],
+  );
 
   const filteredVehicles = useMemo(() => {
     const list = showAll ? vehicles : vehicles.filter((v) => v.activo);
     return [...list].sort((a, b) => a.id - b.id);
   }, [vehicles, showAll]);
+
+  const reloadInversiones = useCallback(() => {
+    void fetchInversionesGeneralesVehiculo(profile?.empresa_id).then(setInversionesGenerales);
+  }, [profile?.empresa_id]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -69,11 +106,17 @@ const Inventario: React.FC = () => {
             ingresos={ingresos}
             gastos={gastos}
             documentaciones={documentaciones}
-            inversionTotalUsd={totalInversionUsdForVehicle(inversionesVehiculo, vehicle.id)}
+            inversionDisplay={resolveVehicleInversionDisplay(
+              vehicle.id,
+              vehicle.placa,
+              generalesIndex,
+              inversionesVehiculo,
+            )}
             listaIndice={idx + 1}
             conductores={conductores}
             canAssignConductor={canRegister}
             onAsignarConductor={() => setAssignVehicle(vehicle)}
+            gastosReadyForUtilidad={gastosReadyForUtilidad}
           />
         ))}
       </div>
@@ -94,7 +137,11 @@ const Inventario: React.FC = () => {
         </div>
       )}
 
-      <RegistrarVehiculoForm isOpen={showRegistrar} onClose={() => setShowRegistrar(false)} />
+      <RegistrarVehiculoForm
+        isOpen={showRegistrar}
+        onClose={() => setShowRegistrar(false)}
+        onSaved={reloadInversiones}
+      />
       <AsignarConductorModal
         vehicle={assignVehicle}
         isOpen={assignVehicle != null}

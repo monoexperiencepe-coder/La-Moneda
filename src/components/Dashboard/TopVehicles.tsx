@@ -21,7 +21,7 @@ const TopVehicles: React.FC<TopVehiclesProps> = ({ vehicles }) => {
   const top5 = vehicles.slice(0, 5);
 
   return (
-    <Card title="Top 5 Vehículos más Rentables" subtitle="Ordenado por margen neto">
+    <Card title="Top 5 Vehículos más Rentables" subtitle="Ordenado por utilidad real (ingresos − gastos)">
       {top5.length === 0 ? (
         <div className="text-center py-8 text-gray-400 text-sm">
           Sin datos disponibles

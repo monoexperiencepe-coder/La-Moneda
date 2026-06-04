@@ -424,6 +424,7 @@ export interface Conductor {
   numeroEmergencia?: string | null;
   direccion?: string | null;
   documentoFirmado?: boolean | null;
+  fechaInicioContrato?: string | null;
   fechaVencimientoContrato?: string | null;
   comentarios: string;
   createdAt: string;
@@ -472,14 +473,43 @@ export interface KilometrajeRegistro {
 export type EstadoPendiente = 'ABIERTO' | 'EN_CURSO' | 'RESUELTO' | 'CANCELADO';
 export type PrioridadPendiente = 'ALTA' | 'MEDIA' | 'BAJA';
 
-/** Tarea / seguimiento (hoja PENDIENTES Excel). */
+export type PendienteTipo =
+  | 'recordatorio'
+  | 'alerta'
+  | 'mantenimiento'
+  | 'documento'
+  | 'financiero'
+  | 'conductor'
+  | 'vehiculo'
+  | 'operacion';
+
+export type PendientePrioridadV2 = 'critica' | 'alta' | 'media' | 'baja';
+
+export type PendienteRelacionadoTipo =
+  | 'vehiculo'
+  | 'conductor'
+  | 'documento'
+  | 'ingreso'
+  | 'gasto'
+  | 'ninguno';
+
+/** Tarea / seguimiento (hoja PENDIENTES Excel + capa manual equipo). */
 export interface Pendiente {
   id: number;
   vehicleId: number | null;
+  /** Título corto; legacy: primera línea de descripcion. */
+  titulo?: string;
   descripcion: string;
   estado: EstadoPendiente;
   fecha: string;
   prioridad: PrioridadPendiente;
+  tipo: PendienteTipo;
+  prioridadV2: PendientePrioridadV2;
+  mostrarEnHoy: boolean;
+  responsable: string | null;
+  fechaObjetivo: string | null;
+  relacionadoTipo: PendienteRelacionadoTipo;
+  relacionadoId: string | number | null;
   createdAt: string;
 }
 

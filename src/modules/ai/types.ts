@@ -7,6 +7,7 @@ export type AiToolName =
   | 'getGastosPeriodo'
   | 'getGastosPorCategoria'
   | 'getVehiculosConMasGasto'
+  | 'getTopVehiculosUtilidad'
   | 'getPendientesRevision'
   | 'getGastosGlobales'
   | 'getPrestamosActivos'
@@ -21,11 +22,25 @@ export type AiToolName =
   | 'getInversionesNoVehiculares'
   // Flota operativa (vehículos + conductores; sin montos)
   | 'getFlotaResumen'
+  | 'getConteoConductores'
+  | 'getAlertasAutomaticas'
+  | 'getDocumentosResumen'
+  | 'getPendientesResumen'
+  | 'getDetalleAlertas'
+  | 'getUtilidadVehiculo'
+  | 'getIngresosVehiculo'
+  | 'getGastosVehiculo'
+  | 'getUtilidadVehiculoDetalle'
+  | 'getGastosVehiculoDesglose'
+  | 'getDocumentosPorRango'
+  | 'getDocumentosVehiculo'
   | 'getVehiculosDisponibles'
   | 'getConductoresAsignados'
   | 'getVehiculosSinConductor'
   | 'getVehiculoPorPlaca'
-  | 'getConductorPorVehiculo';
+  | 'getConductorPorVehiculo'
+  | 'getVehiculoPorNumero'
+  | 'getConductorPorNumero';
 
 export type AiSuggestedAction = {
   label: string;

@@ -122,7 +122,7 @@ const ConductorEditPanel: React.FC<Props> = ({
           <option value="">Sin asignar</option>
           {vehiclesSorted.map((v) => (
             <option key={v.id} value={String(v.id)}>
-              #{v.id} · {v.placa}
+              #{v.id} · {v.placa} · {v.marca} {v.modelo}
             </option>
           ))}
         </select>
@@ -184,6 +184,15 @@ const ConductorEditPanel: React.FC<Props> = ({
             type="text"
             value={draft.cochera}
             onChange={(e) => onChange({ cochera: e.target.value })}
+            className={fieldClass}
+          />
+        </label>
+        <label className="block col-span-2 sm:col-span-1">
+          <span className={labelClass}>Inicio contrato</span>
+          <input
+            type="date"
+            value={draft.fechaInicioContrato}
+            onChange={(e) => onChange({ fechaInicioContrato: e.target.value })}
             className={fieldClass}
           />
         </label>

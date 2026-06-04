@@ -43,6 +43,25 @@ import {
   extractExplicitYearFromMessage,
   injectExplicitYearIfMissing,
 } from '../../utils/extractExplicitYear';
+import {
+  finishCopilotTrace,
+  logCopilotMemory,
+  logCopilotToolResult,
+  logCopilotToolsSelected,
+  startCopilotTrace,
+} from '../../modules/copilot/copilotTrace';
+import { intentFromToolsUsed } from '../../modules/copilot/copilotIntent';
+import { strictFactPayloadForToolError } from '../../modules/ai/strictFactMode';
+import { tryCopilotPreRoute, deriveCopilotContextFromHistory } from '../../modules/copilot/copilotPreRoute';
+import {
+  logCopilotResponse,
+  recordAiResponseCacheHit,
+  recordAiResponseCacheMiss,
+  setCopilotExecutionContext,
+} from '../../modules/copilot/copilotExecutionAudit';
+import { extractMetricCards } from '../../utils/aiResponseParser';
+import { updateCopilotContextFromTool } from '../../modules/copilot/copilotConversationContext';
+import { updateCopilotFollowUpFromTool } from '../../modules/copilot/copilotFollowUpContext';
 
 type OpenAiMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -194,10 +213,22 @@ export async function sendAiAssistantMessage(opts: {
     explicitYear,
   });
 
+  startCopilotTrace(opts.message);
+
   if (!opts.skipCache) {
     const cached = getCachedAiResponse(cacheKey);
     if (cached) {
       opts.onStatus?.('Resultado reciente…');
+      recordAiResponseCacheHit();
+      logCopilotMemory({ historyMessages: opts.history.length, fromCache: true });
+      finishCopilotTrace({
+        summary: cached.assistant.structured?.summary ?? cached.assistant.content,
+        toolsUsed: cached.assistant.toolsUsed ?? [],
+        durationMs: 0,
+        toolErrors: [],
+        provider: null,
+        model: null,
+      });
       return {
         assistant: {
           ...cached.assistant,
@@ -210,17 +241,120 @@ export async function sendAiAssistantMessage(opts: {
     if (import.meta.env.DEV) {
       console.log('[ai:cache-miss]', cacheKey);
     }
+    recordAiResponseCacheMiss();
   } else {
     invalidateAiCache(cacheKey);
   }
 
   opts.onStatus?.(loadingLabelForMessage(opts.message));
 
+  const conversationContext = deriveCopilotContextFromHistory(opts.history);
+
+  const preRoute = await tryCopilotPreRoute({
+    query: opts.message,
+    ctx,
+    user: permissionUser,
+    conversationContext,
+    onStatus: opts.onStatus,
+  });
+
+  if (preRoute) {
+    const durationMs = performance.now() - started;
+    logCopilotToolsSelected([preRoute.tool], { [preRoute.tool]: {} });
+    logCopilotToolResult({
+      tool: preRoute.tool,
+      args: {},
+      ok: preRoute.toolsUsed.length > 0,
+      durationMs: preRoute.durationMs,
+      data: preRoute.toolData,
+      error: preRoute.toolsUsed.length === 0 ? preRoute.structured.warnings?.[0] : undefined,
+    });
+
+    const debug: AiAssistantDebugInfo = {
+      toolsUsed: [...preRoute.toolsUsed],
+      deniedTools: [],
+      toolErrors: [],
+      toolDurationsMs: preRoute.toolsUsed.length ? { [preRoute.tool]: preRoute.durationMs } : {},
+      durationMs,
+      provider: null,
+      model: null,
+      tokens: null,
+      blockedByPermissions: preRoute.toolsUsed.length === 0,
+      timestamp: new Date().toISOString(),
+    };
+
+    const executiveStructured = prepareExecutiveStructuredResponse({
+      ...preRoute.structured,
+      suggestedActions: humanizeSuggestedActions(preRoute.structured.suggestedActions ?? []),
+    });
+
+    const assistantMessage: AiChatMessage = {
+      id: newMessageId(),
+      role: 'assistant',
+      content: executiveStructured.summary,
+      structured: executiveStructured,
+      createdAt: new Date().toISOString(),
+      toolsUsed: preRoute.toolsUsed,
+      debug,
+    };
+
+    if (preRoute.toolsUsed.length > 0) {
+      setCachedAiResponse(cacheKey, assistantMessage, preRoute.toolsUsed);
+    }
+
+    void insertAiAssistantAuditLog(
+      {
+        questionPreview: opts.message,
+        toolsUsed: preRoute.toolsUsed,
+        deniedTools: [],
+        userRole: opts.user.role,
+        durationMs,
+        status: preRoute.toolsUsed.length > 0 ? 'complete' : 'denied',
+      },
+      opts.empresaId,
+    );
+
+    finishCopilotTrace({
+      summary: executiveStructured.summary,
+      toolsUsed: preRoute.toolsUsed,
+      durationMs,
+      provider: null,
+      model: null,
+      toolErrors: [],
+    });
+
+    if (import.meta.env.DEV) {
+      console.log('[copilot:pre_route:done]', {
+        intent: preRoute.matchedIntent,
+        tool: preRoute.tool,
+        ms: Math.round(durationMs),
+      });
+    }
+
+    const cards = extractMetricCards(executiveStructured.data as Record<string, unknown> | null).length;
+    logCopilotResponse({
+      intent: preRoute.matchedIntent,
+      summaryLength: executiveStructured.summary?.length ?? 0,
+      cards,
+      actions: executiveStructured.suggestedActions?.length ?? 0,
+      toolsUsed: preRoute.toolsUsed,
+      fromCache: false,
+    });
+    if (preRoute.toolData != null) {
+      const nextCtx = updateCopilotContextFromTool(conversationContext, preRoute.tool, preRoute.toolData);
+      setCopilotExecutionContext(nextCtx);
+    }
+
+    return { assistant: assistantMessage };
+  }
+
   const systemPrompt = buildAiSystemPrompt({
     userName: opts.user.name,
     userRole: opts.user.role,
     isOperadorRestricted: isOperador,
   });
+
+  logCopilotMemory({ historyMessages: opts.history.length });
 
   const messages: OpenAiMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -264,6 +398,10 @@ export async function sendAiAssistantMessage(opts: {
 
     if (res.status === 'needs_tools' && res.toolCalls?.length) {
       const plannedCalls = optimizeToolPlanBatch(res.toolCalls);
+      logCopilotToolsSelected(
+        plannedCalls.map((tc) => tc.name),
+        Object.fromEntries(plannedCalls.map((tc) => [tc.name, tc.arguments])),
+      );
 
       if (import.meta.env.DEV) {
         console.log(
@@ -324,16 +462,22 @@ export async function sendAiAssistantMessage(opts: {
             ? `Permiso denegado para ${call.name}.`
             : `Advertencia: ${call.name} falló (${result.error}).`;
           toolWarnings.push(warn);
+          logCopilotToolResult({
+            tool: call.name,
+            args: resolvedArgs,
+            ok: false,
+            rows: null,
+            durationMs: performance.now() - t0,
+            error: result.error,
+            denied: result.denied,
+          });
           messages.push({
             role: 'tool',
             tool_call_id: call.id,
             name: call.name,
-            content: JSON.stringify({
-              ok: false,
-              error: result.error,
-              denied: result.denied ?? false,
-              warning: warn,
-            }),
+            content: JSON.stringify(
+              strictFactPayloadForToolError(call.name, result.error, result.denied),
+            ),
           });
           continue;
         }
@@ -341,7 +485,15 @@ export async function sendAiAssistantMessage(opts: {
         if (!toolsUsed.includes(call.name)) toolsUsed.push(call.name);
         if (result.data != null) {
           completedToolResults.push({ name: call.name, data: result.data });
+          updateCopilotFollowUpFromTool(call.name, resolvedArgs, result.data);
         }
+        logCopilotToolResult({
+          tool: call.name,
+          args: resolvedArgs,
+          ok: true,
+          durationMs: performance.now() - t0,
+          data: result.data,
+        });
         if (call.name === 'getPendientesConSugerencia' && result.data && typeof result.data === 'object') {
           pendientesSugerenciasData = result.data as Record<string, unknown>;
         }
@@ -410,6 +562,15 @@ export async function sendAiAssistantMessage(opts: {
   );
 
   if (lastError && !structured) {
+    finishCopilotTrace({
+      summary: lastError,
+      toolsUsed,
+      durationMs,
+      tokensTotal: lastTokens?.total,
+      provider: lastProvider,
+      model: lastModel,
+      toolErrors: toolErrors.map((e) => ({ name: e.name, error: e.error })),
+    });
     return {
       assistant: buildErrorAssistant(lastError, {
         toolsUsed,
@@ -544,6 +705,31 @@ export async function sendAiAssistantMessage(opts: {
 
   if (!lastError) {
     setCachedAiResponse(cacheKey, assistantMessage, toolsUsed);
+  }
+
+  finishCopilotTrace({
+    summary: executiveStructured.summary,
+    toolsUsed,
+    durationMs,
+    tokensTotal: lastTokens?.total,
+    provider: lastProvider,
+    model: lastModel,
+    toolErrors: toolErrors.map((e) => ({ name: e.name, error: e.error })),
+  });
+
+  if (import.meta.env.DEV && toolsUsed.length > 0) {
+    console.log('[copilot:intent:resolved]', {
+      intent: intentFromToolsUsed(toolsUsed),
+      toolsUsed,
+    });
+  }
+
+  if (completedToolResults.length > 0) {
+    let nextCtx = conversationContext;
+    for (const tr of completedToolResults) {
+      nextCtx = updateCopilotContextFromTool(nextCtx, tr.name, tr.data);
+    }
+    setCopilotExecutionContext(nextCtx);
   }
 
   return {

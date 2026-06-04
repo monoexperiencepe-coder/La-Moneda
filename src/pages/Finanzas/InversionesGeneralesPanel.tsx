@@ -8,6 +8,7 @@ import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
 import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
+import { sumInversionGeneralesByMoneda } from '../../utils/vehicleInversionDisplay';
 
 function montoFmt(
   amount: number,
@@ -134,16 +135,6 @@ const InversionesGeneralesPanel: React.FC = () => {
     void reload();
   }, [reload]);
 
-  const totalesPorMoneda = useMemo(() => {
-    let penSum = 0;
-    let usdSum = 0;
-    for (const r of rows) {
-      if (r.moneda === 'USD') usdSum += r.montoTotal;
-      else penSum += r.montoTotal;
-    }
-    return { penSum, usdSum };
-  }, [rows]);
-
   const handleSortHeader = useCallback((key: SortKey) => {
     setSort((prev) => {
       if (prev.key === key) return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
@@ -169,6 +160,9 @@ const InversionesGeneralesPanel: React.FC = () => {
     arr.sort((a, b) => compareInversionesRow(a, b, sort.key!, mul));
     return arr;
   }, [rows, sort, filterPlaca, filterVehicleId]);
+
+  const totalesPorMoneda = useMemo(() => sumInversionGeneralesByMoneda(displayRows), [displayRows]);
+  const totalesGlobales = useMemo(() => sumInversionGeneralesByMoneda(rows), [rows]);
 
   useCopilotNarrativeNavigation({
     resolveTarget: (step) => {
@@ -216,7 +210,7 @@ const InversionesGeneralesPanel: React.FC = () => {
               <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950">{rows.length}</p>
             </div>
             <div className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-800/90">Total invertido (por moneda)</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-800/90">Total inversiones (listado)</p>
               <div className="mt-1 space-y-1 text-lg font-bold tabular-nums text-violet-950">
                 {totalesPorMoneda.usdSum > 0 ? <p>{montoFmt(totalesPorMoneda.usdSum, 'USD', formatGlobalAmount)}</p> : null}
                 {totalesPorMoneda.penSum > 0 ? <p>{montoFmt(totalesPorMoneda.penSum, 'PEN', formatGlobalAmount)}</p> : null}
@@ -224,6 +218,14 @@ const InversionesGeneralesPanel: React.FC = () => {
                   <p className="text-slate-500 font-normal text-base">—</p>
                 ) : null}
               </div>
+              {(filterPlaca || filterVehicleId) && displayRows.length !== rows.length ? (
+                <p className="mt-1 text-[10px] text-violet-700/90">
+                  {displayRows.length} de {rows.length} filas · global{' '}
+                  {totalesGlobales.usdSum > 0 ? montoFmt(totalesGlobales.usdSum, 'USD', formatGlobalAmount) : ''}
+                  {totalesGlobales.usdSum > 0 && totalesGlobales.penSum > 0 ? ' · ' : ''}
+                  {totalesGlobales.penSum > 0 ? montoFmt(totalesGlobales.penSum, 'PEN', formatGlobalAmount) : ''}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -299,6 +301,30 @@ const InversionesGeneralesPanel: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+              {displayRows.length > 0 ? (
+                <tfoot>
+                  <tr className="border-t-2 border-violet-200 bg-violet-50/80 font-semibold text-violet-950">
+                    <td colSpan={10} className={`${tdText} py-2`}>
+                      Total inversiones ({displayRows.length} unidad{displayRows.length === 1 ? '' : 'es'})
+                    </td>
+                    <td className={`${tdUsd} py-2`}>
+                      {totalesPorMoneda.usdSum > 0 ? (
+                        <span className="block">{montoFmt(totalesPorMoneda.usdSum, 'USD', formatGlobalAmount)}</span>
+                      ) : null}
+                      {totalesPorMoneda.penSum > 0 ? (
+                        <span className="block">{montoFmt(totalesPorMoneda.penSum, 'PEN', formatGlobalAmount)}</span>
+                      ) : null}
+                      {totalesPorMoneda.usdSum <= 0 && totalesPorMoneda.penSum <= 0 ? '—' : null}
+                    </td>
+                    <td className={`${tdUsd} py-2`}>
+                      {formatGlobalAmount(
+                        displayRows.reduce((s, r) => s + (r.totalInversionPen ?? 0), 0),
+                      )}
+                    </td>
+                    <td className={`${tdText} py-2 text-slate-500`}>—</td>
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
         </>

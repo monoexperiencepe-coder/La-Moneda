@@ -15,7 +15,11 @@ export type CopilotActionId =
   | 'navigate_inversiones'
   | 'navigate_inversiones_generales'
   | 'navigate_vehiculo'
+  | 'navigate_flota_inventario'
+  | 'navigate_conductores'
+  | 'navigate_home_alertas'
   | 'navigate_documentacion'
+  | 'navigate_pendientes_equipo'
   | 'navigate_pendientes_ia'
   | 'navigate_asistente';
 
@@ -40,6 +44,8 @@ export type CopilotNavigateParams = {
   mantenimientoScope?: boolean;
   highlightType?: 'month' | 'vehicle' | 'category' | 'record' | 'card' | 'table-row';
   scrollTarget?: string;
+  /** Vista en Inicio (p. ej. alertas). */
+  view?: string;
   /** Secuencia narrativa (no va en URL; se encola en sessionStorage al navegar). */
   narrativeSteps?: import('./navigationNarrative/types').NarrativeStep[];
 };
@@ -54,8 +60,12 @@ const ALLOWED_PATH_PREFIXES = [
   '/finanzas/inversiones',
   '/finanzas/inversiones/generales',
   '/finanzas/ia-clasificacion',
+  '/operaciones/pendientes',
   '/operaciones/docs',
+  '/operaciones/conductores',
+  '/vehiculos/inventario',
   '/vehiculos/',
+  '/',
   '/asistente',
 ] as const;
 
@@ -97,6 +107,7 @@ function buildQueryParams(input: CopilotNavigateParams): Record<string, string> 
   if (input.highlightType) params.highlightType = input.highlightType;
   if (input.scrollTarget?.trim()) params.scrollTarget = input.scrollTarget.trim();
   if (input.mantenimientoScope) params.mantenimiento_scope = '1';
+  if (input.view?.trim()) params.view = input.view.trim();
   return params;
 }
 
@@ -207,6 +218,43 @@ export function navigateToVehiculo(
   };
 }
 
+export function navigateToFlotaInventario(user: PermissionUser): CopilotNavigateResult {
+  if (!canViewSection(user, 'vehiculos')) {
+    return denied('No tienes permiso para ver vehículos.');
+  }
+  return {
+    ok: true,
+    path: '/vehiculos/inventario',
+    params: {},
+    statusLabel: 'Abriendo inventario de flota…',
+  };
+}
+
+export function navigateToConductores(user: PermissionUser): CopilotNavigateResult {
+  if (!canViewSection(user, 'operaciones')) {
+    return denied('No tienes permiso para ver conductores.');
+  }
+  return {
+    ok: true,
+    path: '/operaciones/conductores',
+    params: {},
+    statusLabel: 'Abriendo conductores…',
+  };
+}
+
+export function navigateToHomeAlertas(
+  user: PermissionUser,
+  filters: Pick<CopilotNavigateParams, 'view'> = {},
+): CopilotNavigateResult {
+  const params = buildQueryParams({ view: filters.view ?? 'alertas' });
+  return {
+    ok: true,
+    path: '/',
+    params,
+    statusLabel: 'Abriendo alertas…',
+  };
+}
+
 export function navigateToDocumentacion(
   user: PermissionUser,
   filters: Pick<CopilotNavigateParams, 'year' | 'search'> = {},
@@ -220,6 +268,18 @@ export function navigateToDocumentacion(
     path: '/operaciones/docs',
     params,
     statusLabel: params.year ? `Abriendo documentación ${params.year}…` : 'Abriendo documentación…',
+  };
+}
+
+export function navigateToPendientesEquipo(user: PermissionUser): CopilotNavigateResult {
+  if (!canViewSection(user, 'operaciones')) {
+    return denied('No tienes permiso para ver pendientes del equipo.');
+  }
+  return {
+    ok: true,
+    path: '/operaciones/pendientes',
+    params: {},
+    statusLabel: 'Abriendo pendientes del equipo…',
   };
 }
 
@@ -262,8 +322,16 @@ export function executeCopilotAction(
       return navigateToInversiones(user, params);
     case 'navigate_vehiculo':
       return navigateToVehiculo(user, params);
+    case 'navigate_flota_inventario':
+      return navigateToFlotaInventario(user);
+    case 'navigate_conductores':
+      return navigateToConductores(user);
+    case 'navigate_home_alertas':
+      return navigateToHomeAlertas(user, params);
     case 'navigate_documentacion':
       return navigateToDocumentacion(user, params);
+    case 'navigate_pendientes_equipo':
+      return navigateToPendientesEquipo(user);
     case 'navigate_pendientes_ia':
       return navigateToPendientesIA(user);
     case 'navigate_asistente':
@@ -285,10 +353,14 @@ export function resolveWhitelistedRoute(
   if (normalized === '/finanzas/ingresos') return navigateToIngresos(user, params);
   if (normalized === '/finanzas/gastos') return navigateToGastos(user, params);
   if (normalized.startsWith('/finanzas/inversiones')) return navigateToInversiones(user, params);
+  if (normalized === '/vehiculos/inventario') return navigateToFlotaInventario(user);
+  if (normalized === '/operaciones/conductores') return navigateToConductores(user);
+  if (normalized === '/') return navigateToHomeAlertas(user);
   if (normalized.startsWith('/vehiculos/')) {
     const id = normalized.replace('/vehiculos/', '');
     return navigateToVehiculo(user, { vehicleId: id });
   }
+  if (normalized === '/operaciones/pendientes') return navigateToPendientesEquipo(user);
   if (normalized === '/operaciones/docs') return navigateToDocumentacion(user, params);
   if (normalized === '/finanzas/ia-clasificacion') return navigateToPendientesIA(user);
   if (normalized === '/asistente') return navigateToAsistente(user);

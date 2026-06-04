@@ -30,4 +30,4 @@ export type RegisterUndoInput = Omit<UndoAction, 'id' | 'timestamp'>;
 export type UndoExecuteResult = 'ok' | 'fail' | 'noop' | 'stale';
 
 /** Duración del toast de éxito (independiente del undo en sesión). */
-export const DEFAULT_UNDO_TOAST_MS = 8_000;
+export { TOAST_UNDO_MS as DEFAULT_UNDO_TOAST_MS } from '../config/toastTiming';

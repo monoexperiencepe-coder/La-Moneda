@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_AI_FOCUS_DEBUG?: string;
   readonly VITE_DATA_QUALITY_TOOLS?: string;
   readonly VITE_VERBOSE_DEBUG?: string;
+  readonly VITE_COPILOT_STRICT_FACT_MODE?: string;
 }
 
 interface ImportMeta {

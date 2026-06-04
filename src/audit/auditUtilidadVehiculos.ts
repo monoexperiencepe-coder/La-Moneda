@@ -15,12 +15,10 @@ import { gastosOperativosSolamente, isCajaNegocioGasto } from '../utils/cajaNego
 import { ingresoMontoPEN } from '../utils/moneda';
 import {
   buildUtilidadHistoricaPorVehiculo,
-  buildUtilidadPorVehiculo,
-  calcularUtilidadAcumulada,
   getUtilidadCorteHistorico,
   isGastoOperativoUtilidadVehiculo,
-  UTILIDAD_CALCULO_AUTOMATICO_ACTIVO,
 } from '../utils/utilidadOperativa';
+import { calcularUtilidadRealVehiculo, sumUtilidadRealFlota } from '../utils/utilidadReal';
 import { tipoGastoEffective } from '../utils/gastosTipoGasto';
 
 export type AuditUtilidadVehiculosInput = {
@@ -30,6 +28,7 @@ export type AuditUtilidadVehiculosInput = {
   cajaNegocioVehiculo: readonly CajaNegocioVehiculo[];
   gastosCaja?: readonly GastoCaja[];
   descuentos?: readonly Descuento[];
+  gastosLoadScope?: 'recent' | 'full';
 };
 
 export type AuditUtilidadVehiculoRow = {
@@ -44,12 +43,14 @@ export type AuditUtilidadVehiculoRow = {
   gastos_sin_vehiculo_excluidos: number;
   utilidad_esperada: number;
   utilidad_esperada_solo_operativo: number;
+  utilidad_actual_ui: number;
   utilidad_historica_importada: number;
+  /** Alias de utilidad_actual_ui (métrica principal en pantallas). */
   utilidad_acumulada_ui: number;
-  utilidad_calculada_post_corte: number;
+  margen_operativo_detalle: number;
   margen_reportes_legacy: number;
-  margen_detalle_vehiculo: number;
   diferencia_vs_esperada_historica: number;
+  diferencia_vs_esperada_ui: number;
   diferencia_vs_esperada_acumulada: number;
   diferencia_vs_esperada_margen_reportes: number;
   cantidad_ingresos: number;
@@ -65,8 +66,12 @@ export type AuditUtilidadVehiculosResult = {
   formulaActualUi: Record<string, unknown>;
   resumen: {
     vehiculosActivos: number;
+    utilidadRealFlota: number;
+    gastos_en_memoria: number;
+    gastos_load_scope: 'recent' | 'full';
+    subconteo_probable_bootstrap: boolean;
     conDiferenciaHistoricaVsEsperada: number;
-    conDiferenciaAcumuladaVsEsperada: number;
+    conDiferenciaUiVsEsperada: number;
     ingresosSinVehiculo: number;
     gastosSinVehiculo: number;
     gastosGlobalesSinVehiculo: number;
@@ -102,18 +107,12 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     cajaNegocioVehiculo,
     gastosCaja = [],
     descuentos = [],
+    gastosLoadScope = 'recent',
   } = input;
 
   const activos = vehicles.filter((v) => v.activo !== false);
   const historicaPorVehiculo = buildUtilidadHistoricaPorVehiculo([...cajaNegocioVehiculo]);
   const historicaMap = new Map(historicaPorVehiculo.map((r) => [r.vehicleId, r.monto]));
-  const acumulada = calcularUtilidadAcumulada(
-    [...cajaNegocioVehiculo],
-    [...ingresos],
-    [...gastos],
-    [...activos],
-  );
-  const acumuladaMap = new Map(acumulada.porVehiculo.map((r) => [r.vehicleId, r]));
   const corte = getUtilidadCorteHistorico([...cajaNegocioVehiculo]);
 
   const rentabilidad = calculateVehicleRentability(
@@ -134,24 +133,26 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     ingresos: {
       tabla: 'public.ingresos',
       campoVehiculo: 'vehicle_id → Ingreso.vehicleId (number | null)',
-      unidadId: 'no se usa unidad_id en ingresos; solo vehicle_id',
       monto: 'ingresoMontoPEN(i) — PEN o monto × tipoCambio si USD',
-      estados: 'estadoPago legacy en BD; UI trata ingresos como confirmados (sin filtro anulado en memoria)',
-      eliminados: 'no hay soft-delete en cliente; lista = fetchIngresos en bootstrap (registros borrados no aparecen)',
+      eliminados: 'no hay soft-delete en cliente; lista = fetchIngresos en bootstrap',
       sinVehiculo: {
         count: ingresosSinVeh.length,
         montoPEN: round2(ingresosSinVeh.reduce((s, i) => s + ingresoMontoPEN(i), 0)),
-        esExtraordinario: ingresosSinVeh.filter((i) => i.esExtraordinario).length,
       },
     },
     gastos: {
       tabla: 'public.gastos',
       campoVehiculo: 'vehicle_id → Gasto.vehicleId (number | string | null)',
-      unidadId: 'no se usa unidad_id en gastos',
       monto: 'g.monto (signo siempre negativo en tipo)',
-      estados: 'sin filtro estado en memoria; borrados no están en bootstrap',
-      globalesMezclados: 'gastos con vehicle_id null y tipo_gastos_globales no se asignan a un vehículo en utilidad por unidad',
-      cajaNegocioTexto: 'gastos con texto «caja negocio» excluidos de operativos (isCajaNegocioGasto)',
+      bootstrap: {
+        scope: gastosLoadScope,
+        nota:
+          gastosLoadScope === 'recent'
+            ? 'Memoria = fetchGastosRecent (~1000 últimos) + pendiente + globales. Utilidad subcuenta si hay gastos antiguos no incluidos. Usar reloadGastosFull() o pantallas utilidad (auto-carga).'
+            : 'Memoria = fetchGastosFull (histórico completo).',
+        filas_en_memoria: gastos.length,
+      },
+      globalesMezclados: 'gastos con vehicle_id null no se asignan a un vehículo',
       sinVehiculo: {
         count: gastosSinVeh.length,
         monto: round2(gastosSinVeh.reduce((s, g) => s + g.monto, 0)),
@@ -161,58 +162,42 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     gastos_caja: {
       tabla: 'public.gastos_caja (Excel GASTOS)',
       aplicaUtilidadVehiculo: false,
-      nota: 'caja general sin vehicle_id; no entra en utilidad por vehículo',
       count: gastosCaja.length,
-      monto: round2(gastosCaja.reduce((s, g) => s + g.monto, 0)),
     },
     caja_negocio_vehiculo: {
       tabla: 'public.caja_negocio_vehiculo',
-      campo: 'vehicle_id, fecha, monto (utilidad histórica importada Excel)',
       esFormulaDueno: false,
-      nota: 'Es dato importado, no ingresos−gastos',
+      nota: 'Histórico importado (referencial). Ya no es utilidad principal.',
       registros: cajaNegocioVehiculo.length,
       corte,
     },
     descuentos: {
-      tabla: 'descuentos (memoria)',
-      campo: 'vehicle_id',
       enFormulaDueno: false,
-      enMargenReportes: 'calculateVehicleRentability suma descuentos al margen',
+      enMargenOperativoDetalle: 'ingresos − gastos operativos + descuentos',
       count: descuentos.length,
     },
   };
 
   const formulaActualUi: Record<string, unknown> = {
     formulaEsperadaDueno: 'INGRESOS(vehículo) − GASTOS(vehículo) — todos los gastos con vehicle_id',
-    utilidadHistoricaImportada: {
-      donde: 'FinanzasHub, /finanzas/utilidad-operativa, Reportes → Utilidad acumulada',
-      fuente: 'Σ caja_negocio_vehiculo.monto por vehicle_id',
-      funcion: 'buildUtilidadHistoricaPorVehiculo / sumUtilidadHistoricaTotal',
-      cache: 'memoria RegistrosContext.cajaNegocioVehiculo (fetch bootstrap)',
-      rpc: false,
+    utilidadRealPrincipal: {
+      donde: 'FinanzasHub, /finanzas/utilidad-operativa, Reportes → Utilidad acumulada, detalle vehículo, cards',
+      formula: 'Σ ingresos(vehicle_id) − Σ gastos(vehicle_id)',
+      funcion: 'calcularUtilidadRealVehiculo / buildUtilidadRealPorVehiculo / sumUtilidadRealFlota',
     },
-    utilidadAcumuladaCombinada: {
-      donde: 'utilidadOperativa.ts (reportes avanzados si se activa cálculo)',
-      formula: 'meses ≤ corte: histórica importada; meses > corte: Σ(ingresos − gastos operativo_vehiculo) por mes',
-      funcion: 'buildUtilidadPorVehiculo / calcularUtilidadAcumulada',
-      calculoAutomaticoActivo: UTILIDAD_CALCULO_AUTOMATICO_ACTIVO,
-      gastosIncluidos: 'solo tipo operativo_vehiculo (excluye globales, admin, financiero, caja negocio texto)',
+    historicoImportadoReferencial: {
+      donde: 'Sección aparte en utilidad-operativa, reportes, tab finanzas detalle vehículo',
+      fuente: 'Σ caja_negocio_vehiculo.monto por vehicle_id',
+      etiqueta: 'Histórico importado (referencial)',
+    },
+    margenOperativo: {
+      donde: 'Detalle vehículo (secundario)',
+      formula: 'Σ ingresos − Σ gastosOperativosSolamente + Σ descuentos',
     },
     rentabilidadReportes: {
-      donde: 'Reportes → Rentabilidad por vehículo, VehiculosHub, Metas',
-      formula: 'Σ ingresos − Σ gastosOperativosSolamente + Σ descuentos',
+      donde: 'Reportes → Rentabilidad por vehículo, VehiculosHub, Dashboard TopVehicles',
+      formula: 'Σ ingresos − Σ gastos (todos con vehicle_id)',
       funcion: 'calculateVehicleRentability (calculations.ts)',
-      gastos: 'excluye isCajaNegocioGasto; no filtra por tipo_gasto operativo_vehiculo estricto',
-    },
-    vehiculoDetalle: {
-      donde: '/vehiculos/:id',
-      formula: 'totalIngresos − totalGastosOperativos + totalDescuentos',
-      gastosOperativos: 'gastosOperativosSolamente (sin caja negocio texto)',
-    },
-    resultadoNetoGlobal: {
-      donde: 'FinanzasHub (oculto), Resumen',
-      formula: 'Σ ingresos − Σ gastos (todas categorías, RPC summary posible)',
-      nota: 'NO es utilidad por vehículo',
     },
   };
 
@@ -227,34 +212,33 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     const gasOp = gasRows.filter((g) => isGastoOperativoUtilidadVehiculo(g));
     const gasOpTotal = gasOp.reduce((s, g) => s + g.monto, 0);
     const gasGlobalesEnVeh = gasRows.filter((g) => tipoGastoEffective(g) === 'gastos_globales');
+    const vehicleDescuentos = descuentos.filter((d) => vehicleIdMatches(d.vehicleId, v.id));
+    const descTotal = vehicleDescuentos.reduce((s, d) => s + d.monto, 0);
+
     const utilidadEsperada = ingTotal - gasTotalTodos;
     const utilidadEsperadaOp = ingTotal - gasOpTotal;
+    const { utilidadReal: utilidadActualUi } = calcularUtilidadRealVehiculo(v.id, ingresos, gastos);
     const historica = historicaMap.get(v.id) ?? 0;
-    const acum = acumuladaMap.get(v.id);
-    const utilidadAcumulada = acum?.utilidadAcumulada ?? 0;
-    const utilidadCalculada = acum?.utilidadCalculada ?? 0;
     const rent = rentMap.get(v.id);
-    const margenReportes = rent?.margen ?? 0;
-    const margenDetalle =
-      (rent?.totalIngresos ?? ingTotal) -
-      (rent?.totalGastos ?? gasOpTotal) +
-      (rent?.totalDescuentos ?? 0);
+    const margenReportes = rent?.margen ?? utilidadActualUi;
+    const margenOperativoDetalle =
+      ingTotal - gastosOperativosSolamente(gasRows).reduce((s, g) => s + g.monto, 0) + descTotal;
 
     const observaciones: string[] = [];
     if (historica !== 0 && Math.abs(historica - utilidadEsperada) > 0.01) {
-      observaciones.push('Utilidad histórica importada ≠ ingresos−gastos (dato Excel, no calculada)');
+      observaciones.push('Histórico importado ≠ ingresos−gastos (dato Excel referencial)');
     }
-    if (!UTILIDAD_CALCULO_AUTOMATICO_ACTIVO && utilidadCalculada !== 0) {
-      observaciones.push('Hay tramo calculado post-corte aunque UI muestra solo histórica');
-    }
-    if (Math.abs(margenReportes - utilidadEsperada) > 0.01) {
-      observaciones.push('Margen reportes usa gastos operativos+caja texto y descuentos, no todos los gastos');
+    if (Math.abs(margenOperativoDetalle - utilidadEsperada) > 0.01) {
+      observaciones.push('Margen operativo usa solo gastos operativos + descuentos');
     }
     if (gasGlobalesEnVeh.length > 0) {
       observaciones.push(`${gasGlobalesEnVeh.length} gasto(s) globales con vehicle_id asignado`);
     }
     if (gasRows.some((g) => isCajaNegocioGasto(g))) {
       observaciones.push('Incluye gastos etiquetados caja negocio en tabla gastos');
+    }
+    if (gastosLoadScope === 'recent' && gasRows.length < 5 && ingTotal > 1000) {
+      observaciones.push('Bootstrap reciente: pocos gastos en memoria vs ingresos altos — posible subconteo');
     }
 
     const row: AuditUtilidadVehiculoRow = {
@@ -269,13 +253,14 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
       gastos_sin_vehiculo_excluidos: 0,
       utilidad_esperada: round2(utilidadEsperada),
       utilidad_esperada_solo_operativo: round2(utilidadEsperadaOp),
+      utilidad_actual_ui: round2(utilidadActualUi),
       utilidad_historica_importada: round2(historica),
-      utilidad_acumulada_ui: round2(utilidadAcumulada),
-      utilidad_calculada_post_corte: round2(utilidadCalculada),
+      utilidad_acumulada_ui: round2(utilidadActualUi),
+      margen_operativo_detalle: round2(margenOperativoDetalle),
       margen_reportes_legacy: round2(margenReportes),
-      margen_detalle_vehiculo: round2(margenDetalle),
       diferencia_vs_esperada_historica: round2(historica - utilidadEsperada),
-      diferencia_vs_esperada_acumulada: round2(utilidadAcumulada - utilidadEsperada),
+      diferencia_vs_esperada_ui: round2(utilidadActualUi - utilidadEsperada),
+      diferencia_vs_esperada_acumulada: round2(utilidadActualUi - utilidadEsperada),
       diferencia_vs_esperada_margen_reportes: round2(margenReportes - utilidadEsperada),
       cantidad_ingresos: ingRows.length,
       cantidad_gastos_todos: gasRows.length,
@@ -289,25 +274,24 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
   });
 
   const conDiffHist = porVehiculo.filter((r) => Math.abs(r.diferencia_vs_esperada_historica) > 0.01).length;
-  const conDiffAcum = porVehiculo.filter((r) => Math.abs(r.diferencia_vs_esperada_acumulada) > 0.01).length;
+  const conDiffUi = porVehiculo.filter((r) => Math.abs(r.diferencia_vs_esperada_ui) > 0.01).length;
 
   const diferencias = porVehiculo
     .filter(
       (r) =>
-        Math.abs(r.diferencia_vs_esperada_historica) > 0.01 ||
-        Math.abs(r.diferencia_vs_esperada_acumulada) > 0.01 ||
-        Math.abs(r.diferencia_vs_esperada_margen_reportes) > 0.01,
+        Math.abs(r.diferencia_vs_esperada_ui) > 0.01 ||
+        Math.abs(r.diferencia_vs_esperada_historica) > 0.01,
     )
     .map((r) => ({
       vehicleId: r.vehicleId,
       placa: r.placa,
+      ingresos_total: r.ingresos_total,
+      gastos_total_todos: r.gastos_total_todos,
       utilidad_esperada: r.utilidad_esperada,
+      utilidad_actual_ui: r.utilidad_actual_ui,
       utilidad_historica_importada: r.utilidad_historica_importada,
-      utilidad_acumulada_ui: r.utilidad_acumulada_ui,
-      margen_reportes: r.margen_reportes_legacy,
+      dif_ui: r.diferencia_vs_esperada_ui,
       dif_historica: r.diferencia_vs_esperada_historica,
-      dif_acumulada: r.diferencia_vs_esperada_acumulada,
-      dif_margen: r.diferencia_vs_esperada_margen_reportes,
       observaciones: r.observaciones,
     }));
 
@@ -319,8 +303,12 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     formulaActualUi,
     resumen: {
       vehiculosActivos: activos.length,
+      utilidadRealFlota: round2(sumUtilidadRealFlota(ingresos, gastos, activos)),
+      gastos_en_memoria: gastos.length,
+      gastos_load_scope: gastosLoadScope,
+      subconteo_probable_bootstrap: gastosLoadScope === 'recent',
       conDiferenciaHistoricaVsEsperada: conDiffHist,
-      conDiferenciaAcumuladaVsEsperada: conDiffAcum,
+      conDiferenciaUiVsEsperada: conDiffUi,
       ingresosSinVehiculo: ingresosSinVeh.length,
       gastosSinVehiculo: gastosSinVeh.length,
       gastosGlobalesSinVehiculo: gastosGlobalesSinVeh.length,

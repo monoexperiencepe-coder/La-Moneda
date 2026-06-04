@@ -38,6 +38,7 @@ import type { AiChatMessage, AiSuggestedAction } from '../../modules/ai/types';
 import AIMessageCard from './AIMessageCard';
 import AIDebugPanel from './AIDebugPanel';
 import { structuredFromAssistantContent } from '../../utils/aiResponseParser';
+import { ensureCopilotAuditRegistered } from '../../modules/copilot/registerCopilotAudit';
 
 // ─── Safe navigation ──────────────────────────────────────────────────────────
 
@@ -377,6 +378,13 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    ensureCopilotAuditRegistered({
+      getUser: () => (user ? permissionUserFromAuth(user, profile?.email ?? null) : null),
+      getEmpresaId: () => profile?.empresa_id ?? import.meta.env.VITE_EMPRESA_ID ?? null,
+    });
+  }, [user, profile?.email, profile?.empresa_id]);
 
   useEffect(() => {
     if (variant !== 'companion' || !empresaId || !userId) return;

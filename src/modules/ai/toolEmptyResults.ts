@@ -7,6 +7,8 @@ const EMPTY_MESSAGES: Partial<Record<AiToolName, string>> = {
   getGastosPeriodo: 'No encontré gastos para ese periodo o categoría.',
   getGastosPorCategoria: 'No encontré gastos por categoría en ese periodo.',
   getVehiculosConMasGasto: 'No encontré gastos operativos por vehículo en ese periodo.',
+  getTopVehiculosUtilidad:
+    'No hay datos suficientes en public.ingresos o public.gastos con vehicle_id para armar el ranking de utilidad.',
   getPendientesRevision: 'No hay gastos pendientes de revisión en este momento.',
   getGastosGlobales: 'No hay gastos globales registrados.',
   getPrestamosActivos: 'No hay préstamos activos registrados.',
@@ -17,11 +19,25 @@ const EMPTY_MESSAGES: Partial<Record<AiToolName, string>> = {
   getDetalleInversionVehiculo: 'No encontré inversión registrada para ese vehículo.',
   getInversionesNoVehiculares: 'No encontré inversiones no vehiculares registradas para ese subtipo o periodo.',
   getFlotaResumen: 'No hay vehículos registrados en la flota.',
+  getConteoConductores: 'No hay conductores registrados.',
+  getAlertasAutomaticas: 'No hay alertas automáticas activas en este momento.',
+  getDocumentosResumen: 'No hay documentos registrados en la flota activa.',
+  getPendientesResumen: 'No hay pendientes operativos registrados.',
+  getDetalleAlertas: 'No hay alertas en esa categoría.',
+  getUtilidadVehiculo: 'No se encontró el vehículo indicado.',
+  getIngresosVehiculo: 'No se encontró el vehículo indicado.',
+  getGastosVehiculo: 'No se encontró el vehículo indicado.',
+  getUtilidadVehiculoDetalle: 'No se encontró el vehículo indicado.',
+  getGastosVehiculoDesglose: 'No hay gastos operativos para desglosar.',
+  getDocumentosPorRango: 'No hay documentos que venzan en ese rango.',
+  getDocumentosVehiculo: 'No se encontró el vehículo indicado.',
   getVehiculosDisponibles: 'No hay vehículos activos disponibles (todos tienen conductor asignado o están inactivos).',
   getVehiculosSinConductor: 'No hay vehículos activos sin conductor asignado.',
   getConductoresAsignados: 'No hay conductores vigentes con vehículo asignado.',
   getVehiculoPorPlaca: 'No encontré un vehículo con esa placa.',
   getConductorPorVehiculo: 'No encontré conductor ni vehículo con ese criterio.',
+  getVehiculoPorNumero: 'No encontré un vehículo con ese número de unidad.',
+  getConductorPorNumero: 'No encontré un conductor con ese número en el listado.',
 };
 
 export function emptyResultMessageForTool(tool: AiToolName): string {
@@ -62,12 +78,60 @@ export function isAiToolResultEmpty(tool: AiToolName, data: unknown): boolean {
     return d.tipo_gasto_sugerido == null && d.categoriaSugerida == null;
   }
 
+  if (tool === 'getTopVehiculosUtilidad') {
+    if (Array.isArray(d.datos_faltantes) && d.datos_faltantes.length > 0) return true;
+    const ranking = d.ranking as Array<{ utilidad?: number; ingresos?: number; gastos?: number }> | undefined;
+    if (!ranking?.length) return true;
+    return ranking.every((r) => (r.utilidad ?? 0) === 0 && (r.ingresos ?? 0) === 0 && (r.gastos ?? 0) === 0);
+  }
+
   if (tool === 'getFlotaResumen') {
-    return (d.total as number | undefined) === 0;
+    const total = (d.totalVehiculos ?? d.total) as number | undefined;
+    return total === 0;
+  }
+
+  if (tool === 'getConteoConductores') {
+    return (d.totalConductores as number | undefined) === 0;
+  }
+
+  if (tool === 'getAlertasAutomaticas') {
+    return (d.totalAlertasAutomaticas as number | undefined) === 0;
+  }
+
+  if (tool === 'getDocumentosResumen') {
+    return (d.totalDocumentos as number | undefined) === 0;
+  }
+
+  if (tool === 'getPendientesResumen') {
+    return (d.totalPendientes as number | undefined) === 0;
+  }
+
+  if (tool === 'getDetalleAlertas') {
+    return (d.count as number | undefined) === 0;
+  }
+
+  if (tool === 'getUtilidadVehiculo' || tool === 'getIngresosVehiculo' || tool === 'getGastosVehiculo') {
+    return d.encontrado === false;
+  }
+
+  if (tool === 'getUtilidadVehiculoDetalle' || tool === 'getGastosVehiculoDesglose') {
+    return d.encontrado === false || ((d.count as number | undefined) === 0 && tool === 'getGastosVehiculoDesglose');
+  }
+
+  if (tool === 'getDocumentosPorRango') {
+    return (d.count as number | undefined) === 0;
+  }
+
+  if (tool === 'getDocumentosVehiculo') {
+    return d.encontrado === false;
   }
 
   if (tool === 'getVehiculoPorPlaca' || tool === 'getConductorPorVehiculo') {
     return d.encontrado === false && !Array.isArray(d.coincidencias_nombre);
+  }
+
+  if (tool === 'getVehiculoPorNumero' || tool === 'getConductorPorNumero') {
+    return d.encontrado === false;
   }
 
   const c = countFromData(d);

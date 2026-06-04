@@ -1,5 +1,5 @@
 ﻿import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   Search,
@@ -23,6 +23,7 @@ import {
   conductorToDraft,
   conductorDraftsEqual,
   draftToConductorPatch,
+  parseVehicleIdFromDraft,
   validateConductorDraft,
   whatsappHref,
   telHref,
@@ -73,10 +74,22 @@ function emptyNuevoConductorForm() {
     numeroEmergencia: '',
     direccion: '',
     fechaVencimientoContrato: '',
+    fechaInicioContrato: '',
     documentoFirmado: 'unset' as 'unset' | 'true' | 'false',
     comentarios: '',
     statusOriginal: '',
   };
+}
+
+type NuevoConductorForm = ReturnType<typeof emptyNuevoConductorForm>;
+
+function nuevoFormDisabledReason(f: NuevoConductorForm, busy: boolean): string | null {
+  if (busy) return 'Guardando…';
+  if (!f.nombres.trim()) return 'Falta nombres.';
+  if (!f.apellidos.trim()) return 'Falta apellidos.';
+  if (!f.numeroDocumento.trim()) return 'Falta número de documento.';
+  if (!f.celular.trim()) return 'Falta celular.';
+  return null;
 }
 
 /* â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -121,12 +134,14 @@ const SortTh: React.FC<{
 /* â”€â”€â”€ component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const Conductores: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     conductores,
     vehicles,
     deleteConductor,
     updateConductor,
     addConductor,
+    assignConductorToVehicle,
     registrosBootstrapLoading,
     registrosBootstrapComplete,
   } = useRegistrosContext();
@@ -186,20 +201,66 @@ const Conductores: React.FC = () => {
     setNuevoError('');
   }, []);
 
+  useEffect(() => {
+    if (searchParams.get('registrar') !== '1') return;
+    setShowNuevoForm(true);
+    setNuevoForm(emptyNuevoConductorForm());
+    setNuevoError('');
+    const next = new URLSearchParams(searchParams);
+    next.delete('registrar');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const nuevoDisabledReason = useMemo(
+    () => nuevoFormDisabledReason(nuevoForm, nuevoBusy),
+    [nuevoForm, nuevoBusy],
+  );
+  const nuevoCanSubmit = nuevoDisabledReason == null;
+
+  useEffect(() => {
+    if (!showNuevoForm) return;
+    console.log('[conductor:create:open]');
+    console.log('[conductor:create:form_state]', {
+      nombres: nuevoForm.nombres,
+      apellidos: nuevoForm.apellidos,
+      numeroDocumento: nuevoForm.numeroDocumento,
+      celular: nuevoForm.celular,
+      vehicleId: nuevoForm.vehicleId,
+      fechaInicioContrato: nuevoForm.fechaInicioContrato,
+    });
+  }, [showNuevoForm]);
+
+  useEffect(() => {
+    if (!showNuevoForm) return;
+    console.log('[conductor:create:disabled_reason]', nuevoDisabledReason ?? 'ready');
+  }, [showNuevoForm, nuevoDisabledReason]);
+
   const handleNuevoSubmit = useCallback(async () => {
+    console.log('[conductor:create:submit]');
+    console.log('[conductor:create:before_validate]', { form: nuevoForm });
     if (nuevoBusy) return;
     setNuevoError('');
     const f = nuevoForm;
-    if (!f.nombres.trim() || !f.apellidos.trim() || !f.numeroDocumento.trim() || !f.celular.trim()) {
-      setNuevoError('Completa nombres, apellidos, número de documento y celular.');
+    const validationError = nuevoFormDisabledReason(f, false);
+    if (validationError) {
+      console.log('[conductor:create:validation_error]', validationError);
+      setNuevoError(`Completa los campos obligatorios: ${validationError}`);
       return;
     }
     const docFirm: boolean | null =
       f.documentoFirmado === 'unset' ? null : f.documentoFirmado === 'true';
     setNuevoBusy(true);
     try {
+      const vehicleIdRaw = f.vehicleId.trim();
+      const vehicleIdNum =
+        vehicleIdRaw === '' || !Number.isFinite(Number(vehicleIdRaw)) ? null : Number(vehicleIdRaw);
+      console.log('[conductor:create:before_insert]', {
+        vehicleIdNum,
+        estado: f.estado,
+        fechaInicioContrato: f.fechaInicioContrato || null,
+      });
       const result = await addConductor({
-        vehicleId: f.vehicleId.trim() === '' ? null : Number(f.vehicleId),
+        vehicleId: null,
         tipoDocumento: f.tipoDocumento,
         numeroDocumento: f.numeroDocumento.trim(),
         nombres: f.nombres.trim(),
@@ -213,24 +274,30 @@ const Conductores: React.FC = () => {
         numeroEmergencia: f.numeroEmergencia.trim() || null,
         direccion: f.direccion.trim() || null,
         documentoFirmado: docFirm,
+        fechaInicioContrato: f.fechaInicioContrato.trim() || null,
         fechaVencimientoContrato: f.fechaVencimientoContrato.trim() || null,
         comentarios: f.comentarios.trim(),
       });
       if (!result) {
+        console.log('[conductor:create:error]', 'insert returned null');
         setNuevoError('No se pudo guardar. Revisa los datos o la conexión con Supabase.');
         return;
       }
+      if (f.estado === 'VIGENTE' && vehicleIdNum != null && vehicleIdNum > 0) {
+        await assignConductorToVehicle(result.id, vehicleIdNum);
+      }
+      console.log('[conductor:create:success]', { id: result.id });
       setShowNuevoForm(false);
       setNuevoForm(emptyNuevoConductorForm());
-      const d = conductorToDraft(result);
-      setEditingDriverId(result.id);
-      setEditState({ driverId: result.id, draft: d, baseline: d });
-      setShowAdvanced(false);
-      setEditError(null);
+      setEstadoFilter('TODOS');
+      setQ('');
+    } catch (e) {
+      console.log('[conductor:create:error]', e);
+      setNuevoError(e instanceof Error ? e.message : 'No se pudo guardar el conductor.');
     } finally {
       setNuevoBusy(false);
     }
-  }, [nuevoForm, addConductor]);
+  }, [nuevoForm, addConductor, assignConductorToVehicle, nuevoBusy]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortDir((prev) => (sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
@@ -277,7 +344,7 @@ const Conductores: React.FC = () => {
   }, [conductores]);
 
   const handleSaveConductor = useCallback(
-    async (id: string, d: ConductorEditDraft) => {
+    async (id: string, d: ConductorEditDraft, baseline: ConductorEditDraft) => {
       if (editSaveBusyId === id) return;
       if (!isValidConductorId(id)) {
         console.error('[conductores update] UI guardó con id inválido', { id, type: typeof id });
@@ -291,13 +358,22 @@ const Conductores: React.FC = () => {
       }
       setEditSaveBusyId(id);
       setEditError(null);
-      console.log('[conductores update]', { id, type: typeof id });
       try {
-        const result = await updateConductor(id, draftToConductorPatch(d));
+        const patch = draftToConductorPatch(d);
+        const baselineVehicle = parseVehicleIdFromDraft(baseline.vehicleId);
+        const newVehicle = parseVehicleIdFromDraft(d.vehicleId);
+        const vehicleChanged = baselineVehicle !== newVehicle;
+
+        if (vehicleChanged) {
+          const vid = newVehicle === 'invalid' ? null : newVehicle;
+          await assignConductorToVehicle(id, vid);
+        }
+
+        const { vehicleId: _ignored, ...restPatch } = patch;
+        const result = await updateConductor(id, vehicleChanged ? restPatch : patch);
         if (result) {
           closeEdit();
         } else {
-          console.error('[Conductores] updateConductor returned null', { id });
           setEditError('No se pudo guardar el conductor. Revisa la conexión o los datos.');
         }
       } catch (e) {
@@ -307,7 +383,7 @@ const Conductores: React.FC = () => {
         setEditSaveBusyId((cur) => (cur === id ? null : cur));
       }
     },
-    [updateConductor, closeEdit],
+    [updateConductor, assignConductorToVehicle, closeEdit, editSaveBusyId],
   );
 
   const filtered = useMemo(() => {
@@ -469,7 +545,7 @@ const Conductores: React.FC = () => {
 
         {/* â”€â”€ fecha filter panel â”€â”€ */}
         {showFilters && (
-          <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-gray-100 animate-fade-in">
+          <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-gray-100">
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
                 Registrado desde
@@ -530,13 +606,16 @@ const Conductores: React.FC = () => {
       </div>
 
       {showNuevoForm && (
-        <div className="shrink-0 mx-4 sm:mx-6 mt-2 mb-1 rounded-2xl border border-primary-100 bg-white shadow-soft px-4 py-4 animate-fade-in">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 mb-3 flex items-center gap-2">
-            <UserPlus size={12} /> Registrar conductor
-          </p>
+        <div className="shrink-0 mx-4 sm:mx-6 mt-2 mb-1 rounded-2xl border border-primary-100 bg-white shadow-soft flex flex-col max-h-[min(70vh,560px)] animate-fade-in">
+          <div className="px-4 pt-4 pb-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 flex items-center gap-2">
+              <UserPlus size={12} /> Registrar conductor
+            </p>
+          </div>
           {nuevoError && (
-            <p className="text-xs text-red-600 mb-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2">{nuevoError}</p>
+            <p className="text-xs text-red-600 mx-4 mb-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2">{nuevoError}</p>
           )}
+          <div className="overflow-y-auto flex-1 min-h-0 px-4 pb-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <label className="block">
               <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Nombres</span>
@@ -678,6 +757,15 @@ const Conductores: React.FC = () => {
               />
             </label>
             <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Inicio contrato</span>
+              <input
+                type="date"
+                value={nuevoForm.fechaInicioContrato}
+                onChange={(e) => setNuevoForm((p) => ({ ...p, fechaInicioContrato: e.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="block">
               <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Vencimiento contrato</span>
               <input
                 type="date"
@@ -722,12 +810,13 @@ const Conductores: React.FC = () => {
               />
             </label>
           </div>
-          <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+          </div>
+          <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-t border-gray-100 bg-white rounded-b-2xl">
             <button
               type="button"
-              disabled={nuevoBusy}
+              disabled={!nuevoCanSubmit}
               onClick={() => void handleNuevoSubmit()}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors shadow-soft disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={14} /> {nuevoBusy ? 'Guardando…' : 'Guardar conductor'}
             </button>
@@ -739,6 +828,11 @@ const Conductores: React.FC = () => {
             >
               Cancelar
             </button>
+            {!nuevoCanSubmit && nuevoDisabledReason && !nuevoBusy && (
+              <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                {nuevoDisabledReason}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -746,7 +840,7 @@ const Conductores: React.FC = () => {
       {/* â”€â”€ TABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="relative flex-1 overflow-auto px-2 sm:px-4 py-2 min-h-[20rem]">
         <UpdatingChrome active={isRecalculating} />
-        <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0 content-enter transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+        <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0">
           <thead>
             <tr>
               <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 w-7 rounded-tl-xl" />
@@ -755,6 +849,7 @@ const Conductores: React.FC = () => {
               <SortTh col="vehicleId" current={sortKey} dir={sortDir} onSort={handleSort}>Carro</SortTh>
               <SortTh col="celular"   current={sortKey} dir={sortDir} onSort={handleSort}>Contacto</SortTh>
               <SortTh col="cochera"   current={sortKey} dir={sortDir} onSort={handleSort}>Cochera</SortTh>
+              <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left whitespace-nowrap">Inicio contrato</th>
               <th className="sticky top-0 bg-gray-50 py-2 px-2 border-b border-gray-200 text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">Registro</th>
               <SortTh col="estado" current={sortKey} dir={sortDir} onSort={handleSort}>
                 Estado
@@ -767,13 +862,13 @@ const Conductores: React.FC = () => {
           <tbody>
             {listBootstrapping ? (
               <tr>
-                <td colSpan={9} className="p-3">
+                <td colSpan={10} className="p-3">
                   <SkeletonTableRows rows={8} cols={5} />
                 </td>
               </tr>
             ) : canShowEmpty && filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-16 text-center text-gray-400">
+                <td colSpan={10} className="py-16 text-center text-gray-400">
                   <Search size={28} className="mx-auto mb-3 opacity-40" />
                   <p className="text-sm font-medium">Sin resultados</p>
                   <p className="text-xs mt-1">Prueba con otro nombre, documento o número de carro</p>
@@ -853,6 +948,9 @@ const Conductores: React.FC = () => {
                         <span className="text-gray-300 text-xs">{'\u2014'}</span>
                       )}
                     </td>
+                    <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-[11px] text-gray-600 tabular-nums`}>
+                      {c.fechaInicioContrato ? formatDate(c.fechaInicioContrato) : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap text-[11px] text-gray-600`}>
                       {formatDate(c.createdAt.slice(0, 10))}
                     </td>
@@ -862,7 +960,7 @@ const Conductores: React.FC = () => {
                       <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${
                         isVigente ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isVigente ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isVigente ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                         {isVigente ? 'VIGENTE' : 'SUSPENDIDO'}
                       </span>
                     </td>
@@ -930,7 +1028,7 @@ const Conductores: React.FC = () => {
                   {showEditPanel && editState && (
                     <tr className="bg-primary-50/30">
                       <td />
-                      <td colSpan={8} className="px-3 pb-3 pt-1 border-b border-primary-100">
+                      <td colSpan={10} className="px-3 pb-3 pt-1 border-b border-primary-100">
                         <ConductorEditPanel
                           draft={editState.draft}
                           vehiclesSorted={vehiclesSorted}
@@ -945,7 +1043,7 @@ const Conductores: React.FC = () => {
                             )
                           }
                           onCancel={closeEdit}
-                          onSave={() => void handleSaveConductor(c.id, editState.draft)}
+                          onSave={() => void handleSaveConductor(c.id, editState.draft, editState.baseline)}
                         />
                       </td>
                     </tr>

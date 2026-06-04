@@ -155,6 +155,8 @@ const ReportesHub: React.FC = () => {
           {activeSection === 'utilidad' ? (
             <UtilidadAcumuladaSection
               vehicles={vehicles}
+              ingresos={ingresos}
+              gastos={gastos}
               cajaNegocioVehiculo={cajaNegocioVehiculo}
               yearOptions={yearOptions}
             />

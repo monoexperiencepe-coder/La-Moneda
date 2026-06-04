@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, CalendarClock, Gauge, PiggyBank, Sparkles, Target, TrendingUp } from 'lucide-react';
 import Input from '../../components/Common/Input';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { calculateKPIs, calculateVehicleRentability } from '../../utils/calculations';
+import { calculateKPIs } from '../../utils/calculations';
+import { useUtilidadRealCalculos } from '../../hooks/useUtilidadRealCalculos';
 import { buildMetasGuia } from '../../utils/metasGuiaCoach';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
@@ -47,10 +48,27 @@ const Metas: React.FC = () => {
   const activos = useMemo(() => vehicles.filter((v) => v.activo).length, [vehicles]);
   const inactivos = useMemo(() => vehicles.filter((v) => !v.activo).length, [vehicles]);
 
-  const rentability = useMemo(
-    () => calculateVehicleRentability(vehicles, ingresos, gastos, descuentos),
-    [vehicles, ingresos, gastos, descuentos],
-  );
+  const { porVehiculo, gastosReadyForUtilidad } = useUtilidadRealCalculos({
+    pantalla: 'Metas.margenMediano',
+  });
+
+  const rentability = useMemo(() => {
+    if (!gastosReadyForUtilidad) return [];
+    return porVehiculo
+      .map((row) => {
+        const vehicle = vehicles.find((v) => v.id === row.vehicleId);
+        if (!vehicle) return null;
+        return {
+          vehicle,
+          totalIngresos: row.ingresosTotal,
+          totalGastos: row.gastosTotal,
+          totalDescuentos: 0,
+          margen: row.utilidadReal,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .sort((a, b) => b.margen - a.margen);
+  }, [porVehiculo, vehicles, gastosReadyForUtilidad]);
 
   const margenes = useMemo(() => rentability.map((r) => r.margen), [rentability]);
   const margenMediano = useMemo(() => median(margenes), [margenes]);

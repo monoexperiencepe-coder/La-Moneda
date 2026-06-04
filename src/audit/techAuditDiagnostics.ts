@@ -256,6 +256,8 @@ export type TechAuditContext = {
   getGastosCaja?: () => import('../data/types').GastoCaja[];
   getDescuentos?: () => import('../data/types').Descuento[];
   getPermissionUser: () => PermissionUser | null;
+  getGastosLoadScope?: () => 'recent' | 'full';
+  getEmpresaId?: () => string | null;
 };
 
 export function runTechAuditFull(ctx: TechAuditContext): void {

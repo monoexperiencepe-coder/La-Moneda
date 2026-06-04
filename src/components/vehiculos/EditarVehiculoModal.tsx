@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Save, Trash2 } from 'lucide-react';
 import Modal from '../Common/Modal';
 import { useRegistrosContext } from '../../context/RegistrosContext';
+import { useAuth } from '../../context/AuthContext';
+import {
+  fetchInversionGeneralByVehicleId,
+  upsertInversionGeneralVehiculoValor,
+} from '../../services/inversionesGeneralesVehiculoService';
 import type { Vehicle } from '../../data/types';
 
 const OBS_SEP = ' · Obs: ';
@@ -24,13 +29,16 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   onDeleted?: () => void;
+  onSaved?: () => void;
 };
 
-const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDeleted }) => {
+const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDeleted, onSaved }) => {
   const { updateVehicle, deleteVehicle } = useRegistrosContext();
+  const { profile } = useAuth();
   const [modelo, setModelo] = useState('');
   const [color, setColor] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [valorCompraUsd, setValorCompraUsd] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -41,9 +49,17 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
     setModelo(base);
     setColor(vehicle.color ?? '');
     setObservaciones(obs);
+    setValorCompraUsd('');
     setError('');
     setConfirmDelete(false);
-  }, [isOpen, vehicle]);
+    void fetchInversionGeneralByVehicleId(vehicle.id, profile?.empresa_id).then((inv) => {
+      if (inv?.valorCompraUsd != null && Number.isFinite(inv.valorCompraUsd)) {
+        setValorCompraUsd(String(inv.valorCompraUsd));
+      } else if (inv?.montoTotal != null && inv.moneda === 'USD') {
+        setValorCompraUsd(String(inv.montoTotal));
+      }
+    });
+  }, [isOpen, vehicle, profile?.empresa_id]);
 
   const resetAndClose = useCallback(() => {
     setError('');
@@ -69,13 +85,21 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
         setError('No se pudo guardar el vehículo.');
         return;
       }
+      const rawValor = valorCompraUsd.trim();
+      if (rawValor !== '') {
+        const valor = Number(rawValor);
+        if (Number.isFinite(valor) && valor > 0) {
+          await upsertInversionGeneralVehiculoValor(updated, valor, profile?.empresa_id);
+        }
+      }
+      onSaved?.();
       resetAndClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar.');
     } finally {
       setBusy(false);
     }
-  }, [busy, color, modelo, observaciones, resetAndClose, updateVehicle, vehicle]);
+  }, [busy, color, modelo, observaciones, onSaved, profile?.empresa_id, resetAndClose, updateVehicle, valorCompraUsd, vehicle]);
 
   const handleDelete = useCallback(async () => {
     if (!vehicle || busy) return;
@@ -189,6 +213,18 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
               type="text"
               value={color}
               onChange={(e) => setColor(e.target.value)}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Valor de compra (USD)</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={valorCompraUsd}
+              onChange={(e) => setValorCompraUsd(e.target.value)}
+              placeholder="Inversión inicial — inversiones generales"
               className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
             />
           </label>

@@ -1,327 +1,214 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Trash2, Loader2 } from 'lucide-react';
-import Card from '../../components/Common/Card';
-import Input from '../../components/Common/Input';
-import Select from '../../components/Common/Select';
+import { ChevronLeft } from 'lucide-react';
+import PendienteCard from '../../components/pendientes/PendienteCard';
+import PendienteFormPanel from '../../components/pendientes/PendienteFormPanel';
+import PendientesVirtualList from '../../components/pendientes/PendientesVirtualList';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-import { formatDate, todayStr } from '../../utils/formatting';
-import type { EstadoPendiente, Pendiente, PrioridadPendiente } from '../../data/types';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import type { Pendiente } from '../../data/types';
+import {
+  countPendientesEquipoActivos,
+  emptyPendienteForm,
+  filterPendientesTab,
+  formValuesToPendientePayload,
+  pendienteToFormValues,
+  estadoFromV2,
+  type PendienteFormValues,
+  type PendienteTabId,
+} from '../../utils/pendienteModel';
 
-const ESTADOS_PENDIENTE: { value: EstadoPendiente; label: string }[] = [
-  { value: 'ABIERTO', label: 'Abierto' },
-  { value: 'EN_CURSO', label: 'En curso' },
-  { value: 'RESUELTO', label: 'Resuelto' },
-  { value: 'CANCELADO', label: 'Cancelado' },
-];
-
-const PRIORIDADES_PENDIENTE: { value: PrioridadPendiente; label: string }[] = [
-  { value: 'ALTA', label: 'Alta' },
-  { value: 'MEDIA', label: 'Media' },
-  { value: 'BAJA', label: 'Baja' },
+const TABS: { id: PendienteTabId; label: string }[] = [
+  { id: 'hoy', label: 'Hoy' },
+  { id: 'proximas', label: 'Próximas' },
+  { id: 'backlog', label: 'Sin fecha' },
+  { id: 'completadas', label: 'Completadas' },
 ];
 
 const PendientesPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const filterPrioridadLista = ((): PrioridadPendiente | '' => {
-    const p = searchParams.get('prioridad');
-    return p === 'ALTA' || p === 'MEDIA' || p === 'BAJA' ? p : '';
-  })();
-  const activosSolo = searchParams.get('activos') === '1';
-
-  const clearListaFilters = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('prioridad');
-    next.delete('activos');
-    setSearchParams(next, { replace: true });
-  };
+  const initialTab = (searchParams.get('tab') as PendienteTabId) || 'hoy';
+  const [tab, setTab] = useState<PendienteTabId>(
+    TABS.some((t) => t.id === initialTab) ? initialTab : 'hoy',
+  );
 
   const {
     vehicles,
+    conductores,
     pendientes,
     addPendiente,
     updatePendiente,
-    deletePendiente,
     getVehicleLabel,
   } = useRegistrosContext();
 
-  const [filterVehicleId, setFilterVehicleId] = useState('');
-  const [pendienteForm, setPendienteForm] = useState({
-    vehicleId: '',
-    descripcion: '',
-    estado: 'ABIERTO' as EstadoPendiente,
-    fecha: todayStr(),
-    prioridad: 'MEDIA' as PrioridadPendiente,
-  });
-  const [savingNuevo, setSavingNuevo] = useState(false);
-  const [rowMutatingId, setRowMutatingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [formOpen, setFormOpen] = useState(searchParams.get('nuevo') === '1');
+  const [formValues, setFormValues] = useState<PendienteFormValues>(emptyPendienteForm);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   useEffect(() => {
     const v = searchParams.get('vehicle');
     if (!v) return;
     const n = Number(v);
-    if (Number.isNaN(n) || !vehicles.some((x) => x.id === n)) return;
-    setFilterVehicleId(String(n));
-    setPendienteForm((p) => ({ ...p, vehicleId: String(n) }));
-  }, [searchParams, vehicles]);
+    if (Number.isNaN(n)) return;
+    setFormValues((p) => ({
+      ...p,
+      relacionadoTipo: 'vehiculo',
+      relacionadoId: String(n),
+      vehicleId: String(n),
+    }));
+    setFormOpen(true);
+  }, [searchParams]);
 
-  const pendientesFiltrados = useMemo(() => {
-    let list = pendientes;
-    if (filterVehicleId) {
-      const vid = Number(filterVehicleId);
-      list = list.filter((p) => p.vehicleId != null && Number(p.vehicleId) === vid);
-    }
-    if (activosSolo) {
-      list = list.filter((p) => p.estado === 'ABIERTO' || p.estado === 'EN_CURSO');
-    }
-    if (filterPrioridadLista) {
-      list = list.filter((p) => p.prioridad === filterPrioridadLista);
-    }
-    const rank: Record<PrioridadPendiente, number> = { ALTA: 0, MEDIA: 1, BAJA: 2 };
-    return [...list].sort((a, b) => {
-      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
-      if (vr !== 0) return vr;
-      const rp = rank[a.prioridad] - rank[b.prioridad];
-      if (rp !== 0) return rp;
-      const fd = b.fecha.localeCompare(a.fecha);
-      if (fd !== 0) return fd;
-      return b.id - a.id;
-    });
-  }, [pendientes, filterVehicleId, activosSolo, filterPrioridadLista]);
+  const setTabAndUrl = (next: PendienteTabId) => {
+    setTab(next);
+    const sp = new URLSearchParams(searchParams);
+    sp.set('tab', next);
+    setSearchParams(sp, { replace: true });
+  };
 
-  const vehicleOptions = [
-    { value: '', label: 'Todos los vehículos' },
-    ...[...vehicles].sort((a, b) => a.id - b.id).map((v) => ({
-      value: String(v.id),
-      label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
-    })),
-  ];
+  const listaTab = useMemo(() => filterPendientesTab(pendientes, tab), [pendientes, tab]);
+  const activasHoy = useMemo(() => countPendientesEquipoActivos(pendientes), [pendientes]);
+
+  const startCreate = () => {
+    setEditingId(null);
+    setFormValues(emptyPendienteForm());
+    setFormOpen(true);
+  };
+
+  const startEdit = (p: Pendiente) => {
+    setEditingId(p.id);
+    setFormValues(pendienteToFormValues(p));
+    setFormOpen(true);
+  };
+
+  const saveForm = async () => {
+    if (saving || !formValues.titulo.trim()) return;
+    setSaving(true);
+    try {
+      const payload = formValuesToPendientePayload(formValues);
+      if (editingId != null) {
+        await updatePendiente(editingId, payload);
+      } else {
+        const res = await addPendiente(payload);
+        if (!res) return;
+      }
+      setFormOpen(false);
+      setEditingId(null);
+      setFormValues(emptyPendienteForm());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const completar = async (p: Pendiente) => {
+    setBusyId(p.id);
+    try {
+      await updatePendiente(p.id, { estado: estadoFromV2('completado') });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/operaciones')}
-          className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
-        >
-          <ChevronLeft size={20} />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pendientes</h1>
-          <p className="text-sm text-gray-500">Lista de trabajo por prioridad (alta primero) y vehículo</p>
-          {(filterPrioridadLista || activosSolo) && (
-            <p className="mt-1.5 text-xs text-amber-900">
-              Filtro de lista activo
-              {filterPrioridadLista && ` · prioridad ${filterPrioridadLista}`}
-              {activosSolo && ' · solo abierto / en curso'}
-              {'. '}
-              <button type="button" className="font-semibold text-primary-600 hover:underline" onClick={clearListaFilters}>
-                Quitar filtros
-              </button>
-            </p>
-          )}
-        </div>
-      </div>
-
-      <Card title="Nuevo pendiente" subtitle="Opcional: asignar a un vehículo">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-          <Select
-            label="Vehículo (opcional)"
-            options={vehicles.map((v) => ({ value: String(v.id), label: `#${v.id} ${v.marca} ${v.modelo}` }))}
-            value={pendienteForm.vehicleId}
-            placeholder="General"
-            onChange={(v) => setPendienteForm((p) => ({ ...p, vehicleId: v }))}
-          />
-          <Input
-            label="Fecha"
-            type="date"
-            value={pendienteForm.fecha}
-            onChange={(e) => setPendienteForm((p) => ({ ...p, fecha: e.target.value }))}
-          />
-          <Select
-            label="Estado inicial"
-            options={ESTADOS_PENDIENTE}
-            value={pendienteForm.estado}
-            onChange={(v) => setPendienteForm((p) => ({ ...p, estado: v as EstadoPendiente }))}
-          />
-          <Select
-            label="Prioridad"
-            options={PRIORIDADES_PENDIENTE}
-            value={pendienteForm.prioridad}
-            onChange={(v) => setPendienteForm((p) => ({ ...p, prioridad: v as PrioridadPendiente }))}
-          />
-          <div className="sm:col-span-2 lg:col-span-2">
-            <label className="label">Descripción</label>
-            <textarea
-              value={pendienteForm.descripcion}
-              onChange={(e) => setPendienteForm((p) => ({ ...p, descripcion: e.target.value }))}
-              rows={2}
-              className="input-field text-sm min-h-[72px] resize-y"
-              placeholder="Qué falta hacer, observaciones…"
-            />
-          </div>
-        </div>
-        <div className="mt-3 flex justify-end">
+    <div className="flex flex-col min-h-[calc(100dvh-8rem)] max-w-3xl mx-auto pb-8 animate-fade-in">
+      <header className="sticky top-0 z-20 -mx-4 px-4 py-3 mb-2 bg-gray-50/95 backdrop-blur border-b border-gray-100 sm:mx-0 sm:rounded-2xl sm:border sm:px-4">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            disabled={savingNuevo}
-            className="px-4 py-2 rounded-xl bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white text-sm font-semibold inline-flex items-center gap-2 min-w-[10rem] justify-center"
-            onClick={() => {
-              const d = pendienteForm.descripcion.trim();
-              if (!d || savingNuevo) return;
-              void (async () => {
-                setSavingNuevo(true);
-                try {
-                  const res = await addPendiente({
-                    vehicleId: pendienteForm.vehicleId ? Number(pendienteForm.vehicleId) : null,
-                    descripcion: d,
-                    estado: pendienteForm.estado,
-                    fecha: pendienteForm.fecha,
-                    prioridad: pendienteForm.prioridad,
-                  });
-                  if (!res) return;
-                  setPendienteForm({
-                    vehicleId: '',
-                    descripcion: '',
-                    estado: 'ABIERTO',
-                    fecha: todayStr(),
-                    prioridad: 'MEDIA',
-                  });
-                } finally {
-                  setSavingNuevo(false);
-                }
-              })();
-            }}
+            onClick={() => navigate('/operaciones')}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 shrink-0 min-h-11 min-w-11 flex items-center justify-center"
+            aria-label="Volver"
           >
-            {savingNuevo ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden /> : null}
-            {savingNuevo ? 'Guardando…' : 'Guardar pendiente'}
+            <ChevronLeft size={20} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold text-gray-900 truncate">Pendientes</h1>
+            <p className="text-xs text-gray-500">
+              {activasHoy} activa{activasHoy !== 1 ? 's' : ''} en Qué hacer hoy · capa manual del equipo
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={startCreate}
+            className="shrink-0 min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white hover:bg-violet-800"
+          >
+            + Nuevo
           </button>
         </div>
-      </Card>
 
-      <Card title="Lista" subtitle={`${pendientesFiltrados.length} registro${pendientesFiltrados.length !== 1 ? 's' : ''}`}>
-        <div className="mb-4 max-w-md">
-          <Select
-            label="Filtrar por vehículo"
-            options={vehicleOptions}
-            value={filterVehicleId}
-            placeholder="Todos"
-            onChange={setFilterVehicleId}
+        <div
+          className="mt-3 flex gap-1 overflow-x-auto overscroll-x-contain pb-0.5 -mx-1 px-1"
+          role="tablist"
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTabAndUrl(t.id)}
+              className={`shrink-0 min-h-11 px-4 rounded-xl text-sm font-semibold transition-colors ${
+                tab === t.id
+                  ? 'bg-violet-700 text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {formOpen ? (
+        <div className="mb-4">
+          <PendienteFormPanel
+            title={editingId != null ? 'Editar pendiente' : 'Nuevo pendiente'}
+            values={formValues}
+            onChange={(patch) => setFormValues((v) => ({ ...v, ...patch }))}
+            onSubmit={() => void saveForm()}
+            onCancel={() => {
+              setFormOpen(false);
+              setEditingId(null);
+            }}
+            saving={saving}
+            vehicles={vehicles}
           />
         </div>
-        <div className="overflow-x-auto max-h-[min(70vh,520px)] overflow-y-auto border border-gray-100 rounded-xl">
-          {pendientesFiltrados.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-10 px-4">No hay pendientes que coincidan.</p>
-          ) : (
-            <table className="w-full text-sm min-w-[720px]">
-              <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10">
-                <tr className="text-xs text-gray-500 uppercase">
-                  <th className="text-left py-2 px-3">Prioridad</th>
-                  <th className="text-left py-2 px-3">Fecha</th>
-                  <th className="text-left py-2 px-3">Unidad</th>
-                  <th className="text-left py-2 px-3">Descripción</th>
-                  <th className="text-left py-2 px-3 w-36">Estado</th>
-                  <th className="text-right py-2 px-3 w-12" />
-                </tr>
-              </thead>
-              <tbody>
-                {pendientesFiltrados.map((p: Pendiente) => (
-                  <tr
-                    key={p.id}
-                    className={`border-b border-gray-50 hover:bg-gray-50/80 align-top ${
-                      p.prioridad === 'ALTA' && (p.estado === 'ABIERTO' || p.estado === 'EN_CURSO')
-                        ? 'bg-red-50/40'
-                        : ''
-                    }`}
-                  >
-                    <td className="py-2 px-3">
-                      <select
-                        value={p.prioridad}
-                        disabled={rowMutatingId === p.id || deletingId === p.id}
-                        onChange={(e) => {
-                          void (async () => {
-                            setRowMutatingId(p.id);
-                            try {
-                              await updatePendiente(p.id, { prioridad: e.target.value as PrioridadPendiente });
-                            } finally {
-                              setRowMutatingId((cur) => (cur === p.id ? null : cur));
-                            }
-                          })();
-                        }}
-                        className="input-field text-xs py-1.5 w-full font-semibold disabled:opacity-50"
-                      >
-                        {PRIORIDADES_PENDIENTE.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap text-gray-600">{formatDate(p.fecha)}</td>
-                    <td className="py-2 px-3 text-xs">{getVehicleLabel(p.vehicleId)}</td>
-                    <td className="py-2 px-3 text-xs text-gray-700 max-w-[280px]">
-                      <span className="line-clamp-3" title={p.descripcion}>
-                        {p.descripcion}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3">
-                      <select
-                        value={p.estado}
-                        disabled={rowMutatingId === p.id || deletingId === p.id}
-                        onChange={(e) => {
-                          void (async () => {
-                            setRowMutatingId(p.id);
-                            try {
-                              await updatePendiente(p.id, { estado: e.target.value as EstadoPendiente });
-                            } finally {
-                              setRowMutatingId((cur) => (cur === p.id ? null : cur));
-                            }
-                          })();
-                        }}
-                        className="input-field text-xs py-1.5 w-full disabled:opacity-50"
-                      >
-                        {ESTADOS_PENDIENTE.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      <button
-                        type="button"
-                        disabled={deletingId === p.id || rowMutatingId === p.id}
-                        onClick={() => {
-                          void (async () => {
-                            setDeletingId(p.id);
-                            try {
-                              await deletePendiente(p.id);
-                            } finally {
-                              setDeletingId((cur) => (cur === p.id ? null : cur));
-                            }
-                          })();
-                        }}
-                        className="text-gray-400 hover:text-red-500 p-1 disabled:opacity-40 inline-flex"
-                        title="Eliminar"
-                      >
-                        {deletingId === p.id ? (
-                          <Loader2 size={14} className="animate-spin text-red-500" aria-hidden />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </Card>
+      ) : null}
+
+      <p className="text-xs text-gray-500 mb-2 px-0.5">
+        {tab === 'hoy' && 'Vencidas, vence hoy y prioridad crítica.'}
+        {tab === 'proximas' && 'Con fecha objetivo en los próximos 30 días.'}
+        {tab === 'backlog' && 'Tareas sin fecha límite definida.'}
+        {tab === 'completadas' && 'Solo lectura · tareas cerradas.'}
+        {' '}
+        <span className="font-semibold tabular-nums">{listaTab.length}</span> en esta vista.
+      </p>
+
+      <PendientesVirtualList
+        items={listaTab}
+        className="flex-1 min-h-[240px] max-h-[min(70vh,640px)]"
+        empty={
+          <p className="text-center text-sm text-gray-400 py-12 px-4 rounded-xl border border-dashed border-gray-200 bg-white">
+            No hay pendientes en esta vista.
+          </p>
+        }
+        renderRow={(p) => (
+          <PendienteCard
+            pendiente={p}
+            vehicles={vehicles}
+            conductores={conductores}
+            getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
+            onNavigate={navigate}
+            onCompletar={tab === 'completadas' ? undefined : completar}
+            onEditar={tab === 'completadas' ? undefined : startEdit}
+            readonly={tab === 'completadas'}
+            busy={busyId === p.id}
+          />
+        )}
+      />
     </div>
   );
 };

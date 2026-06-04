@@ -133,6 +133,30 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getTopVehiculosUtilidad',
+      description:
+        'Ranking de utilidad real por vehículo: Σ ingresos (public.ingresos, vehicle_id, PEN) − Σ gastos permitidos (public.gastos, vehicle_id). ' +
+        'Orden utilidad DESC, top 10. Usar para: mejores vehículos, rentabilidad, más utilidad, ranking histórico. ' +
+        'NO usar caja_negocio ni proxy por gastos. NO decir que ingresos están consolidados.',
+      parameters: {
+        type: 'object',
+        properties: {
+          periodo: {
+            type: 'string',
+            enum: ['historico', 'mes', 'rango'],
+            description: 'historico = todo el histórico; mes = mes actual; rango = desde/hasta',
+          },
+          desde: { type: 'string', description: 'YYYY-MM-DD si periodo=rango' },
+          hasta: { type: 'string', description: 'YYYY-MM-DD si periodo=rango' },
+          anio: { type: 'number', description: 'Atajo: año calendario completo (ej. 2024)' },
+          limit: { type: 'number', description: 'Top N (default 10, máx 10)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getPendientesRevision',
       description: 'Gastos en estado pendiente_revision sin clasificar. Incluye posibles duplicados.',
       parameters: {
@@ -259,10 +283,220 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: 'getFlotaResumen',
       description:
-        'Resumen de flota: total de vehículos, activos, inactivos, disponibles (activos sin conductor vigente), ' +
-        'conductores vigentes y asignados. Usar para: "¿cuántos vehículos tiene la empresa?", "¿cuántos activos hay?". ' +
-        'No incluye montos ni gastos.',
+        'Conteo de VEHÍCULOS: totalVehiculos, activos, inactivos, disponibles. Incluye totalConductores (vigentes) como referencia. ' +
+        'Usar para: "¿cuántos vehículos?", "tamaño de flota". ' +
+        'Para "¿cuántos conductores?" usar getConteoConductores. No incluye montos.',
       parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getConteoConductores',
+      description:
+        'Conteo de CONDUCTORES en public.conductores: totalConductores, activos (VIGENTE), inactivos. ' +
+        'Usar para: "¿cuántos conductores?", "conductores activos". NO usar getFlotaResumen para esta pregunta.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getAlertasAutomaticas',
+      description:
+        'Alertas automáticas (misma lógica que Home / Qué hacer hoy): documentos vencidos, por vencer, sin ingresos, km mant., ' +
+        'pendientes alta prioridad. Usar para: "alertas activas", "qué hacer hoy", "cuántas alertas". Para listado detallado usar getDetalleAlertas.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getDocumentosResumen',
+      description:
+        'Resumen de documentación operativa: totalDocumentos, vencidos, porVencer, vigentes. ' +
+        'Usar para: "estado de documentación", "cuántos documentos vencidos hay".',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getPendientesResumen',
+      description:
+        'Resumen de pendientes operativos del equipo (tabla pendientes): total, activos, por estado y prioridad. ' +
+        'NO usar para gastos pendiente_revision. Usar para: "cuántos pendientes hay", "pendientes del equipo".',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getDetalleAlertas',
+      description:
+        'Listado detallado de alertas por vehículo: documentos vencidos, por vencer, sin ingresos, mantenimientos por km. ' +
+        'Cada fila: vehiculo, placa, motivo, diasRestantes. ' +
+        'Usar para: "muestrame documentos vencidos", "cuales son los 34 por vencer", "vehiculos sin ingresos".',
+      parameters: {
+        type: 'object',
+        properties: {
+          tipo: {
+            type: 'string',
+            enum: ['documentos_vencidos', 'documentos_por_vencer', 'sin_ingresos', 'mantenimientos', 'todos'],
+            description: 'Categoría de alerta a listar (default: todos)',
+          },
+          dias: {
+            type: 'number',
+            description: 'Horizonte en días para documentos_por_vencer (default 30)',
+          },
+          limit: { type: 'number', description: 'Máximo de filas (default 50, máx 200)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getUtilidadVehiculo',
+      description:
+        'Utilidad real de un vehículo por número de unidad: ingresos, gastos operativos y utilidad (histórico). ' +
+        'Usar para: "utilidad vehículo 1", "rentabilidad del vehículo número 3". ANTES que getVehiculoPorNumero si hay palabra utilidad/rentabilidad.',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getIngresosVehiculo',
+      description:
+        'Ingresos históricos de un vehículo por número de unidad. ' +
+        'Usar para: "ingresos vehículo 1", "cuánto ha ingresado el vehículo número 5".',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getGastosVehiculo',
+      description:
+        'Gastos operativos (utilidad real) de un vehículo por número de unidad. ' +
+        'Usar para: "gastos vehículo 1", "cuánto ha gastado el vehículo número 5".',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getDocumentosPorRango',
+      description:
+        'Documentos que vencen en N días (próxima semana = dias:7): cantidad, lista breve, placas y fechas. ' +
+        'Usar para: "cuántos vencen esta semana", "documentos por vencer en 7 días".',
+      parameters: {
+        type: 'object',
+        properties: {
+          dias: { type: 'number', description: 'Ventana en días desde hoy (default 7)' },
+          limit: { type: 'number', description: 'Máximo de filas en lista (default 25)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getDocumentosVehiculo',
+      description:
+        'Documentación de un vehículo por número: faltantes, vencidos, por vencer, vigentes. ' +
+        'Usar para: "qué documentos del vehículo 10 faltan". ANTES que getVehiculoPorNumero si hay documentos+vehículo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getUtilidadVehiculoDetalle',
+      description:
+        'Explica utilidad de un vehículo: ingresos, gastos, desglose por tipo/subtipo, top 5 gastos, conclusión. ' +
+        'Usar para: "por qué tiene esa utilidad", "explicar utilidad vehículo 1".',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getGastosVehiculoDesglose',
+      description:
+        'Desglose real de gastos del vehículo: total, porTipoGasto, porCategoria, porSubtipo, topRegistros. ' +
+        'Opcional filtroTexto (motor, frenos, llantas). Usar contexto si falta número.',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          filtroTexto: { type: 'string', description: 'Filtro por subtipo/motivo (ej. motor)' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getVehiculoPorNumero',
+      description:
+        'Datos de un vehículo por número de unidad (#3 → vehicles.id=3): placa, marca, modelo, conductor asignado. ' +
+        'Usar SOLO si NO piden utilidad/rentabilidad/ingresos/gastos. Ej: "vehículo número 3", "carro #5".',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+        },
+        required: ['numero'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getConductorPorNumero',
+      description:
+        'Nombre y datos de un conductor por su número en el listado (#60 → fila 60 orden vehicleId). ' +
+        'Usar para: "conductor número 60", "chofer #12".',
+      parameters: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number', description: 'Número de fila del conductor en listado' },
+        },
+        required: ['numero'],
+      },
     },
   },
   {

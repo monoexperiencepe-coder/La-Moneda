@@ -20,8 +20,12 @@ import type {
   ControlFecha,
   KilometrajeRegistro,
   Pendiente,
+  PendientePrioridadV2,
+  PendienteRelacionadoTipo,
+  PendienteTipo,
   RegistroTiempo,
 } from '../data/types';
+import { prioridadLegacyFromV2, prioridadV2FromLegacy } from '../utils/pendienteModel';
 
 /** Entero desde Postgres (int/bigint) o PostgREST (number | string | bigint). */
 function num(v: unknown): number {
@@ -186,6 +190,7 @@ export function mapConductorRow(r: Record<string, unknown>): Conductor {
     numeroEmergencia: strOrNull(r.numero_emergencia),
     direccion: strOrNull(r.direccion),
     documentoFirmado: boolOrNull(r.documento_firmado),
+    fechaInicioContrato: strOrNull(r.fecha_inicio_contrato),
     fechaVencimientoContrato: strOrNull(r.fecha_vencimiento_contrato),
     comentarios: str(r.comentarios),
     createdAt: isoCreated(r.created_at),
@@ -433,6 +438,7 @@ export function conductorToInsert(
     numero_emergencia: row.numeroEmergencia ?? null,
     direccion: row.direccion ?? null,
     documento_firmado: row.documentoFirmado,
+    fecha_inicio_contrato: row.fechaInicioContrato,
     fecha_vencimiento_contrato: row.fechaVencimientoContrato,
     comentarios: row.comentarios,
   };
@@ -456,6 +462,10 @@ export function conductorPatchToSnake(
   if (patch.numeroEmergencia !== undefined) out.numero_emergencia = patch.numeroEmergencia;
   if (patch.direccion !== undefined) out.direccion = patch.direccion;
   if (patch.documentoFirmado !== undefined) out.documento_firmado = patch.documentoFirmado;
+  if (patch.fechaInicioContrato !== undefined) {
+    const fi = patch.fechaInicioContrato;
+    out.fecha_inicio_contrato = fi == null || String(fi).trim() === '' ? null : String(fi).trim();
+  }
   if (patch.fechaVencimientoContrato !== undefined) {
     const fv = patch.fechaVencimientoContrato;
     out.fecha_vencimiento_contrato =
@@ -601,19 +611,89 @@ export function kilometrajeToInsert(
   };
 }
 
+function parsePendienteMetadata(raw: unknown): Record<string, unknown> {
+  if (raw == null) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw) as unknown;
+      if (p && typeof p === 'object' && !Array.isArray(p)) return p as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+const PENDIENTE_TIPOS: PendienteTipo[] = [
+  'recordatorio', 'alerta', 'mantenimiento', 'documento', 'financiero', 'conductor', 'vehiculo', 'operacion',
+];
+const PENDIENTE_PRI_V2: PendientePrioridadV2[] = ['critica', 'alta', 'media', 'baja'];
+const PENDIENTE_REL: PendienteRelacionadoTipo[] = [
+  'vehiculo', 'conductor', 'documento', 'ingreso', 'gasto', 'ninguno',
+];
+
 export function mapPendienteRow(r: Record<string, unknown>): Pendiente {
   const es = str(r.estado).toUpperCase();
   const pr = str(r.prioridad).toUpperCase();
+  const prioridad = (['ALTA', 'MEDIA', 'BAJA'].includes(pr) ? pr : 'MEDIA') as Pendiente['prioridad'];
+  const meta = parsePendienteMetadata(r.metadata);
+  const tipoRaw = str(meta.tipo ?? meta.tipo_pendiente).toLowerCase();
+  const tipo = (PENDIENTE_TIPOS.includes(tipoRaw as PendienteTipo) ? tipoRaw : 'operacion') as PendienteTipo;
+  const pv2Raw = str(meta.prioridad_v2 ?? meta.prioridadV2).toLowerCase();
+  const prioridadV2 = PENDIENTE_PRI_V2.includes(pv2Raw as PendientePrioridadV2)
+    ? (pv2Raw as PendientePrioridadV2)
+    : prioridadV2FromLegacy(prioridad, undefined);
+  const relRaw = str(meta.relacionado_tipo ?? meta.relacionadoTipo).toLowerCase();
+  let relacionadoTipo = (PENDIENTE_REL.includes(relRaw as PendienteRelacionadoTipo)
+    ? relRaw
+    : 'ninguno') as PendienteRelacionadoTipo;
+  const relId = meta.relacionado_id ?? meta.relacionadoId ?? null;
+  let relacionadoId: string | number | null =
+    relId == null || relId === '' ? null : typeof relId === 'number' ? relId : String(relId);
+  const vehicleId = r.vehicle_id != null ? num(r.vehicle_id) : null;
+  if (relacionadoTipo === 'ninguno' && vehicleId != null) {
+    relacionadoTipo = 'vehiculo';
+    relacionadoId = vehicleId;
+  }
+  const tituloDb = str(r.titulo).trim();
+  const descripcion = str(r.descripcion);
+  const mostrarRaw = meta.mostrar_en_hoy ?? meta.mostrarEnHoy;
+  const mostrarEnHoy = mostrarRaw === false || mostrarRaw === 'false' ? false : true;
+  const fechaObj = meta.fecha_objetivo ?? meta.fechaObjetivo;
+  const fechaObjetivo =
+    fechaObj != null && String(fechaObj).trim() !== '' ? String(fechaObj).slice(0, 10) : null;
+
   return {
     id: num(r.id),
-    vehicleId: r.vehicle_id != null ? num(r.vehicle_id) : null,
-    descripcion: str(r.descripcion),
+    vehicleId,
+    titulo: tituloDb || undefined,
+    descripcion,
     estado: (['ABIERTO', 'EN_CURSO', 'RESUELTO', 'CANCELADO'].includes(es)
       ? es
       : 'ABIERTO') as Pendiente['estado'],
     fecha: str(r.fecha).slice(0, 10),
-    prioridad: (['ALTA', 'MEDIA', 'BAJA'].includes(pr) ? pr : 'MEDIA') as Pendiente['prioridad'],
+    prioridad,
+    tipo,
+    prioridadV2,
+    mostrarEnHoy,
+    responsable: strOrNull(meta.responsable),
+    fechaObjetivo,
+    relacionadoTipo,
+    relacionadoId,
     createdAt: isoCreated(r.created_at),
+  };
+}
+
+function pendienteMetadataFromRow(row: Omit<Pendiente, 'id' | 'createdAt'>): Record<string, unknown> {
+  return {
+    tipo: row.tipo,
+    prioridad_v2: row.prioridadV2,
+    mostrar_en_hoy: row.mostrarEnHoy,
+    responsable: row.responsable,
+    fecha_objetivo: row.fechaObjetivo,
+    relacionado_tipo: row.relacionadoTipo,
+    relacionado_id: row.relacionadoId,
   };
 }
 
@@ -621,23 +701,39 @@ export function pendienteToInsert(
   empresaId: string,
   row: Omit<Pendiente, 'id' | 'createdAt'>,
 ): Record<string, unknown> {
+  const prioridad = row.prioridad ?? prioridadLegacyFromV2(row.prioridadV2 ?? 'media');
   return {
     empresa_id: empresaId,
     vehicle_id: row.vehicleId,
+    titulo: row.titulo?.trim() || row.descripcion.trim().slice(0, 200),
     descripcion: row.descripcion,
     estado: row.estado,
     fecha: row.fecha,
-    prioridad: row.prioridad,
+    prioridad,
+    metadata: pendienteMetadataFromRow({ ...row, prioridad }),
   };
 }
 
 export function pendientePatchToSnake(patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (patch.vehicleId !== undefined) out.vehicle_id = patch.vehicleId;
+  if (patch.titulo !== undefined) out.titulo = patch.titulo;
   if (patch.descripcion !== undefined) out.descripcion = patch.descripcion;
   if (patch.estado !== undefined) out.estado = patch.estado;
   if (patch.fecha !== undefined) out.fecha = patch.fecha;
   if (patch.prioridad !== undefined) out.prioridad = patch.prioridad;
+  const metaPatch: Record<string, unknown> = {};
+  if (patch.tipo !== undefined) metaPatch.tipo = patch.tipo;
+  if (patch.prioridadV2 !== undefined) metaPatch.prioridad_v2 = patch.prioridadV2;
+  if (patch.mostrarEnHoy !== undefined) metaPatch.mostrar_en_hoy = patch.mostrarEnHoy;
+  if (patch.responsable !== undefined) metaPatch.responsable = patch.responsable;
+  if (patch.fechaObjetivo !== undefined) metaPatch.fecha_objetivo = patch.fechaObjetivo;
+  if (patch.relacionadoTipo !== undefined) metaPatch.relacionado_tipo = patch.relacionadoTipo;
+  if (patch.relacionadoId !== undefined) metaPatch.relacionado_id = patch.relacionadoId;
+  if (Object.keys(metaPatch).length > 0) out.metadata = metaPatch;
+  if (patch.prioridadV2 !== undefined && patch.prioridad === undefined) {
+    out.prioridad = prioridadLegacyFromV2(patch.prioridadV2);
+  }
   return out;
 }
 

@@ -1,5 +1,7 @@
 import type { TechAuditContext } from './techAuditDiagnostics';
 import { auditUtilidadVehiculos, type AuditUtilidadVehiculosInput } from './auditUtilidadVehiculos';
+import { auditGastosVehiculo } from './auditGastosVehiculo';
+import { auditGastosClasificacionVehiculo } from './auditGastosClasificacionVehiculo';
 import {
   auditConductores,
   auditKmQaFlow,
@@ -24,6 +26,7 @@ import { logAdministrativosSubtiposAudit } from './auditAdministrativosSubtipos'
 import { logOperativosSubtiposAudit } from './auditOperativosSubtipos';
 import { registerDataQualityWindow } from './registerDataQualityWindow';
 import { auditAmountPermissions } from './auditAmountPermissions';
+import { runAuditUtilidadCompare } from '../hooks/useUtilidadRealCalculos';
 
 declare global {
   interface Window {
@@ -47,6 +50,11 @@ declare global {
     auditOperativosSubtipos: () => void;
     auditAmountPermissions: () => ReturnType<typeof auditAmountPermissions>;
     auditUtilidadVehiculos: () => ReturnType<typeof auditUtilidadVehiculos>;
+    auditGastosVehiculo: (idOrPlaca?: number | string) => ReturnType<typeof auditGastosVehiculo>;
+    auditGastosClasificacionVehiculo: (
+      idOrPlaca?: number | string,
+    ) => ReturnType<typeof auditGastosClasificacionVehiculo>;
+    auditUtilidadCompare: (vehicleIdOrPlaca?: number | string) => void;
   }
 }
 
@@ -89,13 +97,47 @@ export function registerTechAuditWindow(ctx: TechAuditContext): void {
       cajaNegocioVehiculo: ctx.getCajaNegocioVehiculo?.() ?? [],
       gastosCaja: ctx.getGastosCaja?.() ?? [],
       descuentos: ctx.getDescuentos?.() ?? [],
+      gastosLoadScope: ctx.getGastosLoadScope?.() ?? 'recent',
     };
     return auditUtilidadVehiculos(payload);
+  };
+
+  window.auditGastosVehiculo = (idOrPlaca?: number | string) =>
+    auditGastosVehiculo(
+      {
+        vehicles: ctx.getVehicles(),
+        gastos: ctx.getGastos(),
+        gastosLoadScope: ctx.getGastosLoadScope?.() ?? 'recent',
+        ingresos: ctx.getIngresos?.() ?? [],
+        empresaId: ctx.getEmpresaId?.() ?? null,
+      },
+      idOrPlaca,
+    );
+
+  window.auditGastosClasificacionVehiculo = (idOrPlaca?: number | string) =>
+    auditGastosClasificacionVehiculo(
+      {
+        vehicles: ctx.getVehicles(),
+        gastos: ctx.getGastos(),
+        ingresos: ctx.getIngresos?.() ?? [],
+        gastosLoadScope: ctx.getGastosLoadScope?.() ?? 'recent',
+      },
+      idOrPlaca,
+    );
+
+  window.auditUtilidadCompare = (vehicleIdOrPlaca: number | string = 1) => {
+    runAuditUtilidadCompare(
+      vehicleIdOrPlaca,
+      ctx.getVehicles(),
+      ctx.getIngresos?.() ?? [],
+      ctx.getGastos(),
+      ctx.getGastosLoadScope?.() ?? 'recent',
+    );
   };
 
   registerDataQualityWindow({ getGastos: ctx.getGastos });
 
   console.info(
-    '[tech-audit] DEV: runTechAudit() | auditUtilidadVehiculos() | auditSubtipoFactFull() | auditFinancierosSubtipos() | …',
+    '[tech-audit] DEV: auditUtilidadCompare(1) | auditGastosClasificacionVehiculo("PLACA") | auditUtilidadVehiculos() | …',
   );
 }

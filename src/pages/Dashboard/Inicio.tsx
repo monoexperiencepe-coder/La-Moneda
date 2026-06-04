@@ -9,6 +9,14 @@ import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { computeTodayReview, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
 import { KM_ALERTA_VARIACION_DESDE_MANT } from '../../utils/kmMantenimientoControl';
 import SmartClock from '../../components/Common/SmartClock';
+import HomeRecentRecordsModal, {
+  type HomeRecentModalKind,
+} from '../../components/Dashboard/HomeRecentRecordsModal';
+import { REGISTROS_ACCESOS, filterRegistrosAccesos } from '../../config/registrosAccesos';
+import { useAuth } from '../../context/AuthContext';
+import { permissionUserFromAuth } from '../../utils/permissions';
+import PendientesEquipoHoyBlock from '../../components/pendientes/PendientesEquipoHoyBlock';
+import { countPendientesEquipoActivos } from '../../utils/pendienteModel';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
 const MODULE_ITEMS = [
@@ -47,40 +55,6 @@ const MODULES = [
     emoji: '📊', label: 'Reportes', hint: 'Análisis · exportar',
     path: '/reportes', accent: 'border-l-violet-500',
     glow: 'hover:shadow-[0_4px_20px_rgba(139,92,246,0.15)]',
-  },
-];
-
-/* ─── Acciones rápidas ───────────────────────────────────────────────────── */
-const buildQuickActions = (navigate: (p: string) => void) => [
-  {
-    emoji: '💵', label: '+ Ingreso', hint: 'Registrar cobro',
-    cls: 'border-emerald-200 bg-gradient-to-br from-white to-emerald-50/80 text-emerald-950',
-    glow: 'hover:shadow-[0_4px_20px_rgba(16,185,129,0.18)]',
-    action: () => navigate('/finanzas/ingresos?registrar=1'),
-  },
-  {
-    emoji: '💸', label: '+ Gasto', hint: 'Registrar salida',
-    cls: 'border-rose-200 bg-gradient-to-br from-white to-rose-50/80 text-rose-950',
-    glow: 'hover:shadow-[0_4px_20px_rgba(244,63,94,0.18)]',
-    action: () => navigate('/finanzas/gastos?registrar=1'),
-  },
-  {
-    emoji: '🛠️', label: '+ Kilometraje', hint: 'Control de km',
-    cls: 'border-slate-200 bg-gradient-to-br from-white to-slate-50/80 text-slate-900',
-    glow: 'hover:shadow-[0_4px_20px_rgba(100,116,139,0.18)]',
-    action: () => navigate('/operaciones/mantenimiento'),
-  },
-  {
-    emoji: '📋', label: '+ Vencimiento', hint: 'Documento / fecha',
-    cls: 'border-amber-200 bg-gradient-to-br from-white to-amber-50/80 text-amber-950',
-    glow: 'hover:shadow-[0_4px_20px_rgba(245,158,11,0.18)]',
-    action: () => navigate('/operaciones/docs'),
-  },
-  {
-    emoji: '📌', label: '+ Pendiente', hint: 'Tarea operativa',
-    cls: 'border-violet-200 bg-gradient-to-br from-white to-violet-50/80 text-violet-950',
-    glow: 'hover:shadow-[0_4px_20px_rgba(139,92,246,0.18)]',
-    action: () => navigate('/operaciones/pendientes'),
   },
 ];
 
@@ -139,11 +113,31 @@ const WorkBlock: React.FC<{
 ══════════════════════════════════════════════════════════════════════════ */
 const Inicio: React.FC = () => {
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewAlertas = searchParams.get('view') === 'alertas';
 
-  const { ingresos, gastos, vehicles, controlFechas, pendientes, getVehicleLabel, kilometrajes } = useRegistrosContext();
-  const { formatGlobalAmount } = useAmountDisplay();
+  const {
+    ingresos,
+    gastos,
+    vehicles,
+    conductores,
+    controlFechas,
+    pendientes,
+    getVehicleLabel,
+    kilometrajes,
+  } = useRegistrosContext();
+  const { formatGlobalAmount, formatRecordAmount, canViewGlobal, canViewRecordAmount } =
+    useAmountDisplay();
+
+  const [recentModal, setRecentModal] = useState<HomeRecentModalKind | null>(null);
+
+  const openRecentModal = (kind: HomeRecentModalKind) => {
+    if (import.meta.env.DEV) {
+      console.warn('[home:recent-modal:open]', { kind });
+    }
+    setRecentModal(kind);
+  };
 
   /* Búsqueda */
   const [query, setQuery] = useState('');
@@ -180,14 +174,18 @@ const Inicio: React.FC = () => {
     () => computeTodayReview(vehicles, controlFechas, ingresos, pendientes, DIAS_ALERTA_SIN_INGRESO, kilometrajes),
     [vehicles, controlFechas, ingresos, pendientes, kilometrajes],
   );
-  const totalAlertas = useMemo(
+  /** Solo alertas automáticas (sin pendientes manuales del equipo). */
+  const totalAlertasAutomaticas = useMemo(
     () =>
       queRevisar.vencidosCount +
       queRevisar.porVencerCount +
       queRevisar.sinIngresoCount +
-      queRevisar.pendientesAltaActivosCount +
       queRevisar.kmMantVariacionAlertCount,
     [queRevisar],
+  );
+  const pendientesEquipoActivas = useMemo(
+    () => countPendientesEquipoActivos(pendientes),
+    [pendientes],
   );
 
   /* Sugerencias del buscador */
@@ -242,7 +240,17 @@ const Inicio: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const quickActions = useMemo(() => buildQuickActions(navigate), [navigate]);
+  const quickActions = useMemo(() => {
+    const items = filterRegistrosAccesos(REGISTROS_ACCESOS, permissionUserFromAuth(user, profile?.email));
+    return items.map((item) => ({
+      emoji: item.emoji,
+      label: item.quickLabel,
+      hint: item.hint,
+      cls: item.quickCls,
+      glow: item.quickGlow,
+      action: () => navigate(item.path),
+    }));
+  }, [navigate, user, profile?.email]);
 
   /* ════════════════════════════════════════════════════════════════════
      VISTA: QUÉ HACER HOY
@@ -263,12 +271,24 @@ const Inicio: React.FC = () => {
           <div>
             <h1 className="text-lg font-black text-gray-900 tracking-tight">Qué hacer hoy</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {totalAlertas > 0
-                ? `${totalAlertas} alerta${totalAlertas !== 1 ? 's' : ''} activa${totalAlertas !== 1 ? 's' : ''}`
-                : 'Sin alertas — todo al día'}
+              {totalAlertasAutomaticas} alerta{totalAlertasAutomaticas !== 1 ? 's' : ''} automática
+              {totalAlertasAutomaticas !== 1 ? 's' : ''}
+              {pendientesEquipoActivas > 0
+                ? ` · ${pendientesEquipoActivas} pendiente${pendientesEquipoActivas !== 1 ? 's' : ''} activa${pendientesEquipoActivas !== 1 ? 's' : ''}`
+                : ''}
             </p>
           </div>
         </div>
+
+        <PendientesEquipoHoyBlock
+          pendientes={pendientes}
+          vehicles={vehicles}
+          conductores={conductores}
+          getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
+          compact
+          className="max-h-[260px]"
+          onVer={() => navigate('/operaciones/pendientes?tab=hoy')}
+        />
 
         <WorkBlock title="Documentos vencidos" count={queRevisar.vencidosCount}
           subtitle="Control de fechas ya vencidos" lines={vencidosLines}
@@ -312,17 +332,41 @@ const Inicio: React.FC = () => {
 
       {/* ── RESUMEN DEL DÍA (montos) ───────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm">
+        <button
+          type="button"
+          onClick={() => openRecentModal('ingreso')}
+          className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 shadow-sm cursor-pointer transition-colors hover:bg-emerald-100/80 hover:border-emerald-200 active:scale-[0.98]"
+          aria-label="Ver ingresos recientes"
+        >
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
           <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Hoy · Ing.</span>
           <span className="text-xs font-bold text-emerald-900 tabular-nums">{formatGlobalAmount(todayIngresos)}</span>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm">
+        </button>
+        <button
+          type="button"
+          onClick={() => openRecentModal('gasto')}
+          className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-2.5 py-1.5 shadow-sm cursor-pointer transition-colors hover:bg-rose-100/80 hover:border-rose-200 active:scale-[0.98]"
+          aria-label="Ver gastos recientes"
+        >
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
           <span className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Hoy · Gas.</span>
           <span className="text-xs font-bold text-rose-900 tabular-nums">{formatGlobalAmount(todayGastos)}</span>
-        </div>
+        </button>
       </div>
+
+      <HomeRecentRecordsModal
+        isOpen={recentModal != null}
+        kind={recentModal ?? 'ingreso'}
+        onClose={() => setRecentModal(null)}
+        ingresos={ingresos}
+        gastos={gastos}
+        conductores={conductores}
+        getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
+        formatGlobalAmount={formatGlobalAmount}
+        formatRecordAmount={formatRecordAmount}
+        canViewGlobal={canViewGlobal}
+        canViewRecordAmount={canViewRecordAmount}
+      />
 
       {/* ── COMMAND BAR ────────────────────────────────────────────────── */}
       <div className="relative">
@@ -439,63 +483,75 @@ const Inicio: React.FC = () => {
         ))}
       </div>
 
-      {/* ── QUÉ HACER HOY ──────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => {
-          const next = new URLSearchParams(searchParams);
-          next.set('view', 'alertas');
-          setSearchParams(next, { replace: true });
-        }}
-        className={`w-full rounded-2xl border px-5 py-4 text-left transition-all duration-150
-          hover:-translate-y-0.5 active:translate-y-0
-          ${totalAlertas > 0
-            ? 'bg-gradient-to-r from-rose-50 via-orange-50/60 to-amber-50/40 border-rose-200 hover:shadow-[0_4px_20px_rgba(244,63,94,0.12)]'
-            : 'bg-gradient-to-r from-emerald-50 via-teal-50/60 to-green-50/40 border-emerald-200 hover:shadow-[0_4px_20px_rgba(16,185,129,0.12)]'
-          }`}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Dot de estado */}
-            <span className="relative flex h-3 w-3 shrink-0">
-              {totalAlertas > 0 && (
-                <span className="absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75 animate-ping" />
+      {/* ── QUÉ HACER HOY ─────────────────────────────────────────────── */}
+      <div className="space-y-4 w-full">
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(searchParams);
+            next.set('view', 'alertas');
+            setSearchParams(next, { replace: true });
+          }}
+          className="w-full min-h-[110px] rounded-[24px] border border-[rgba(244,63,94,0.12)] p-6 text-left shadow-soft
+            transition-shadow hover:shadow-[0_4px_20px_rgba(244,63,94,0.08)] active:scale-[0.995]"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,248,248,1) 0%, rgba(255,252,250,1) 100%)',
+          }}
+          aria-label="Qué hacer hoy"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="relative flex h-3 w-3 shrink-0">
+                {totalAlertasAutomaticas > 0 && (
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75 animate-ping" />
+                )}
+                <span
+                  className={`relative inline-flex h-3 w-3 rounded-full ${
+                    totalAlertasAutomaticas > 0 ? 'bg-rose-500' : 'bg-emerald-500'
+                  }`}
+                />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-gray-900 tracking-tight">Qué hacer hoy</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                  {totalAlertasAutomaticas > 0
+                    ? `${totalAlertasAutomaticas} alerta${totalAlertasAutomaticas !== 1 ? 's' : ''} automática${totalAlertasAutomaticas !== 1 ? 's' : ''}`
+                    : 'Alertas automáticas al día'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {totalAlertasAutomaticas > 0 ? (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700 tabular-nums">
+                  {totalAlertasAutomaticas} auto
+                </span>
+              ) : (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                  OK
+                </span>
               )}
-              <span className={`relative inline-flex h-3 w-3 rounded-full ${
-                totalAlertas > 0 ? 'bg-rose-500' : 'bg-emerald-500'
-              }`} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-black text-gray-900 tracking-tight">Qué hacer hoy</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">
-                {totalAlertas > 0
-                  ? `${totalAlertas} alerta${totalAlertas !== 1 ? 's' : ''} activa${totalAlertas !== 1 ? 's' : ''}`
-                  : 'Docs · pendientes · flota'}
-              </p>
+              <ArrowRight size={14} className="text-slate-400" />
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {totalAlertas > 0 ? (
-              <span className="rounded-full bg-rose-100 border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-700 tabular-nums">
-                {totalAlertas}
-              </span>
-            ) : (
-              <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                OK
-              </span>
-            )}
-            <ArrowRight size={14} className="text-gray-400" />
-          </div>
-        </div>
-      </button>
+        </button>
+
+        {/* ── PENDIENTES DEL EQUIPO ─────────────────────────────────────── */}
+        <PendientesEquipoHoyBlock
+          pendientes={pendientes}
+          vehicles={vehicles}
+          conductores={conductores}
+          getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
+          onVer={() => navigate('/operaciones/pendientes')}
+        />
+      </div>
 
       {/* ── ACCIONES RÁPIDAS ───────────────────────────────────────────── */}
-      <div>
+      <div className="mt-6">
         <p className="mb-2.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400 pl-0.5">
           <Zap size={10} className="text-gray-400" />
           Acciones rápidas
         </p>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
           {quickActions.map((a) => (
             <button
               key={a.label}

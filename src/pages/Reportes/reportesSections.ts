@@ -39,15 +39,15 @@ export const REPORTES_SECTION_CARDS: ReportesSectionCard[] = [
   {
     id: 'vehiculos',
     title: 'Rentabilidad por vehículo',
-    description: 'Detecta qué unidades generan más margen operativo.',
+    description: 'Utilidad real por unidad: ingresos − gastos registrados.',
     icon: Car,
     accent: 'border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-100',
     iconBg: 'bg-emerald-100 text-emerald-700',
   },
   {
     id: 'utilidad',
-    title: 'Utilidad histórica',
-    description: 'Importada desde Excel; sin cálculo automático por ahora.',
+    title: 'Utilidad acumulada',
+    description: 'Ingresos − gastos por vehículo; histórico Excel aparte como referencia.',
     icon: LineChart,
     accent: 'border-teal-200 hover:border-teal-400 hover:shadow-teal-100',
     iconBg: 'bg-teal-100 text-teal-700',

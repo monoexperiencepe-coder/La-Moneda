@@ -201,7 +201,11 @@ const Documentacion: React.FC = () => {
         </div>
       </div>
 
-      <ControlFechaRegistroPanel historialSearchMode="documentacion" formExpandedDefault />
+      <ControlFechaRegistroPanel
+        historialSearchMode="documentacion"
+        formExpandedDefault
+        layoutSection="registro-only"
+      />
 
       {docQuery && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-900">
@@ -367,6 +371,18 @@ const Documentacion: React.FC = () => {
           </div>
         )}
       </div>
+
+      <section className="mt-8 pt-6 border-t border-gray-200" aria-label="Historial de documentación">
+        <h2 className="text-sm font-bold text-gray-800 mb-1">Historial de registros</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Movimientos anteriores en control_fechas. La tabla principal arriba muestra el último vencimiento por unidad.
+        </p>
+        <ControlFechaRegistroPanel
+          historialSearchMode="documentacion"
+          formExpandedDefault={false}
+          layoutSection="historial-only"
+        />
+      </section>
     </div>
   );
 };

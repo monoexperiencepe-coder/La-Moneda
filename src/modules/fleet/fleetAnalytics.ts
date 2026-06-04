@@ -2,6 +2,18 @@ import type { Conductor, Vehicle } from '../../data/types';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { normalizePlaca, placasMatch } from '../../utils/normalizePlaca';
 
+function dedupeConductores(conductores: readonly Conductor[]): Conductor[] {
+  const seen = new Set<string>();
+  const out: Conductor[] = [];
+  for (const c of conductores) {
+    const key = String(c.id ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 export type FlotaResumen = {
   total: number;
   activos: number;
@@ -107,6 +119,33 @@ export function buildFlotaResumen(
     disponibles: activosSinConductor.length,
     conductoresVigentes: vigentes.length,
     asignados: asignados.length,
+  };
+}
+
+export type ConteoConductores = {
+  totalConductores: number;
+  activos: number;
+  inactivos: number;
+  /** Conductores VIGENTES con vehicle_id asignado. */
+  conductoresAsignados: number;
+  /** Conductores VIGENTES sin vehículo asignado. */
+  conductoresSinVehiculo: number;
+  fuente: 'public.conductores';
+};
+
+/** Conteo de conductores (filas únicas en public.conductores; activos = VIGENTE). */
+export function buildConteoConductores(conductores: readonly Conductor[]): ConteoConductores {
+  const unique = dedupeConductores(conductores);
+  const vigentes = unique.filter((c) => c.estado === 'VIGENTE');
+  const asignados = vigentes.filter((c) => c.vehicleId != null).length;
+  const activos = vigentes.length;
+  return {
+    totalConductores: unique.length,
+    activos,
+    inactivos: unique.length - activos,
+    conductoresAsignados: asignados,
+    conductoresSinVehiculo: vigentes.length - asignados,
+    fuente: 'public.conductores',
   };
 }
 
@@ -287,6 +326,104 @@ export function getVehiculoPorConductorNombre(
       vehicle_id: c.vehicleId,
     },
     vehiculo: v ? compactVehiculoFlota(v, conductores) : null,
+  };
+}
+
+export type VehiculoPorNumeroPayload = {
+  encontrado: boolean;
+  vehicleId: number | null;
+  numeroUnidad: number;
+  placa: string | null;
+  marca: string | null;
+  modelo: string | null;
+  estado: string | null;
+  conductorAsignado: { id: string; nombre: string } | null;
+  fuente: 'public.vehiculos';
+};
+
+/** Busca vehículo por id/unidad (#3 → vehicles.id === 3). */
+export function getVehiculoPorNumero(
+  vehicles: readonly Vehicle[],
+  conductores: readonly Conductor[],
+  numero: number,
+): VehiculoPorNumeroPayload {
+  const v = vehicles.find((x) => x.id === numero) ?? null;
+  if (!v) {
+    return {
+      encontrado: false,
+      vehicleId: null,
+      numeroUnidad: numero,
+      placa: null,
+      marca: null,
+      modelo: null,
+      estado: null,
+      conductorAsignado: null,
+      fuente: 'public.vehiculos',
+    };
+  }
+  const c = conductorVigentePorVehiculo(conductores, v.id);
+  return {
+    encontrado: true,
+    vehicleId: v.id,
+    numeroUnidad: v.id,
+    placa: v.placa,
+    marca: v.marca,
+    modelo: v.modelo,
+    estado: v.activo ? 'activo' : 'inactivo',
+    conductorAsignado: c
+      ? { id: c.id, nombre: formatConductorDisplayLabel(c) }
+      : null,
+    fuente: 'public.vehiculos',
+  };
+}
+
+export type ConductorPorNumeroPayload = {
+  encontrado: boolean;
+  conductorId: string | null;
+  numero: number;
+  nombre: string | null;
+  estado: string | null;
+  vehiculoAsignado: { id: number; placa: string; numeroUnidad: number } | null;
+  fuente: 'public.conductores';
+};
+
+/** Busca conductor por número de fila en listado (mismo orden que UI: vehicleId asc). */
+export function getConductorPorNumero(
+  vehicles: readonly Vehicle[],
+  conductores: readonly Conductor[],
+  numero: number,
+): ConductorPorNumeroPayload {
+  const unique = dedupeConductores(conductores);
+  const sorted = [...unique].sort((a, b) => {
+    const va = a.vehicleId ?? Number.MAX_SAFE_INTEGER;
+    const vb = b.vehicleId ?? Number.MAX_SAFE_INTEGER;
+    if (va !== vb) return va - vb;
+    return String(a.apellidos).localeCompare(String(b.apellidos), 'es');
+  });
+  const c = sorted[numero - 1] ?? null;
+  if (!c) {
+    return {
+      encontrado: false,
+      conductorId: null,
+      numero,
+      nombre: null,
+      estado: null,
+      vehiculoAsignado: null,
+      fuente: 'public.conductores',
+    };
+  }
+  const v =
+    c.vehicleId != null ? vehicles.find((x) => x.id === Number(c.vehicleId)) ?? null : null;
+  return {
+    encontrado: true,
+    conductorId: c.id,
+    numero,
+    nombre: formatConductorDisplayLabel(c),
+    estado: c.estado,
+    vehiculoAsignado: v
+      ? { id: v.id, placa: v.placa, numeroUnidad: v.id }
+      : null,
+    fuente: 'public.conductores',
   };
 }
 

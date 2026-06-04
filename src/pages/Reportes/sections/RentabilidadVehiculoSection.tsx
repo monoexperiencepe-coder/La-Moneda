@@ -10,8 +10,10 @@ import {
   getReportesPeriodRange,
   type ReportesPeriodPreset,
 } from '../../../utils/reportesAnalytics';
+import { UTILIDAD_REAL_TOOLTIP } from '../../../utils/utilidadReal';
 import ReportesPeriodFilter from '../components/ReportesPeriodFilter';
 import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
+import { useEnsureGastosFullForUtilidad } from '../../../hooks/useEnsureGastosFullForUtilidad';
 
 interface RentabilidadVehiculoSectionProps {
   vehicles: Vehicle[];
@@ -30,6 +32,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
 }) => {
   const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
   const navigate = useNavigate();
+  const { isLoadingGastosFull, gastosReadyForUtilidad } = useEnsureGastosFullForUtilidad();
   const [preset, setPreset] = useState<ReportesPeriodPreset>('anio_actual');
   const [customYear, setCustomYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
 
@@ -42,6 +45,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
   );
 
   const rentability = useMemo(() => {
+    if (!gastosReadyForUtilidad) return [];
     const i = filterIngresosPeriod(ingresos, range.desde, range.hasta);
     const g = filterGastosPeriod(gastos, range.desde, range.hasta);
     const d =
@@ -49,7 +53,7 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
         ? descuentos.filter((x) => x.fecha >= range.desde! && x.fecha <= range.hasta!)
         : descuentos;
     return calculateVehicleRentability(vehicles, i, g, d);
-  }, [vehicles, ingresos, gastos, descuentos, range]);
+  }, [gastosReadyForUtilidad, vehicles, ingresos, gastos, descuentos, range]);
 
   const topRentables = useMemo(() => rentability.filter((r) => r.margen > 0).slice(0, 5), [rentability]);
   const topCostosos = useMemo(
@@ -65,8 +69,8 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
       <div>
         <h2 className="text-lg font-bold text-slate-900">Rentabilidad por vehículo</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Ingresos menos gastos operativos por unidad en el período elegido (margen operativo). No es utilidad
-          histórica importada ni resultado neto global.
+          Utilidad real por unidad en el período elegido: ingresos registrados − gastos registrados (todos con
+          vehicle_id). {UTILIDAD_REAL_TOOLTIP}
         </p>
       </div>
 
@@ -79,10 +83,16 @@ const RentabilidadVehiculoSection: React.FC<RentabilidadVehiculoSectionProps> = 
       />
       <p className="text-xs text-slate-500">{range.label}</p>
 
+      {!gastosReadyForUtilidad ? (
+        <p className="text-sm text-slate-500">
+          {isLoadingGastosFull ? 'Cargando gastos completos para utilidad real…' : 'Preparando datos…'}
+        </p>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <RankingList
-          title="Top rentables"
-          empty="Sin margen positivo en este período."
+          title="Top utilidad real"
+          empty="Sin utilidad positiva en este período."
           items={topRentables}
           margenPct={margenPct}
           tone="good"
@@ -154,7 +164,7 @@ function RankingList({
                   >
                     {formatGlobalAmount(r.margen)}
                   </span>
-                  <span className="text-xs text-slate-400">Margen {margenPct(r)}%</span>
+                  <span className="text-xs text-slate-400">Utilidad {margenPct(r)}%</span>
                 </span>
               </button>
             </li>

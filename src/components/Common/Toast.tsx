@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
+import {
+  TOAST_DEFAULT_MS,
+  TOAST_ENTER_MS,
+  TOAST_EXIT_MS,
+} from '../../config/toastTiming';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -74,22 +79,28 @@ const toastConfig = {
 
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   const [visible, setVisible] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const config = toastConfig[toast.type];
   const Icon = config.icon;
+  const animMs = exiting ? TOAST_EXIT_MS : TOAST_ENTER_MS;
 
   const dismiss = React.useCallback(() => {
+    setExiting(true);
     setVisible(false);
-    setTimeout(() => {
+    window.setTimeout(() => {
       toast.onDismiss?.();
       onRemove(toast.id);
-    }, 300);
+    }, TOAST_EXIT_MS);
   }, [toast, onRemove]);
 
   useEffect(() => {
-    setTimeout(() => setVisible(true), 10);
-    const timer = setTimeout(() => dismiss(), toast.duration ?? 4000);
-    return () => clearTimeout(timer);
+    const enterRaf = requestAnimationFrame(() => setVisible(true));
+    const timer = window.setTimeout(dismiss, toast.duration ?? TOAST_DEFAULT_MS);
+    return () => {
+      cancelAnimationFrame(enterRaf);
+      clearTimeout(timer);
+    };
   }, [toast.id, toast.duration, dismiss]);
 
   const sz = config.iconSize;
@@ -100,12 +111,16 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   return (
     <div
       className={`
-        flex items-start rounded-xl border shadow-soft-md
-        transition-all duration-300 ease-in-out
+        flex items-start rounded-xl border shadow-soft-md ease-out
         ${cardExtra}
         ${config.bgClass}
         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
       `}
+      style={{
+        transitionProperty: 'opacity, transform',
+        transitionDuration: `${animMs}ms`,
+        transitionTimingFunction: 'ease-out',
+      }}
     >
       <Icon size={sz} className={`flex-shrink-0 mt-0.5 ${config.iconClass}`} />
       <div className="flex-1 min-w-0">
@@ -150,9 +165,11 @@ interface ToastContainerProps {
 
 export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemove }) => {
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3">
+    <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
       {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
+        <div key={toast.id} className="pointer-events-auto">
+          <ToastItem toast={toast} onRemove={onRemove} />
+        </div>
       ))}
     </div>
   );

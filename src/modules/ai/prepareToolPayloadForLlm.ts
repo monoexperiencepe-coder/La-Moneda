@@ -5,6 +5,7 @@
 import type { AiToolName } from './types';
 import { formatFleetToolPayloadForLlm, isFleetAiTool } from './fleetExecutiveFormat';
 import { enrichToolPayloadForLlm } from './toolEmptyResults';
+import { strictFactPayloadEnrichment } from './strictFactMode';
 
 const MAX_FILAS = 8;
 const MAX_RANKING = 10;
@@ -56,6 +57,10 @@ function compactPayload(tool: AiToolName, data: Record<string, unknown>): Record
     out.vehiculos = (out.vehiculos as unknown[]).slice(0, 25);
     out._vehiculos_truncados = true;
   }
+  if (Array.isArray(out.items) && (out.items as unknown[]).length > 40) {
+    out.items = (out.items as unknown[]).slice(0, 40);
+    out._items_truncados = true;
+  }
   if (Array.isArray(out.asignados) && (out.asignados as unknown[]).length > 40) {
     out.asignados = (out.asignados as unknown[]).slice(0, 40);
     out._asignados_truncados = true;
@@ -73,15 +78,29 @@ function compactPayload(tool: AiToolName, data: Record<string, unknown>): Record
       'inversion_compra y compras de activos NO son gasto operativo; no los uses para explicar "gasto operativo alto".';
   }
 
+  if (tool === 'getTopVehiculosUtilidad') {
+    out._instruccion_interpretacion =
+      'Ranking de utilidad REAL por vehículo (ingresos−gastos con vehicle_id). Copia lineas_ranking al usuario. PROHIBIDO decir ingresos consolidados o usar caja_negocio.';
+  }
+
+  if (tool === 'getGastosPeriodo' && typeof out.count === 'number' && out.count > 0) {
+    out._instruccion_interpretacion =
+      'Hay registros en el periodo. Responde con total_gastos_pen (o OPEX+CAPEX), count y periodo.label. PROHIBIDO decir que no hay histórico ni que no existen gastos.';
+  }
+
   return out;
 }
 
 export function prepareToolPayloadForLlm(tool: AiToolName, data: unknown): Record<string, unknown> {
   const base = enrichToolPayloadForLlm(tool, data);
   if (base.empty === true) {
-    if (isFleetAiTool(tool)) return formatFleetToolPayloadForLlm(tool, base);
-    return base;
+    if (isFleetAiTool(tool)) {
+      return strictFactPayloadEnrichment(tool, formatFleetToolPayloadForLlm(tool, base));
+    }
+    return strictFactPayloadEnrichment(tool, base);
   }
-  if (isFleetAiTool(tool)) return formatFleetToolPayloadForLlm(tool, compactPayload(tool, base));
-  return compactPayload(tool, base);
+  if (isFleetAiTool(tool)) {
+    return strictFactPayloadEnrichment(tool, formatFleetToolPayloadForLlm(tool, compactPayload(tool, base)));
+  }
+  return strictFactPayloadEnrichment(tool, compactPayload(tool, base));
 }

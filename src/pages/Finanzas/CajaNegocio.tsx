@@ -304,7 +304,7 @@ const CajaNegocio: React.FC = () => {
           </button>
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Utilidad histórica por vehículo
+              Histórico importado por vehículo (referencial)
             </h1>
           </div>
         </div>
@@ -408,7 +408,7 @@ const CajaNegocio: React.FC = () => {
           onChartYearChange={setChartYear}
           yearOptions={chartYearOptions}
           chartData={chartData}
-          tooltipSeriesName="Utilidad histórica"
+          tooltipSeriesName="Histórico importado (referencial)"
           variant="teal"
           yearSelectLabel="Año del gráfico"
           showMonthTotalsGrid={false}

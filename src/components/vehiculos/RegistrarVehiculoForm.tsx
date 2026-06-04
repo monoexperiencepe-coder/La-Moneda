@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import Modal from '../Common/Modal';
 import { useRegistrosContext } from '../../context/RegistrosContext';
+import { useAuth } from '../../context/AuthContext';
+import { upsertInversionGeneralVehiculoValor } from '../../services/inversionesGeneralesVehiculoService';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { normalizePlaca, placasMatch } from '../../utils/normalizePlaca';
 import type { InsertVehiculoInput } from '../../services/vehiculosService';
@@ -17,16 +19,19 @@ function emptyForm() {
     color: '',
     estado: 'activo' as EstadoForm,
     conductorId: '',
+    valorCompraUsd: '',
   };
 }
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 };
 
-const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose }) => {
+const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   const { vehicles, conductores, addVehicle } = useRegistrosContext();
+  const { profile } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,11 +92,19 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose }) => {
         conductorId: form.conductorId.trim() === '' ? null : form.conductorId.trim(),
       });
       if (!result) return;
+      const rawValor = form.valorCompraUsd.trim();
+      if (rawValor !== '') {
+        const valor = Number(rawValor);
+        if (Number.isFinite(valor) && valor > 0) {
+          await upsertInversionGeneralVehiculoValor(result, valor, profile?.empresa_id);
+        }
+      }
+      onSaved?.();
       resetAndClose();
     } finally {
       setBusy(false);
     }
-  }, [addVehicle, busy, form, resetAndClose, vehicles]);
+  }, [addVehicle, busy, form, onSaved, profile?.empresa_id, resetAndClose, vehicles]);
 
   return (
     <Modal
@@ -186,6 +199,18 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose }) => {
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Valor de compra (USD)</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.valorCompraUsd}
+              onChange={(e) => setForm((p) => ({ ...p, valorCompraUsd: e.target.value }))}
+              placeholder="Opcional — inversiones generales"
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            />
           </label>
           <label className="block sm:col-span-2">
             <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">

@@ -18,7 +18,8 @@
     "import:financiamiento": "node scripts/import_financiamiento_from_xlsx.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report playwright-report"
+    "test:e2e:report": "playwright show-report playwright-report",
+    "audit:copilot-router": "npx tsx scripts/copilot-router-audit.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

@@ -3,15 +3,27 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
-;
 import { totalInversionUsdForVehicle } from '../../services/inversionesVehiculoService';
-import { calculateVehicleRentability } from '../../utils/calculations';
+import { UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
+import { useUtilidadRealCalculos } from '../../hooks/useUtilidadRealCalculos';
 
 const VehiculosHub: React.FC = () => {
-  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
+  const { formatGlobalAmount } = useAmountDisplay();
   const navigate = useNavigate();
-  const { vehicles, ingresos, gastos, descuentos, inversionesVehiculo } = useRegistrosContext();
-  const rentability = calculateVehicleRentability(vehicles, ingresos, gastos, descuentos);
+  const { vehicles, inversionesVehiculo } = useRegistrosContext();
+  const { porVehiculo, gastosReadyForUtilidad, isLoadingGastosFull } = useUtilidadRealCalculos({
+    pantalla: 'VehiculosHub.rankingUtilidad',
+  });
+  const rentability = useMemo(() => {
+    if (!gastosReadyForUtilidad) return [];
+    return porVehiculo
+      .map((row) => {
+        const vehicle = vehicles.find((v) => v.id === row.vehicleId);
+        if (!vehicle?.activo) return null;
+        return { vehicle, margen: row.utilidadReal };
+      })
+      .filter((r): r is { vehicle: (typeof vehicles)[0]; margen: number } => r != null);
+  }, [porVehiculo, vehicles, gastosReadyForUtilidad]);
   const inversionUsdByVehicleId = useMemo(() => {
     const m = new Map<number, number | null>();
     for (const v of vehicles) {
@@ -31,7 +43,7 @@ const VehiculosHub: React.FC = () => {
     },
     {
       title: 'Rentabilidad',
-      desc: 'Análisis por vehículo',
+      desc: 'Utilidad real por unidad (ingresos − gastos)',
       emoji: '📈',
       path: '/vehiculos/rentabilidad',
       gradient: 'from-emerald-500/10 to-teal-500/10',
@@ -68,10 +80,18 @@ const VehiculosHub: React.FC = () => {
       {/* Quick vehicle list */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-800">Ranking de Rentabilidad</h3>
+          <h3 className="font-bold text-gray-800" title={UTILIDAD_REAL_TOOLTIP}>
+            Ranking de utilidad real
+          </h3>
         </div>
+        {!gastosReadyForUtilidad ? (
+          <p className="px-5 py-6 text-center text-sm text-gray-500">
+            {isLoadingGastosFull ? 'Cargando gastos completos…' : 'Preparando utilidad real…'}
+          </p>
+        ) : null}
         <div className="divide-y divide-gray-50">
-          {rentability.map((r, i) => (
+          {gastosReadyForUtilidad &&
+            rentability.map((r, i) => (
             <div key={r.vehicle.id}
               className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
               onClick={() => navigate(`/vehiculos/${r.vehicle.id}`)}>
@@ -93,7 +113,7 @@ const VehiculosHub: React.FC = () => {
               </span>
               <ChevronRight size={14} className="text-gray-300" />
             </div>
-          ))}
+            ))}
         </div>
       </div>
     </div>

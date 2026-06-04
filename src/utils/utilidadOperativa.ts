@@ -21,10 +21,12 @@ import {
 export const UTILIDAD_CALCULO_AUTOMATICO_ACTIVO = false;
 
 export const UTILIDAD_HISTORICA_TOOLTIP =
-  'Dato histórico importado desde Excel. La utilidad calculada automática se activará en una fase posterior.';
+  'Histórico importado (referencial): dato Excel en caja_negocio_vehiculo. Ya no es la utilidad principal del sistema.';
 
 export const UTILIDAD_HISTORICA_PENDIENTE_NOTA =
-  'Cálculo automático pendiente de activación cuando la data operativa esté ordenada y se defina el mes de inicio.';
+  'Referencia histórica importada. La utilidad principal del sistema es ingresos − gastos por vehículo.';
+
+export const UTILIDAD_HISTORICA_REFERENCIAL_LABEL = 'Histórico importado (referencial)';
 
 export interface UtilidadHistoricaMes {
   mes: string;

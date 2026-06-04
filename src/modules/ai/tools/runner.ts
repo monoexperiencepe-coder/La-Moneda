@@ -1,15 +1,23 @@
 import { mapGastoRow } from '../../../services/supabaseMappers';
 import { supabase } from '../../../lib/supabase';
-import { fetchGastosByTipo, fetchGastosFinancialSummary, fetchGastosRecent } from '../../../services/gastosService';
+import {
+  fetchGastosByTipo,
+  fetchGastosFinancialSummary,
+  fetchGastosFull,
+  fetchGastosRecent,
+} from '../../../services/gastosService';
 import { fetchIngresos } from '../../../services/ingresosService';
 import { fetchPrestamosFinancierosDetalle } from '../../../services/prestamosFinancierosService';
 import { fetchVehiculos } from '../../../services/vehiculosService';
-import { fetchConductores } from '../../../services/conductoresService';
+import { fetchConductores, countConductoresRows } from '../../../services/conductoresService';
 import {
   buildFlotaResumen,
+  buildConteoConductores,
   getConductoresAsignados,
+  getConductorPorNumero,
   getConductorPorVehiculo,
   getVehiculoPorConductorNombre,
+  getVehiculoPorNumero,
   getVehiculoPorPlaca,
   getVehiculosDisponibles,
   getVehiculosSinConductor,
@@ -37,6 +45,11 @@ import {
   splitGastosByCapa,
 } from '../financialAnalytics';
 import { aiToolDeniedMessage, canExecuteAiTool } from '../permissions';
+import {
+  logCopilotToolStart,
+  logCopilotToolEnd,
+  countRowsFromToolData,
+} from '../../copilot/copilotExecutionAudit';
 import { enrichToolPayloadForLlm } from '../toolEmptyResults';
 import type { AiToolName } from '../types';
 
@@ -49,6 +62,25 @@ import {
   resolveMaintenanceToolArgs,
 } from '../maintenanceSubtipos';
 import { buildIngresosHistoricosPorMes } from '../ingresosHistoricos';
+import { buildUtilidadRankToolPayload } from '../utilidadVehiculosRank';
+import { buildAlertasAutomaticasPayload } from '../alertasAutomaticasTool';
+import { buildDocumentosResumenPayload } from '../documentosResumenTool';
+import { buildPendientesResumenPayload } from '../pendientesResumenTool';
+import { buildAlertasDetallePayload, type AlertasDetalleTipo } from '../alertasDetalleTool';
+import {
+  buildUtilidadVehiculoPayload,
+  buildIngresosVehiculoPayload,
+  buildGastosVehiculoPayload,
+} from '../vehiculoFinanzasTool';
+import {
+  buildUtilidadVehiculoDetallePayload,
+  buildGastosVehiculoDesglosePayload,
+} from '../vehiculoFinanzasDetalleTool';
+import {
+  buildDocumentosPorRangoPayload,
+  buildDocumentosVehiculoPayload,
+} from '../documentosExtendedTool';
+import { getCachedFinanzasVehiculoBundle } from '../aiToolDataCache';
 import {
   getInversionSubtipoDedupeKey,
   getInversionSubtipoLabel,
@@ -90,6 +122,27 @@ export type AiToolContext = {
 
 const GASTO_SELECT =
   'id,fecha,monto,tipo_gasto,subtipo_gasto,motivo,comentarios,vehicle_id,tipo,sub_tipo';
+
+function resolveNumeroVehiculoArg(args: Record<string, unknown>): number {
+  const numeroRaw = args.numero ?? args.numero_unidad ?? args.vehicle_id;
+  const numero = Number(numeroRaw);
+  if (!Number.isFinite(numero) || numero <= 0) {
+    throw new Error('Indica el número de vehículo/unidad (entero positivo).');
+  }
+  return numero;
+}
+
+function resolveAlertasDetalleTipo(raw: unknown): AlertasDetalleTipo {
+  const s = String(raw ?? 'todos').trim();
+  const allowed: AlertasDetalleTipo[] = [
+    'documentos_vencidos',
+    'documentos_por_vencer',
+    'sin_ingresos',
+    'mantenimientos',
+    'todos',
+  ];
+  return allowed.includes(s as AlertasDetalleTipo) ? (s as AlertasDetalleTipo) : 'todos';
+}
 
 function clampLimit(n: unknown, fallback: number, max: number): number {
   const v = Number(n);
@@ -337,7 +390,13 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
         alcance: scope,
         total_opex_pen: sumMontos(opex),
         total_capex_pen: sumMontos(capex),
+        total_gastos_pen: sumMontos(opex) + sumMontos(capex),
         count: gastos.length,
+        historico_disponible: gastos.length > 0,
+        instruccion_respuesta:
+          gastos.length > 0
+            ? `Hay ${gastos.length} registros en el periodo ${range.label}. Totales: OPEX S/ ${sumMontos(opex).toLocaleString('es-PE')} + CAPEX S/ ${sumMontos(capex).toLocaleString('es-PE')}. NUNCA digas que no hay histórico si count>0.`
+            : 'Sin registros en el rango consultado (puede ser filtro o límite de filas).',
         nota: soloMantenimiento
           ? 'Solo mantenimiento/reparación vehicular (motor, frenos, llantas, etc.). No incluye combustible ni CAPEX.'
           : 'Por defecto interpreta total_opex_pen como gasto operativo. CAPEX (inversion_compra) va en total_capex_pen.',
@@ -397,6 +456,15 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
           ? 'Ranking por mantenimiento/reparación vehicular (excluye combustible y CAPEX).'
           : 'Ranking solo gasto operativo por vehículo (excluye inversion_compra / CAPEX).',
       };
+    }
+    case 'getTopVehiculosUtilidad': {
+      const { ingresos, gastosAll, vehicles } = await getCachedFinanzasVehiculoBundle(ctx.empresaId);
+      const gastosVisibles = filterGastosForUser(ctx.user, gastosAll);
+      const result = buildUtilidadRankToolPayload(vehicles, ingresos, gastosVisibles, args);
+      logToolResult(name, result, {
+        source_table: 'ingresos+gastos',
+      });
+      return result;
     }
     case 'getPendientesRevision': {
       const limit = clampLimit(args.limit, 50, 100);
@@ -749,12 +817,173 @@ async function runToolImpl(name: AiToolName, args: Record<string, unknown>, ctx:
       ]);
       const resumen = buildFlotaResumen(vehicles, conductores);
       const result = {
-        ...resumen,
+        totalVehiculos: resumen.total,
+        activos: resumen.activos,
+        inactivos: resumen.inactivos,
+        disponibles: resumen.disponibles,
+        sinConductor: resumen.sinConductor,
+        vehiculosConConductor: Math.max(0, resumen.activos - resumen.sinConductor),
+        conductoresAsignados: resumen.asignados,
+        _tipo_metrica: 'conteo_flota',
+        fuente: 'public.vehiculos + public.conductores',
         nota_operativa:
-          'Disponibles = activos sin conductor vigente. Mantenimiento no aplica en esta fase (solo activo/inactivo).',
+          'Métricas de VEHÍCULOS: totalVehiculos, vehiculosConConductor, sinConductor. conductoresAsignados = conductores vigentes con unidad (no confundir con totalVehiculos). Para total de conductores usar getConteoConductores.',
       };
       logFlotaTool(name, {}, resumen.total);
       logToolResult(name, { count: resumen.total }, { source_table: 'vehiculos+conductores' });
+      return result;
+    }
+
+    case 'getConteoConductores': {
+      const [conductores, dbCount, vehicles] = await Promise.all([
+        fetchConductores(ctx.empresaId),
+        countConductoresRows(ctx.empresaId),
+        fetchVehiculos(ctx.empresaId),
+      ]);
+      const conteo = buildConteoConductores(conductores);
+      const flota = buildFlotaResumen(vehicles, conductores);
+      const totalConductores = dbCount > 0 ? dbCount : conteo.totalConductores;
+      const sampleIds = conductores.slice(0, 5).map((c) => c.id);
+      console.log(
+        '[conductores:count:tool]',
+        JSON.stringify({
+          totalRows: totalConductores,
+          activos: conteo.activos,
+          inactivos: conteo.inactivos,
+          conductoresAsignados: conteo.conductoresAsignados,
+          vehiculosSinConductor: flota.sinConductor,
+          fetchRows: conductores.length,
+          dbCountExact: dbCount,
+          sampleIds,
+        }),
+      );
+      const result = {
+        totalConductores,
+        activos: conteo.activos,
+        inactivos: conteo.inactivos,
+        conductoresAsignados: conteo.conductoresAsignados,
+        conductoresSinVehiculo: conteo.conductoresSinVehiculo,
+        vehiculosSinConductor: flota.sinConductor,
+        fuente: 'public.conductores',
+        count: totalConductores,
+        _tipo_metrica: 'conteo_conductores',
+        nota: 'Conteo de CONDUCTORES (totalConductores). conductoresAsignados ≠ totalVehiculos. vehiculosSinConductor = unidades activas libres.',
+      };
+      logFlotaTool(name, {}, totalConductores);
+      logToolResult(name, { count: totalConductores }, { source_table: 'conductores' });
+      return result;
+    }
+
+    case 'getAlertasAutomaticas': {
+      const payload = await buildAlertasAutomaticasPayload(ctx.empresaId);
+      logToolResult(name, { count: payload.totalAlertasAutomaticas }, { source_table: 'alertas_automaticas' });
+      return payload;
+    }
+
+    case 'getDocumentosResumen': {
+      const payload = await buildDocumentosResumenPayload(ctx.empresaId);
+      logToolResult(name, { count: payload.totalDocumentos }, { source_table: 'control_fechas' });
+      return payload;
+    }
+
+    case 'getPendientesResumen': {
+      const payload = await buildPendientesResumenPayload(ctx.empresaId);
+      logToolResult(name, { count: payload.totalPendientes }, { source_table: 'pendientes' });
+      return payload;
+    }
+
+    case 'getDetalleAlertas': {
+      const limit = clampLimit(args.limit, 50, 200);
+      const tipo = resolveAlertasDetalleTipo(args.tipo);
+      const dias = clampLimit(args.dias, 30, 365);
+      const payload = await buildAlertasDetallePayload(ctx.empresaId, tipo, limit, dias);
+      logToolResult(name, { count: payload.count }, { source_table: 'alertas_detalle' });
+      return payload;
+    }
+
+    case 'getUtilidadVehiculo': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const payload = await buildUtilidadVehiculoPayload(ctx.empresaId, ctx.user, numero);
+      logToolResult(name, { count: payload.encontrado ? 1 : 0 }, { source_table: 'ingresos+gastos' });
+      return payload;
+    }
+
+    case 'getIngresosVehiculo': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const payload = await buildIngresosVehiculoPayload(ctx.empresaId, numero);
+      logToolResult(name, { count: payload.count }, { source_table: 'ingresos' });
+      return payload;
+    }
+
+    case 'getGastosVehiculo': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const payload = await buildGastosVehiculoPayload(ctx.empresaId, ctx.user, numero);
+      logToolResult(name, { count: payload.count }, { source_table: 'gastos' });
+      return payload;
+    }
+
+    case 'getUtilidadVehiculoDetalle': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const payload = await buildUtilidadVehiculoDetallePayload(ctx.empresaId, ctx.user, numero);
+      logToolResult(name, { count: payload.encontrado ? 1 : 0 }, { source_table: 'ingresos+gastos' });
+      return payload;
+    }
+
+    case 'getGastosVehiculoDesglose': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const filtro = args.filtroTexto ?? args.filtro ?? args.categoria;
+      const payload = await buildGastosVehiculoDesglosePayload(
+        ctx.empresaId,
+        ctx.user,
+        numero,
+        filtro != null ? String(filtro) : undefined,
+      );
+      logToolResult(name, { count: payload.count ?? 0 }, { source_table: 'gastos' });
+      return payload;
+    }
+
+    case 'getDocumentosPorRango': {
+      const dias = clampLimit(args.dias, 7, 90);
+      const limit = clampLimit(args.limit, 25, 100);
+      const payload = await buildDocumentosPorRangoPayload(ctx.empresaId, dias, limit);
+      logToolResult(name, { count: payload.count }, { source_table: 'control_fechas' });
+      return payload;
+    }
+
+    case 'getDocumentosVehiculo': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const payload = await buildDocumentosVehiculoPayload(ctx.empresaId, numero);
+      logToolResult(name, { count: payload.countFaltantes + payload.countVencidos }, { source_table: 'control_fechas' });
+      return payload;
+    }
+
+    case 'getVehiculoPorNumero': {
+      const numero = resolveNumeroVehiculoArg(args);
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const payload = getVehiculoPorNumero(vehicles, conductores, numero);
+      const result = { ...payload, count: payload.encontrado ? 1 : 0 };
+      logFlotaTool(name, { numero }, payload.encontrado ? 1 : 0);
+      logToolResult(name, { count: payload.encontrado ? 1 : 0 }, { source_table: 'vehiculos' });
+      return result;
+    }
+
+    case 'getConductorPorNumero': {
+      const numeroRaw = args.numero ?? args.conductor_numero;
+      const numero = Number(numeroRaw);
+      if (!Number.isFinite(numero) || numero <= 0) {
+        throw new Error('Indica el número de conductor (entero positivo).');
+      }
+      const [vehicles, conductores] = await Promise.all([
+        fetchVehiculos(ctx.empresaId),
+        fetchConductores(ctx.empresaId),
+      ]);
+      const payload = getConductorPorNumero(vehicles, conductores, numero);
+      const result = { ...payload, count: payload.encontrado ? 1 : 0 };
+      logFlotaTool(name, { numero }, payload.encontrado ? 1 : 0);
+      logToolResult(name, { count: payload.encontrado ? 1 : 0 }, { source_table: 'conductores' });
       return result;
     }
 
@@ -867,11 +1096,18 @@ export async function executeAiTool(
   if (!canExecuteAiTool(ctx.user, name)) {
     return { ok: false, error: aiToolDeniedMessage(name), denied: true };
   }
+  logCopilotToolStart(name, args);
+  const t0 = performance.now();
   try {
     const data = await runToolImpl(name, args, ctx);
-    return { ok: true, data: enrichToolPayloadForLlm(name, data) };
+    const ms = Math.round(performance.now() - t0);
+    const enriched = enrichToolPayloadForLlm(name, data);
+    logCopilotToolEnd(name, ms, countRowsFromToolData(enriched), true, args);
+    return { ok: true, data: enriched };
   } catch (e) {
+    const ms = Math.round(performance.now() - t0);
     const msg = e instanceof Error ? e.message : 'Error al ejecutar herramienta';
+    logCopilotToolEnd(name, ms, null, false, args, msg);
     return { ok: false, error: msg };
   }
 }

@@ -409,6 +409,14 @@ function dedupeBullets(bullets: ExecutiveBullet[]): ExecutiveBullet[] {
 }
 
 function compressExecutivePayload(structured: AiStructuredResponse): AiStructuredResponse {
+  const data = structured.data;
+  if (data != null && typeof data === 'object' && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    if (d._preserve_summary === true) {
+      return structured;
+    }
+  }
+
   let summary = structured.summary ?? '';
   let insights = [...(structured.insights ?? [])];
   let warnings = [...(structured.warnings ?? [])];
@@ -664,6 +672,87 @@ export function extractMetricCards(
   if (!data || Array.isArray(data)) return [];
   const d = data as Record<string, unknown>;
 
+  // Conteos de flota / conductores / alertas — nunca como moneda
+  if (d._tipo_metrica === 'conteo_flota') {
+    const total = Number(d.totalVehiculos ?? 0);
+    const activos = Number(d.activos ?? 0);
+    const sinConductor = Number(d.sinConductor ?? 0);
+    const conConductor = Number(
+      d.vehiculosConConductor ?? Math.max(0, activos - sinConductor),
+    );
+    return [
+      { label: 'Vehículos', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Con conductor', value: String(conConductor), raw: conConductor, variant: 'green' },
+      { label: 'Sin conductor', value: String(sinConductor), raw: sinConductor, variant: 'gray' },
+    ];
+  }
+  if (d._tipo_metrica === 'conteo_conductores') {
+    const total = Number(d.totalConductores ?? 0);
+    const asignados = Number(d.conductoresAsignados ?? 0);
+    const sinVeh = Number(d.vehiculosSinConductor ?? 0);
+    return [
+      { label: 'Conductores', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Asignados', value: String(asignados), raw: asignados, variant: 'green' },
+      { label: 'Veh. libres', value: String(sinVeh), raw: sinVeh, variant: 'gray' },
+    ];
+  }
+  if (typeof d.totalVehiculos === 'number') {
+    const total = Number(d.totalVehiculos ?? 0);
+    const activos = Number(d.activos ?? 0);
+    const inactivos = Number(d.inactivos ?? 0);
+    return [
+      { label: 'Vehículos', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Activos', value: String(activos), raw: activos, variant: 'green' },
+      { label: 'Inactivos', value: String(inactivos), raw: inactivos, variant: 'gray' },
+    ];
+  }
+  if (typeof d.totalConductores === 'number') {
+    const total = Number(d.totalConductores ?? 0);
+    const activos = Number(d.activos ?? 0);
+    const inactivos = Number(d.inactivos ?? 0);
+    return [
+      { label: 'Conductores', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Activos', value: String(activos), raw: activos, variant: 'green' },
+      { label: 'Inactivos', value: String(inactivos), raw: inactivos, variant: 'gray' },
+    ];
+  }
+  if (d._tipo_metrica === 'conteo_alertas' || typeof d.totalAlertasAutomaticas === 'number') {
+    const total = Number(d.totalAlertasAutomaticas ?? d.count ?? 0);
+    return [{ label: 'Alertas', value: String(total), raw: total, variant: 'amber' }];
+  }
+  if (d._tipo_metrica === 'utilidad_vehiculo' || (typeof d.utilidad === 'number' && typeof d.ingresos_total === 'number')) {
+    const ing = Number(d.ingresos ?? d.ingresos_total ?? 0);
+    const gas = Number(d.gastos ?? d.gastos_total ?? 0);
+    const util = Number(d.utilidad ?? ing - gas);
+    return [
+      { label: 'Ingresos', value: fmtPen(ing), raw: ing, variant: 'green' },
+      { label: 'Gastos', value: fmtPen(gas), raw: gas, variant: 'red' },
+      { label: 'Utilidad', value: fmtPen(util), raw: util, variant: util >= 0 ? 'blue' : 'red' },
+    ];
+  }
+  if (d._tipo_metrica === 'documentos_resumen' || typeof d.totalDocumentos === 'number') {
+    const total = Number(d.totalDocumentos ?? 0);
+    const vencidos = Number(d.vencidos ?? 0);
+    const porVencer = Number(d.porVencer ?? 0);
+    const vigentes = Number(d.vigentes ?? 0);
+    return [
+      { label: 'Documentos', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Vencidos', value: String(vencidos), raw: vencidos, variant: 'red' },
+      { label: 'Por vencer', value: String(porVencer), raw: porVencer, variant: 'amber' },
+      { label: 'Vigentes', value: String(vigentes), raw: vigentes, variant: 'green' },
+    ];
+  }
+  if (d._tipo_metrica === 'pendientes_resumen' || typeof d.totalPendientes === 'number') {
+    const total = Number(d.totalPendientes ?? 0);
+    const activos = Number(d.activos ?? 0);
+    const alta = Number(d.alta ?? 0);
+    return [
+      { label: 'Pendientes', value: String(total), raw: total, variant: 'blue' },
+      { label: 'Activos', value: String(activos), raw: activos, variant: 'amber' },
+      { label: 'Alta prioridad', value: String(alta), raw: alta, variant: 'red' },
+    ];
+  }
+
   // Pattern OPEX/CAPEX: capas separadas del asistente ejecutivo
   const ingPen = metricFromField(d.ingresos_pen);
   const opexPen = metricFromField(d.gastos_opex_pen);
@@ -774,8 +863,11 @@ export function extractMetricCards(
     if (cards.length >= 2) return cards;
   }
 
-  // Pattern B: flat { total, count }
+  // Pattern B: flat { total, count } — solo si parece monto financiero
   if (typeof d.total === 'number' && typeof d.count === 'number') {
+    if (d._tipo_metrica != null || d.totalVehiculos != null || d.totalConductores != null) {
+      return [];
+    }
     return [
       { label: 'Registros', value: String(d.count), raw: d.count, variant: 'gray' },
       { label: 'Total', value: fmtPen(d.total), raw: d.total, variant: 'blue' },
@@ -802,7 +894,7 @@ export function extractSimpleTable(
     rows = data;
   } else {
     const d = data as Record<string, unknown>;
-    const candidates = ['categorias', 'ranking', 'filas', 'movimientos', 'gastos', 'items'];
+    const candidates = ['categorias', 'ranking', 'filas', 'movimientos', 'gastos', 'items', 'porSubtipo'];
     for (const key of candidates) {
       if (Array.isArray(d[key])) {
         rows = d[key] as unknown[];
@@ -822,8 +914,13 @@ export function extractSimpleTable(
     motivo: 'Motivo',
     vehicle_id: 'Vehículo',
     placa: 'Placa',
+    posicion: '#',
+    total: 'Total',
+    utilidad_formatted: 'Utilidad',
+    ingresos_formatted: 'Ingresos',
+    gastos_formatted: 'Gastos',
   };
-  const SHOW_KEYS = ['label', 'tipo_gasto', 'count', 'monto', 'fecha', 'motivo', 'vehicle_id', 'placa'];
+  const SHOW_KEYS = ['posicion', 'placa', 'label', 'tipo_gasto', 'key', 'count', 'total', 'monto', 'utilidad_formatted', 'ingresos_formatted', 'gastos_formatted', 'fecha', 'motivo'];
   const firstRow = rows[0] as Record<string, unknown>;
   const headers = SHOW_KEYS.filter((k) => k in firstRow).map((k) => LABEL_MAP[k] ?? k);
   const keys = SHOW_KEYS.filter((k) => k in firstRow);
