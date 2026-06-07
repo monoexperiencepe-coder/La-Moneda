@@ -151,6 +151,105 @@ async function deleteControlFechaViaApi(
   return { ok: true };
 }
 
+async function fetchIngresoComentarios(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<string | null> {
+  let q = client.from('ingresos').select('comentarios').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error || !data) return null;
+  return typeof (data as { comentarios?: unknown }).comentarios === 'string'
+    ? (data as { comentarios: string }).comentarios
+    : null;
+}
+
+async function deleteIngresoViaApi(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const comentarios = await fetchIngresoComentarios(client, id, empresaId);
+  if (comentarios == null) return { ok: true };
+  if (!isSafeQaGastoComentarios(comentarios)) {
+    return { ok: false, error: `Refusing delete: comentarios sin ${QA_PREFIX}` };
+  }
+  let q = client.from('ingresos').delete().eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { error } = await q;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+async function fetchPendienteTexto(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<{ titulo: string | null; descripcion: string | null }> {
+  let q = client.from('pendientes').select('titulo, descripcion').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error || !data) return { titulo: null, descripcion: null };
+  const row = data as { titulo?: unknown; descripcion?: unknown };
+  return {
+    titulo: typeof row.titulo === 'string' ? row.titulo : null,
+    descripcion: typeof row.descripcion === 'string' ? row.descripcion : null,
+  };
+}
+
+function isSafeQaPendienteText(titulo: string | null, descripcion: string | null): boolean {
+  return Boolean(titulo?.includes(QA_PREFIX) || descripcion?.includes(QA_PREFIX));
+}
+
+async function deletePendienteViaApi(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const { titulo, descripcion } = await fetchPendienteTexto(client, id, empresaId);
+  if (titulo == null && descripcion == null) return { ok: true };
+  if (!isSafeQaPendienteText(titulo, descripcion)) {
+    return { ok: false, error: `Refusing delete: pendiente sin ${QA_PREFIX}` };
+  }
+  let q = client.from('pendientes').delete().eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { error } = await q;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+async function fetchVehicleDowntimeComentario(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<string | null> {
+  let q = client.from('vehicle_downtime').select('comentario').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error || !data) return null;
+  return typeof (data as { comentario?: unknown }).comentario === 'string'
+    ? (data as { comentario: string }).comentario
+    : null;
+}
+
+async function deleteVehicleDowntimeViaApi(
+  client: SupabaseClient,
+  id: string,
+  empresaId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const comentario = await fetchVehicleDowntimeComentario(client, id, empresaId);
+  if (comentario == null) return { ok: true };
+  if (!comentario.includes(QA_PREFIX)) {
+    return { ok: false, error: `Refusing delete: comentario sin ${QA_PREFIX}` };
+  }
+  let q = client.from('vehicle_downtime').delete().eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { error } = await q;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 async function deleteKilometrajeViaApi(
   client: SupabaseClient,
   id: string,
@@ -171,8 +270,11 @@ async function deleteKilometrajeViaApi(
 const CLEANUP_KIND_ORDER: Record<QaEntityRecord['kind'], number> = {
   control_fecha: 0,
   kilometraje: 1,
-  gasto: 2,
-  vehiculo: 3,
+  vehicle_downtime: 2,
+  gasto: 3,
+  ingreso: 4,
+  pendiente: 5,
+  vehiculo: 6,
 };
 
 function sortPendingForCleanup(entities: QaEntityRecord[]): QaEntityRecord[] {
@@ -285,6 +387,18 @@ export async function cleanupQaEntities(opts?: {
         errorMsg = api.error;
       } else if (entity.kind === 'control_fecha') {
         const api = await deleteControlFechaViaApi(client, entity.id, empresaId);
+        ok = api.ok;
+        errorMsg = api.error;
+      } else if (entity.kind === 'ingreso') {
+        const api = await deleteIngresoViaApi(client, entity.id, empresaId);
+        ok = api.ok;
+        errorMsg = api.error;
+      } else if (entity.kind === 'pendiente') {
+        const api = await deletePendienteViaApi(client, entity.id, empresaId);
+        ok = api.ok;
+        errorMsg = api.error;
+      } else if (entity.kind === 'vehicle_downtime') {
+        const api = await deleteVehicleDowntimeViaApi(client, entity.id, empresaId);
         ok = api.ok;
         errorMsg = api.error;
       }

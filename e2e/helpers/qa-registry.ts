@@ -8,7 +8,16 @@ export const QA_REGISTRY_DIR = path.join(__dirname, '../.qa-artifacts');
 export const QA_REGISTRY_FILE = path.join(QA_REGISTRY_DIR, 'registry.json');
 export const QA_CLEANUP_REPORT_FILE = path.join(QA_REGISTRY_DIR, 'cleanup-report.json');
 
-export type QaEntityKind = 'gasto' | 'vehiculo' | 'kilometraje' | 'control_fecha';
+export type QaEntityKind =
+  | 'gasto'
+  | 'vehiculo'
+  | 'kilometraje'
+  | 'control_fecha'
+  | 'ingreso'
+  | 'pendiente'
+  | 'vehicle_downtime';
+
+export type QaArtifactType = QaEntityKind;
 
 export type QaCleanupStatus = 'pending' | 'deleted' | 'failed';
 
@@ -123,6 +132,61 @@ export function registerQaControlFecha(id: string | number, tag: string): void {
   if (!sid) throw new Error('E2E: registerQaControlFecha requiere id válido');
   registerQaEntity({ kind: 'control_fecha', id: sid, label: tag });
   trackQaArtifact(`control_fecha · id=${sid} · ${tag}`);
+}
+
+export function registerQaIngreso(id: string | number, tag: string): void {
+  assertQaMarker(tag, 'comentarios QA');
+  const sid = String(id).trim();
+  if (!sid) throw new Error('E2E: registerQaIngreso requiere id válido');
+  registerQaEntity({ kind: 'ingreso', id: sid, label: tag });
+  trackQaArtifact(`ingreso · id=${sid} · ${tag}`);
+}
+
+export function registerQaPendiente(id: string | number, tag: string): void {
+  assertQaMarker(tag, 'titulo/descripcion QA');
+  const sid = String(id).trim();
+  if (!sid) throw new Error('E2E: registerQaPendiente requiere id válido');
+  registerQaEntity({ kind: 'pendiente', id: sid, label: tag });
+  trackQaArtifact(`pendiente · id=${sid} · ${tag}`);
+}
+
+export function registerQaVehicleDowntime(id: string | number, tag: string): void {
+  assertQaMarker(tag, 'comentario QA');
+  const sid = String(id).trim();
+  if (!sid) throw new Error('E2E: registerQaVehicleDowntime requiere id válido');
+  registerQaEntity({ kind: 'vehicle_downtime', id: sid, label: tag });
+  trackQaArtifact(`vehicle_downtime · id=${sid} · ${tag}`);
+}
+
+/** Registro unificado de artefactos QA para cleanup en globalTeardown. */
+export function registerQaArtifact(type: QaArtifactType, id: string | number, label: string): void {
+  switch (type) {
+    case 'gasto':
+      registerQaGasto(String(id), label);
+      break;
+    case 'vehiculo':
+      registerQaVehiculo(id, label);
+      break;
+    case 'kilometraje':
+      registerQaKilometraje(id, label);
+      break;
+    case 'control_fecha':
+      registerQaControlFecha(id, label);
+      break;
+    case 'ingreso':
+      registerQaIngreso(id, label);
+      break;
+    case 'pendiente':
+      registerQaPendiente(id, label);
+      break;
+    case 'vehicle_downtime':
+      registerQaVehicleDowntime(id, label);
+      break;
+    default: {
+      const _exhaustive: never = type;
+      throw new Error(`E2E: tipo de artefacto QA desconocido: ${String(_exhaustive)}`);
+    }
+  }
 }
 
 export function updateQaEntityStatus(

@@ -8,9 +8,14 @@ const SUBLINKS: { title: string; path: string; emoji: string; hint?: string }[] 
   { title: 'Control global', path: '/operaciones/control-global', emoji: '🧭', hint: 'Resumen y alertas' },
   { title: 'Pendientes', path: '/operaciones/pendientes', emoji: '📌', hint: 'Trabajo pendiente y prioridades' },
   { title: 'Documentación', path: '/operaciones/docs', emoji: '📋', hint: 'SOAT, RT, vencimientos (Supabase)' },
-  { title: 'Mantenimiento', path: '/operaciones/mantenimiento', emoji: '🔧', hint: 'Kilometraje y valor tiempo' },
+  { title: 'Mantenimiento', path: '/operaciones/mantenimiento', emoji: '🔧', hint: 'Kilometraje y alertas' },
   { title: 'Conductores', path: '/operaciones/conductores', emoji: '👤' },
-  { title: 'Valor tiempo', path: '/operaciones/tiempo', emoji: '⏱️' },
+  {
+    title: 'Disponibilidad operativa',
+    path: '/operaciones/disponibilidad',
+    emoji: '🚫',
+    hint: 'Indisponibilidad y pérdida de oportunidad',
+  },
 ];
 
 function badgeEstado(e: EstadoFlota): { cls: string; label: string } {

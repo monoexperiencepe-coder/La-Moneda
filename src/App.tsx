@@ -43,6 +43,7 @@ const ControlGlobal = lazy(() => import('./pages/Operaciones/ControlGlobal'));
 const RegistroTiempo = lazy(() => import('./pages/Operaciones/RegistroTiempo'));
 const Conductores = lazy(() => import('./pages/Operaciones/Conductores'));
 const Pendientes = lazy(() => import('./pages/Operaciones/Pendientes'));
+const DisponibilidadOperativa = lazy(() => import('./pages/Operaciones/DisponibilidadOperativa'));
 const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const AIPage = lazy(() => import('./pages/AIPage'));
@@ -162,6 +163,7 @@ const AppContent: React.FC = () => {
                         <Route path="/operaciones/tiempo" element={<SectionGuard section="operaciones"><RegistroTiempo /></SectionGuard>} />
                         <Route path="/operaciones/conductores" element={<SectionGuard section="operaciones"><Conductores /></SectionGuard>} />
                         <Route path="/operaciones/pendientes" element={<SectionGuard section="operaciones"><Pendientes /></SectionGuard>} />
+                        <Route path="/operaciones/disponibilidad" element={<SectionGuard section="operaciones"><DisponibilidadOperativa /></SectionGuard>} />
 
                         {/* Reportes */}
                         <Route path="/reportes" element={<SectionGuard section="reportes"><ReportesHub /></SectionGuard>} />

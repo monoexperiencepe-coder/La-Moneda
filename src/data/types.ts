@@ -513,6 +513,29 @@ export interface Pendiente {
   createdAt: string;
 }
 
+export type VehicleDowntimeMotivo =
+  | 'taller'
+  | 'multa'
+  | 'mantenimiento'
+  | 'accidente'
+  | 'sin_conductor'
+  | 'administrativo'
+  | 'otro';
+
+export type VehicleDowntimeEstado = 'activo' | 'cerrado';
+
+/** Indisponibilidad operativa (public.vehicle_downtime). */
+export interface VehicleDowntime {
+  id: number;
+  vehicleId: number;
+  fechaInicio: string;
+  fechaFin: string | null;
+  motivo: VehicleDowntimeMotivo;
+  comentario: string;
+  estado: VehicleDowntimeEstado;
+  createdAt: string;
+}
+
 /**
  * Hoja TIEMPO del Excel: registro operativo asociado a unidad / taller (no es ingreso ni gasto).
  * `valorTiempo` es numérico libre (p. ej. horas de taller o métrica interna).

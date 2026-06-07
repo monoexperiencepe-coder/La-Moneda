@@ -15,6 +15,7 @@ import HomeRecentRecordsModal, {
 import { REGISTROS_ACCESOS, filterRegistrosAccesos } from '../../config/registrosAccesos';
 import { useAuth } from '../../context/AuthContext';
 import { permissionUserFromAuth } from '../../utils/permissions';
+import { useIndisponibilidadModal } from '../../context/IndisponibilidadModalContext';
 import PendientesEquipoHoyBlock from '../../components/pendientes/PendientesEquipoHoyBlock';
 import { countPendientesEquipoActivos } from '../../utils/pendienteModel';
 
@@ -114,6 +115,7 @@ const WorkBlock: React.FC<{
 const Inicio: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { openRegistrar: openIndisponibilidad } = useIndisponibilidadModal();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewAlertas = searchParams.get('view') === 'alertas';
 
@@ -248,9 +250,15 @@ const Inicio: React.FC = () => {
       hint: item.hint,
       cls: item.quickCls,
       glow: item.quickGlow,
-      action: () => navigate(item.path),
+      action: () => {
+        if (item.openModal === 'indisponibilidad') {
+          openIndisponibilidad();
+          return;
+        }
+        navigate(item.path);
+      },
     }));
-  }, [navigate, user, profile?.email]);
+  }, [navigate, openIndisponibilidad, user, profile?.email]);
 
   /* ════════════════════════════════════════════════════════════════════
      VISTA: QUÉ HACER HOY

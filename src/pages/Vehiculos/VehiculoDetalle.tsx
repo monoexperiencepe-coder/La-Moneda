@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, UserCog, Pencil } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -11,7 +11,14 @@ import KmMantenimientoResumen from '../../components/operaciones/KmMantenimiento
 import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivot';
 import { docColumnTone, docRowWorstTone } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_COLUMNS } from '../../data/controlFechaCatalog';
-import type { Conductor, InversionVehiculo, Pendiente, TipoControlFecha, CajaNegocioVehiculo } from '../../data/types';
+import type {
+  Conductor,
+  InversionVehiculo,
+  Pendiente,
+  TipoControlFecha,
+  CajaNegocioVehiculo,
+  VehicleDowntime,
+} from '../../data/types';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
 import { UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
 import { useUtilidadRealVehiculo } from '../../hooks/useUtilidadRealCalculos';
@@ -27,8 +34,14 @@ import ControlFechaRegistroPanel from '../../components/operaciones/ControlFecha
 import KilometrajeMantenimientoPanel from '../../components/operaciones/KilometrajeMantenimientoPanel';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
 import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
+import RegistrarIndisponibilidadModal from '../../components/vehiculos/RegistrarIndisponibilidadModal';
 import { useAuth } from '../../context/AuthContext';
 import { canMutateVehiculos } from '../../utils/permissions';
+import { fetchVehicleDowntimesByVehicle } from '../../services/vehicleDowntimeService';
+import {
+  calcularImpactoIndisponibilidad,
+  VEHICLE_DOWNTIME_MOTIVO_LABELS,
+} from '../../utils/vehicleDowntimeImpact';
 
 const EMPTY_INTEL_KPI: FinancialKPIData = {
   gastos_operativos: 0,
@@ -72,10 +85,14 @@ const VehiculoDetalle: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseTab(searchParams.get('tab'));
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const canAssign = canMutateVehiculos(user);
   const [showAsignarConductor, setShowAsignarConductor] = useState(false);
   const [showEditarVehiculo, setShowEditarVehiculo] = useState(false);
+  const [showIndisponibilidad, setShowIndisponibilidad] = useState(false);
+  const [cerrarDowntimeId, setCerrarDowntimeId] = useState<number | null>(null);
+  const [vehicleDowntimes, setVehicleDowntimes] = useState<VehicleDowntime[]>([]);
+  const [downtimesLoading, setDowntimesLoading] = useState(false);
 
   const {
     vehicles,
@@ -97,6 +114,27 @@ const VehiculoDetalle: React.FC = () => {
   } = useRegistrosContext();
 
   const vehicle = getVehicleById(vid);
+
+  const reloadDowntimes = useCallback(async () => {
+    if (!Number.isFinite(vid)) return;
+    setDowntimesLoading(true);
+    const rows = await fetchVehicleDowntimesByVehicle(vid, profile?.empresa_id);
+    setVehicleDowntimes(rows);
+    setDowntimesLoading(false);
+  }, [vid, profile?.empresa_id]);
+
+  useEffect(() => {
+    void reloadDowntimes();
+  }, [reloadDowntimes]);
+
+  const downtimeFilas = useMemo(
+    () =>
+      vehicleDowntimes.map((d) => ({
+        row: d,
+        impacto: calcularImpactoIndisponibilidad(d, ingresos, cajaNegocioVehiculo),
+      })),
+    [vehicleDowntimes, ingresos, cajaNegocioVehiculo],
+  );
 
   const setTab = (next: TabId) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -258,6 +296,18 @@ const VehiculoDetalle: React.FC = () => {
           <button type="button" className={qaBtn} onClick={() => navigate(`/operaciones/pendientes?vehicle=${vid}`)}>
             Registrar pendiente
           </button>
+          {canAssign ? (
+            <button
+              type="button"
+              className={qaBtn}
+              onClick={() => {
+                setCerrarDowntimeId(null);
+                setShowIndisponibilidad(true);
+              }}
+            >
+              Registrar indisponibilidad
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -386,6 +436,96 @@ const VehiculoDetalle: React.FC = () => {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+            <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-rose-950 uppercase tracking-wide">
+                    Indisponibilidad operativa
+                  </p>
+                  <p className="text-[10px] text-rose-800/90 mt-0.5 max-w-xl">
+                    Métrica virtual (días × ingreso promedio). No modifica ingresos, gastos ni utilidad.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-primary-600 hover:underline"
+                    onClick={() => navigate('/operaciones/disponibilidad')}
+                  >
+                    Ver dashboard →
+                  </button>
+                  {canAssign ? (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-rose-800 hover:underline"
+                      onClick={() => {
+                        setCerrarDowntimeId(null);
+                        setShowIndisponibilidad(true);
+                      }}
+                    >
+                      + Registrar
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {downtimesLoading ? (
+                <p className="text-xs text-gray-500">Cargando indisponibilidades…</p>
+              ) : downtimeFilas.length === 0 ? (
+                <p className="text-xs text-gray-500">Sin registros de indisponibilidad para esta unidad.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-rose-100 bg-white/80">
+                  <table className="w-full text-sm min-w-[520px]">
+                    <thead className="bg-rose-50/80 border-b text-left text-[10px] text-rose-900 uppercase">
+                      <tr>
+                        <th className="py-2 px-3">Estado</th>
+                        <th className="py-2 px-3">Motivo</th>
+                        <th className="py-2 px-3">Inicio</th>
+                        <th className="py-2 px-3">Fin</th>
+                        <th className="py-2 px-3 text-right">Días</th>
+                        <th className="py-2 px-3 text-right">Pérdida est.</th>
+                        <th className="py-2 px-3" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-50">
+                      {downtimeFilas.map(({ row, impacto }) => (
+                        <tr key={row.id} className="align-top">
+                          <td className="py-2 px-3">
+                            <Badge variant={row.estado === 'activo' ? 'warning' : 'neutral'} dot>
+                              {row.estado === 'activo' ? 'Activo' : 'Cerrado'}
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-3 text-gray-800">
+                            {VEHICLE_DOWNTIME_MOTIVO_LABELS[row.motivo] ?? row.motivo}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap text-gray-600">{formatDate(row.fechaInicio)}</td>
+                          <td className="py-2 px-3 whitespace-nowrap text-gray-600">
+                            {row.fechaFin ? formatDate(row.fechaFin) : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums font-medium">{impacto.diasFuera}</td>
+                          <td className="py-2 px-3 text-right tabular-nums font-medium text-rose-900">
+                            {formatGlobalAmount(impacto.perdidaOportunidad)}
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            {canAssign && row.estado === 'activo' ? (
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-primary-600 hover:underline"
+                                onClick={() => {
+                                  setCerrarDowntimeId(row.id);
+                                  setShowIndisponibilidad(true);
+                                }}
+                              >
+                                Cerrar
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
             {inversionTotalUsd != null && (
@@ -788,6 +928,19 @@ const VehiculoDetalle: React.FC = () => {
         isOpen={showEditarVehiculo}
         onClose={() => setShowEditarVehiculo(false)}
         onDeleted={() => navigate('/vehiculos/inventario')}
+      />
+      <RegistrarIndisponibilidadModal
+        vehicle={vehicle}
+        empresaId={profile?.empresa_id ?? null}
+        isOpen={showIndisponibilidad}
+        cerrarId={cerrarDowntimeId}
+        onClose={() => {
+          setShowIndisponibilidad(false);
+          setCerrarDowntimeId(null);
+        }}
+        onSaved={() => {
+          void reloadDowntimes();
+        }}
       />
     </div>
   );

@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { REGISTROS_ACCESOS, filterRegistrosAccesos } from '../../config/registrosAccesos';
+import { REGISTROS_ACCESOS, filterRegistrosAccesos, type RegistrosAccesoDef } from '../../config/registrosAccesos';
 import { permissionUserFromAuth } from '../../utils/permissions';
+import { useIndisponibilidadModal } from '../../context/IndisponibilidadModalContext';
 
 const FloatingRegistrosMenu: React.FC = () => {
   const navigate = useNavigate();
   const { isFinancialOperador, user, profile } = useAuth();
+  const { openRegistrar: openIndisponibilidad } = useIndisponibilidadModal();
   const [open, setOpen] = useState(false);
 
   const menuItems = useMemo(
@@ -26,8 +28,13 @@ const FloatingRegistrosMenu: React.FC = () => {
 
   if (isFinancialOperador) return null;
 
-  const go = (path: string) => {
-    navigate(path);
+  const go = (item: RegistrosAccesoDef) => {
+    if (item.openModal === 'indisponibilidad') {
+      openIndisponibilidad();
+      setOpen(false);
+      return;
+    }
+    navigate(item.path);
     setOpen(false);
   };
 
@@ -68,7 +75,7 @@ const FloatingRegistrosMenu: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => go(item.path)}
+                  onClick={() => go(item)}
                   className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
                 >
                   <span className="shrink-0 text-xl leading-none pt-0.5" aria-hidden>

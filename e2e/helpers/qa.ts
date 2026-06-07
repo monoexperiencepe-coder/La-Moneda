@@ -2,7 +2,12 @@
 export const QA_PREFIX = '[QA_AUTO]';
 
 export function qaTag(scope: string): string {
-  return `${QA_PREFIX} ${scope} ${Date.now()}`;
+  return createQaTag(scope);
+}
+
+/** Etiqueta QA estándar: `[QA_AUTO] label timestamp` */
+export function createQaTag(label: string): string {
+  return `${QA_PREFIX} ${label.trim()} ${Date.now()}`;
 }
 
 export function qaPlaca(): string {

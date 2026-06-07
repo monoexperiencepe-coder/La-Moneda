@@ -24,6 +24,8 @@ import type {
   PendienteRelacionadoTipo,
   PendienteTipo,
   RegistroTiempo,
+  VehicleDowntime,
+  VehicleDowntimeMotivo,
 } from '../data/types';
 import { prioridadLegacyFromV2, prioridadV2FromLegacy } from '../utils/pendienteModel';
 
@@ -785,5 +787,59 @@ export function registroTiempoPatchToSnake(
   if (patch.tipo !== undefined) out.tipo = patch.tipo;
   if (patch.descripcion !== undefined) out.descripcion = patch.descripcion;
   if (patch.valorTiempo !== undefined) out.valor_tiempo = patch.valorTiempo;
+  return out;
+}
+
+const DOWNTIME_MOTIVOS = [
+  'taller',
+  'multa',
+  'mantenimiento',
+  'accidente',
+  'sin_conductor',
+  'administrativo',
+  'otro',
+] as const;
+
+export function mapVehicleDowntimeRow(r: Record<string, unknown>): VehicleDowntime {
+  const mot = str(r.motivo).toLowerCase();
+  const est = str(r.estado).toLowerCase();
+  return {
+    id: num(r.id),
+    vehicleId: num(r.vehicle_id),
+    fechaInicio: str(r.fecha_inicio).slice(0, 10),
+    fechaFin: r.fecha_fin != null && String(r.fecha_fin).trim() !== '' ? str(r.fecha_fin).slice(0, 10) : null,
+    motivo: (DOWNTIME_MOTIVOS.includes(mot as (typeof DOWNTIME_MOTIVOS)[number])
+      ? mot
+      : 'otro') as VehicleDowntimeMotivo,
+    comentario: str(r.comentario),
+    estado: est === 'cerrado' ? 'cerrado' : 'activo',
+    createdAt: isoCreated(r.created_at),
+  };
+}
+
+export function vehicleDowntimeToInsert(
+  empresaId: string,
+  row: Omit<VehicleDowntime, 'id' | 'createdAt'>,
+): Record<string, unknown> {
+  return {
+    empresa_id: empresaId,
+    vehicle_id: row.vehicleId,
+    fecha_inicio: row.fechaInicio,
+    fecha_fin: row.fechaFin,
+    motivo: row.motivo,
+    comentario: row.comentario ?? '',
+    estado: row.estado,
+  };
+}
+
+export function vehicleDowntimePatchToSnake(
+  patch: Partial<Omit<VehicleDowntime, 'id' | 'createdAt'>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (patch.fechaInicio !== undefined) out.fecha_inicio = patch.fechaInicio;
+  if (patch.fechaFin !== undefined) out.fecha_fin = patch.fechaFin;
+  if (patch.motivo !== undefined) out.motivo = patch.motivo;
+  if (patch.comentario !== undefined) out.comentario = patch.comentario;
+  if (patch.estado !== undefined) out.estado = patch.estado;
   return out;
 }

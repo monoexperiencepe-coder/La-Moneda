@@ -14,6 +14,8 @@ export type RegistrosAccesoDef = {
   quickGlow: string;
   /** Solo admin / socio / contador */
   requiresVehiculosMutate?: boolean;
+  /** Abre modal global (sin navegar) */
+  openModal?: 'indisponibilidad';
 };
 
 export const REGISTROS_ACCESOS: RegistrosAccesoDef[] = [
@@ -66,6 +68,18 @@ export const REGISTROS_ACCESOS: RegistrosAccesoDef[] = [
     path: '/operaciones/pendientes',
     quickCls: 'border-violet-200 bg-gradient-to-br from-white to-violet-50/80 text-violet-950',
     quickGlow: 'hover:shadow-[0_4px_20px_rgba(139,92,246,0.18)]',
+  },
+  {
+    id: 'indisponibilidad',
+    emoji: '🚫',
+    menuLabel: 'Registrar indisponibilidad',
+    quickLabel: '+ Indisp.',
+    hint: 'Días fuera y pérdida estimada',
+    path: '/operaciones/disponibilidad',
+    quickCls: 'border-rose-200 bg-gradient-to-br from-white to-rose-50/80 text-rose-950',
+    quickGlow: 'hover:shadow-[0_4px_20px_rgba(244,63,94,0.18)]',
+    requiresVehiculosMutate: true,
+    openModal: 'indisponibilidad',
   },
   {
     id: 'conductor',

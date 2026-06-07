@@ -138,6 +138,125 @@ export async function expectQaGastoAbsentInSupabase(id: string): Promise<void> {
   }
 }
 
+export type QaIngresoDbSnapshot = {
+  exists: boolean;
+  id: string;
+  comentarios: string | null;
+};
+
+export async function fetchQaIngresoFromSupabase(id: string): Promise<QaIngresoDbSnapshot> {
+  const client = await createQaSupabaseClient();
+  const empresaId = await resolveQaEmpresaId(client);
+  let q = client.from('ingresos').select('id, comentarios').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw new Error(`fetchQaIngresoFromSupabase: ${error.message}`);
+  if (!data) return { exists: false, id, comentarios: null };
+  const row = data as { id: string; comentarios?: string | null };
+  const comentarios = row.comentarios ?? null;
+  if (comentarios && !comentarios.includes(QA_PREFIX)) {
+    throw new Error(`Refusing fetch: ingreso ${id} no tiene prefijo ${QA_PREFIX}`);
+  }
+  return { exists: true, id: String(row.id), comentarios };
+}
+
+export async function expectQaIngresoAbsentInSupabase(id: string): Promise<void> {
+  const row = await fetchQaIngresoFromSupabase(id);
+  if (row.exists) {
+    throw new Error(`Ingreso QA id=${id} aún existe en Supabase (comentarios="${row.comentarios ?? ''}")`);
+  }
+}
+
+export async function expectQaPendienteAbsentInSupabase(id: string): Promise<void> {
+  const client = await createQaSupabaseClient();
+  const empresaId = await resolveQaEmpresaId(client);
+  let q = client.from('pendientes').select('id, titulo, descripcion').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw new Error(`expectQaPendienteAbsentInSupabase: ${error.message}`);
+  if (data) {
+    const row = data as { titulo?: string | null; descripcion?: string | null };
+    throw new Error(
+      `Pendiente QA id=${id} aún existe (titulo="${row.titulo ?? ''}")`,
+    );
+  }
+}
+
+export async function expectQaVehicleDowntimeAbsentInSupabase(id: string): Promise<void> {
+  const client = await createQaSupabaseClient();
+  const empresaId = await resolveQaEmpresaId(client);
+  let q = client.from('vehicle_downtime').select('id, comentario').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw new Error(`expectQaVehicleDowntimeAbsentInSupabase: ${error.message}`);
+  if (data) {
+    const row = data as { comentario?: string | null };
+    throw new Error(
+      `vehicle_downtime QA id=${id} aún existe (comentario="${row.comentario ?? ''}")`,
+    );
+  }
+}
+
+async function safeDelete(
+  table: string,
+  id: string,
+  empresaId: string | null,
+  verify: (row: Record<string, unknown>) => boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = await createQaSupabaseClient();
+  let sel = client.from(table).select('*').eq('id', id);
+  if (empresaId) sel = sel.eq('empresa_id', empresaId);
+  const { data, error: readErr } = await sel.maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  if (!data) return { ok: true };
+  if (!verify(data as Record<string, unknown>)) {
+    return { ok: false, error: `Refusing delete ${table} id=${id}: sin prefijo ${QA_PREFIX}` };
+  }
+  let del = client.from(table).delete().eq('id', id);
+  if (empresaId) del = del.eq('empresa_id', empresaId);
+  const { error } = await del;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function deletePendienteViaApiDirect(id: string): Promise<{ ok: boolean; error?: string }> {
+  const client = await createQaSupabaseClient();
+  const empresaId = await resolveQaEmpresaId(client);
+  let q = client.from('pendientes').select('titulo, descripcion').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: true };
+  const row = data as { titulo?: string; descripcion?: string };
+  if (!row.titulo?.includes(QA_PREFIX) && !row.descripcion?.includes(QA_PREFIX)) {
+    return { ok: false, error: `Refusing delete pendiente ${id}` };
+  }
+  let del = client.from('pendientes').delete().eq('id', id);
+  if (empresaId) del = del.eq('empresa_id', empresaId);
+  const { error: delErr } = await del;
+  if (delErr) return { ok: false, error: delErr.message };
+  return { ok: true };
+}
+
+export async function deleteVehicleDowntimeViaApiDirect(id: string): Promise<{ ok: boolean; error?: string }> {
+  const client = await createQaSupabaseClient();
+  const empresaId = await resolveQaEmpresaId(client);
+  let q = client.from('vehicle_downtime').select('comentario').eq('id', id);
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const { data, error } = await q.maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: true };
+  const comentario = (data as { comentario?: string }).comentario ?? '';
+  if (!comentario.includes(QA_PREFIX)) {
+    return { ok: false, error: `Refusing delete vehicle_downtime ${id}` };
+  }
+  let del = client.from('vehicle_downtime').delete().eq('id', id);
+  if (empresaId) del = del.eq('empresa_id', empresaId);
+  const { error: delErr } = await del;
+  if (delErr) return { ok: false, error: delErr.message };
+  return { ok: true };
+}
+
 export type QaKilometrajeDbSnapshot = {
   exists: boolean;
   id: string;

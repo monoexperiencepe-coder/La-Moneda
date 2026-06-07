@@ -110,8 +110,8 @@ const ControlGlobal: React.FC = () => {
 
   const quickLinks = [
     { label: 'Documentación', path: '/operaciones/docs', hint: 'Vencimientos y SOAT' },
-    { label: 'Mantenimiento', path: '/operaciones/mantenimiento', hint: 'KM y valor tiempo' },
-    { label: 'Valor tiempo', path: '/operaciones/tiempo', hint: 'Hoja TIEMPO' },
+    { label: 'Mantenimiento', path: '/operaciones/mantenimiento', hint: 'Kilometraje' },
+    { label: 'Disponibilidad operativa', path: '/operaciones/disponibilidad', hint: 'Indisponibilidad y pérdida estimada' },
     { label: 'Conductores', path: '/operaciones/conductores', hint: 'Listado y altas' },
     { label: 'Pendientes', path: '/operaciones/pendientes', hint: 'Tareas abiertas' },
     { label: 'Inventario', path: '/vehiculos/inventario', hint: 'Flota' },
@@ -158,15 +158,6 @@ const ControlGlobal: React.FC = () => {
           <p className="text-[10px] text-violet-600 font-semibold mt-1">Ver lista →</p>
         </button>
       </div>
-
-      <button
-        type="button"
-        onClick={() => navigate('/operaciones/tiempo')}
-        className="w-full text-left rounded-2xl border border-indigo-100 bg-indigo-50/90 px-4 py-3 text-sm hover:bg-indigo-50 transition-colors"
-      >
-        <span className="font-semibold text-indigo-900">⏱️ Valor tiempo (hoja TIEMPO del Excel)</span>
-        <span className="block text-xs text-indigo-700 mt-0.5">Registros por vehículo — también en Mantenimiento</span>
-      </button>
 
       {operativeAlerts.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50/90 px-4 py-3 text-sm">
