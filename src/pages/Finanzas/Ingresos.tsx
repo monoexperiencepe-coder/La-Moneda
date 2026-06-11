@@ -22,6 +22,10 @@ import type { CopilotFocusSpec } from '../../modules/copilot/copilotFocusTarget'
 import type { NarrativeStep } from '../../modules/copilot/navigationNarrative';
 import { resolveIncomeMonthFocusTarget } from '../../modules/copilot/navigationNarrative/resolveIncomeMonthTarget';
 import CopilotEvidenceSlot from '../../components/Copilot/CopilotEvidenceSlot';
+import {
+  ingresoPromedioMensualDivisor,
+  ingresoPromedioMensualLabel,
+} from '../../utils/ingresoPromedioMensual';
 
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
@@ -330,9 +334,17 @@ const Ingresos: React.FC = () => {
 
   const chartYearInsights = useMemo(() => {
     if (chartYear === 'ALL' || !Number.isFinite(chartYearNum)) {
-      return { avgMonthly: 0, peakLabel: '—', peakTotal: 0, peakMonth: '' };
+      return {
+        avgMonthly: 0,
+        peakLabel: '—',
+        peakTotal: 0,
+        peakMonth: '',
+        avgMonthsLabel: '',
+      };
     }
-    const avgMonthly = totalAnioGrafico / 12;
+    const monthsDivisor = ingresoPromedioMensualDivisor(chartYearNum);
+    const avgMonthly = totalAnioGrafico / monthsDivisor;
+    const avgMonthsLabel = ingresoPromedioMensualLabel(chartYearNum);
     let peakTotal = 0;
     let peakLabel = '—';
     let peakMonth = '';
@@ -348,7 +360,7 @@ const Ingresos: React.FC = () => {
       }
     }
     if (peakTotal <= 0) peakLabel = '—';
-    return { avgMonthly, peakLabel, peakTotal, peakMonth };
+    return { avgMonthly, peakLabel, peakTotal, peakMonth, avgMonthsLabel };
   }, [chartYear, chartYearNum, totalAnioGrafico, ingresosChartBase]);
 
   const monthlyFocusRows = useMemo(() => {
@@ -600,7 +612,7 @@ const Ingresos: React.FC = () => {
                         ? allYearsRollup?.yearCount
                           ? `En ${allYearsRollup.yearCount} año${allYearsRollup.yearCount === 1 ? '' : 's'} con datos`
                           : 'Sin años con datos'
-                        : 'Sobre 12 meses'}
+                        : chartYearInsights.avgMonthsLabel}
                     </p>
                   </>
                 ) : (

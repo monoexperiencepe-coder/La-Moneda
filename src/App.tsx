@@ -48,6 +48,7 @@ const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const AIPage = lazy(() => import('./pages/AIPage'));
 const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
+const UsuariosPanel = lazy(() => import('./pages/Admin/UsuariosPanel'));
 const CopilotDebug = lazy(() => import('./pages/Admin/CopilotDebug'));
 const SubtipoConciliacion = lazy(() => import('./pages/Admin/SubtipoConciliacion'));
 
@@ -176,6 +177,14 @@ const AppContent: React.FC = () => {
 
                         {/* Config */}
                         <Route path="/configuracion" element={<SectionGuard section="configuracion"><Configuracion /></SectionGuard>} />
+                        <Route
+                          path="/admin/usuarios"
+                          element={
+                            <AdminOnly>
+                              <UsuariosPanel />
+                            </AdminOnly>
+                          }
+                        />
                         <Route
                           path="/admin/historial-sistema"
                           element={

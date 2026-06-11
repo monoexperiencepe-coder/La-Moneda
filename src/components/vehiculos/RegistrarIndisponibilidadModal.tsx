@@ -57,10 +57,10 @@ const RegistrarIndisponibilidadModal: React.FC<Props> = ({
     () =>
       [...vehicles]
         .filter((v) => v.activo !== false)
-        .sort((a, b) => a.placa.localeCompare(b.placa, 'es'))
+        .sort((a, b) => a.id - b.id)
         .map((v) => ({
           value: String(v.id),
-          label: `${v.placa} · ${v.marca} ${v.modelo}`.trim(),
+          label: `#${v.id} — ${v.marca} ${v.modelo} — ${v.placa}`.trim(),
         })),
     [vehicles],
   );

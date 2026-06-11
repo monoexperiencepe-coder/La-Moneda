@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.local
 .env.qa
 e2e/.auth/
 e2e/.qa-artifacts/
