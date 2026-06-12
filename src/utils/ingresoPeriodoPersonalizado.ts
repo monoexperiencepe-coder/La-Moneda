@@ -127,19 +127,23 @@ export type IngresoPeriodoPersonalizadoHistorial = {
   rango: string | null;
 };
 
-/** Historial personalizado: etiqueta + rango «06/11 → 14/11». */
+/** Historial personalizado: «Periodo personalizado» + «06/11 → 14/11 · 9 días». */
 export function ingresoPeriodoPersonalizadoHistorial(
   ingreso: Pick<Ingreso, 'subTipo' | 'excelExtra' | 'fechaDesde' | 'fechaHasta'>,
 ): IngresoPeriodoPersonalizadoHistorial | null {
-  const etiqueta = formatIngresoPeriodoHistorial(ingreso);
-  if (!etiqueta) return null;
+  if (!isIngresoPeriodoPersonalizado(ingreso)) return null;
+  const dias = getIngresoPeriodoDias(ingreso);
   const d = ingreso.fechaDesde?.trim().slice(0, 10);
   const h = ingreso.fechaHasta?.trim().slice(0, 10);
+  const diasSuffix =
+    dias != null ? ` · ${dias} día${dias !== 1 ? 's' : ''}` : '';
   const rango =
     d && h && ISO_DATE_RE.test(d) && ISO_DATE_RE.test(h)
-      ? `${formatIngresoFechaCorta(d)} → ${formatIngresoFechaCorta(h)}`
-      : null;
-  return { etiqueta, rango };
+      ? `${formatIngresoFechaCorta(d)} → ${formatIngresoFechaCorta(h)}${diasSuffix}`
+      : dias != null
+        ? `${dias} día${dias !== 1 ? 's' : ''}`
+        : null;
+  return { etiqueta: 'Periodo personalizado', rango };
 }
 
 export function stampPeriodoDiasExtra(

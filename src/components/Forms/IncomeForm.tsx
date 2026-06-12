@@ -121,9 +121,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
     if (!form.fecha) {
-      newErrors.fecha = esPeriodoPersonalizado
-        ? 'La fecha inicio es requerida'
-        : 'La fecha de movimiento / pago es requerida';
+      newErrors.fecha = 'La fecha de movimiento / pago es requerida';
     }
     if (esVehicular) {
       if (!form.vehicleId) newErrors.vehicleId = 'Selecciona un vehículo';
@@ -136,14 +134,22 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
     }
     if (!form.monto || Number(form.monto) <= 0) newErrors.monto = 'Ingresa un monto válido';
     if (esPeriodoPersonalizado) {
+      if (!form.fechaDesde.trim()) {
+        newErrors.fechaDesde = 'Indica la fecha inicio del periodo';
+      }
       const dias = Number(form.periodoDias);
       if (!form.periodoDias.trim() || !Number.isFinite(dias) || dias < 1 || dias > 366) {
         newErrors.periodoDias = 'Indica cantidad de días (1–366)';
       }
       if (!form.fechaHasta.trim()) {
         newErrors.fechaHasta = 'Indica la fecha fin';
-      } else if (form.periodoDias.trim() && Number.isFinite(dias) && dias >= 1) {
-        const rango = validatePeriodoPersonalizadoRango(form.fecha, form.fechaHasta, dias);
+      } else if (
+        form.fechaDesde.trim() &&
+        form.periodoDias.trim() &&
+        Number.isFinite(dias) &&
+        dias >= 1
+      ) {
+        const rango = validatePeriodoPersonalizadoRango(form.fechaDesde, form.fechaHasta, dias);
         if (!rango.ok) newErrors.fechaHasta = rango.message;
       }
     }
@@ -193,7 +199,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
           tipo,
           subTipo,
           fechaDesde: esPeriodoPersonalizado
-            ? form.fecha.trim()
+            ? form.fechaDesde.trim()
             : esVehicular
               ? form.fechaDesde.trim() || null
               : null,
@@ -316,17 +322,24 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
               const personalizado = v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
               setForm((p) => {
                 const periodoDias = personalizado ? p.periodoDias : '';
+                const fechaDesde = personalizado ? p.fechaDesde || todayStr() : p.fechaDesde;
                 return {
                   ...p,
                   subTipo: v,
                   periodoDias,
-                  fechaDesde: personalizado ? '' : p.fechaDesde,
+                  fechaDesde: personalizado ? fechaDesde : p.fechaDesde,
                   fechaHasta: personalizado
-                    ? syncPeriodoPersonalizadoFin(p.fecha, periodoDias, '')
+                    ? syncPeriodoPersonalizadoFin(fechaDesde, periodoDias, '')
                     : p.fechaHasta,
                 };
               });
-              setErrors((p) => ({ ...p, subTipo: '', periodoDias: '', fechaHasta: '' }));
+              setErrors((p) => ({
+                ...p,
+                subTipo: '',
+                periodoDias: '',
+                fechaDesde: '',
+                fechaHasta: '',
+              }));
               if (personalizado) setPeriodoOpen(false);
             }}
             error={errors.subTipo}
@@ -344,19 +357,12 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
-          label={esPeriodoPersonalizado ? 'Fecha inicio' : 'Fecha de movimiento / pago'}
+          label="Fecha de movimiento / pago"
           type="date"
           value={form.fecha}
           onChange={(e) => {
-            const fecha = e.target.value;
-            setForm((p) => ({
-              ...p,
-              fecha,
-              fechaHasta: esPeriodoPersonalizado
-                ? syncPeriodoPersonalizadoFin(fecha, p.periodoDias, p.fechaHasta)
-                : p.fechaHasta,
-            }));
-            setErrors((err) => ({ ...err, fecha: '', fechaHasta: '' }));
+            setForm((p) => ({ ...p, fecha: e.target.value }));
+            setErrors((err) => ({ ...err, fecha: '' }));
           }}
           error={errors.fecha}
           required
@@ -371,6 +377,25 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
 
       {esVehicular && esPeriodoPersonalizado ? (
         <div className="space-y-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900/80">
+            Periodo cubierto por este ingreso
+          </p>
+          <Input
+            label="Fecha inicio"
+            type="date"
+            value={form.fechaDesde}
+            onChange={(e) => {
+              const fechaDesde = e.target.value;
+              setForm((p) => ({
+                ...p,
+                fechaDesde,
+                fechaHasta: syncPeriodoPersonalizadoFin(fechaDesde, p.periodoDias, p.fechaHasta),
+              }));
+              setErrors((err) => ({ ...err, fechaDesde: '', fechaHasta: '' }));
+            }}
+            error={errors.fechaDesde}
+            required
+          />
           <Input
             label="Cantidad de días"
             type="number"
@@ -383,7 +408,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
               setForm((p) => ({
                 ...p,
                 periodoDias,
-                fechaHasta: syncPeriodoPersonalizadoFin(p.fecha, periodoDias, p.fechaHasta),
+                fechaHasta: syncPeriodoPersonalizadoFin(p.fechaDesde, periodoDias, p.fechaHasta),
               }));
               setErrors((err) => ({ ...err, periodoDias: '', fechaHasta: '' }));
             }}
@@ -399,19 +424,30 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
               const fechaHasta = e.target.value;
               setForm((p) => ({ ...p, fechaHasta }));
               const dias = Number(form.periodoDias);
-              if (!fechaHasta.trim() || !form.periodoDias.trim() || !Number.isFinite(dias) || dias < 1) {
+              if (
+                !fechaHasta.trim() ||
+                !form.fechaDesde.trim() ||
+                !form.periodoDias.trim() ||
+                !Number.isFinite(dias) ||
+                dias < 1
+              ) {
                 setErrors((err) => ({ ...err, fechaHasta: '' }));
                 return;
               }
-              const rango = validatePeriodoPersonalizadoRango(form.fecha, fechaHasta, dias);
+              const rango = validatePeriodoPersonalizadoRango(form.fechaDesde, fechaHasta, dias);
               setErrors((err) => ({ ...err, fechaHasta: rango.ok ? '' : rango.message }));
             }}
             error={errors.fechaHasta}
             required
           />
-          {form.fecha && form.fechaHasta && form.periodoDias.trim() ? (
+          {form.fechaDesde && form.fechaHasta && form.periodoDias.trim() ? (
             <p className="text-[11px] text-emerald-800/90 tabular-nums">
-              Rango: {formatDate(form.fecha)} → {formatDate(form.fechaHasta)}
+              Cubre: {formatDate(form.fechaDesde)} → {formatDate(form.fechaHasta)}
+              {form.fecha !== form.fechaDesde ? (
+                <span className="block mt-0.5 text-emerald-700/80">
+                  Pago registrado: {formatDate(form.fecha)}
+                </span>
+              ) : null}
             </p>
           ) : null}
         </div>

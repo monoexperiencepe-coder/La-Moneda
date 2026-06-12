@@ -306,22 +306,25 @@ type IngresoEditDraft = {
 function ingresoToEditDraft(i: Ingreso): IngresoEditDraft {
   const dias = getIngresoPeriodoDias(i);
   const esPers = isIngresoPeriodoPersonalizado(i);
+  const fechaPago = i.fecha.slice(0, 10);
   const fechaInicio =
     esPers && i.fechaDesde?.trim()
       ? i.fechaDesde.slice(0, 10)
-      : i.fecha.slice(0, 10);
+      : esPers
+        ? fechaPago
+        : '';
   let fechaHasta = i.fechaHasta?.slice(0, 10) ?? '';
   if (esPers && !fechaHasta && dias != null && fechaInicio) {
     fechaHasta = calcPeriodoPersonalizadoFin(fechaInicio, dias) ?? '';
   }
   return {
-    fecha: fechaInicio,
+    fecha: fechaPago,
     vehicleIdStr: i.vehicleId != null ? String(i.vehicleId) : '',
     tipo: i.tipo,
     subTipo: i.subTipo ?? '',
     periodoDias: dias != null ? String(dias) : '',
-    fechaDesde: i.fechaDesde?.slice(0, 10) ?? '',
-    fechaHasta: i.fechaHasta?.slice(0, 10) ?? '',
+    fechaDesde: fechaInicio,
+    fechaHasta,
     montoStr: String(i.monto),
     comentarios: i.comentarios ?? '',
   };
@@ -351,20 +354,24 @@ function buildIngresoDetallePatch(
   const esPersonalizado =
     subTipo?.toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
   if (esPersonalizado) {
+    const fd = draft.fechaDesde.trim().slice(0, 10);
+    if (!ISO_DATE_RE.test(fd)) {
+      return { patch: {}, error: 'Indica fecha inicio del periodo (AAAA-MM-DD).' };
+    }
     const dias = Number(draft.periodoDias);
     if (!draft.periodoDias.trim() || !Number.isFinite(dias) || dias < 1 || dias > 366) {
       return { patch: {}, error: 'Indica cantidad de días (1–366) para periodo personalizado.' };
     }
     const diasInt = Math.round(dias);
     const fh = draft.fechaHasta.trim().slice(0, 10);
-    const rango = validatePeriodoPersonalizadoRango(f, fh, diasInt);
+    const rango = validatePeriodoPersonalizadoRango(fd, fh, diasInt);
     if (!rango.ok) return { patch: {}, error: rango.message };
     const extra = stampPeriodoDiasExtra(baseline.excelExtra ?? null, diasInt);
     const prevDias = getIngresoPeriodoDias(baseline);
     if (diasInt !== prevDias || !isIngresoPeriodoPersonalizado(baseline)) {
       patch.excelExtra = extra;
     }
-    if ((baseline.fechaDesde ?? null) !== f) patch.fechaDesde = f;
+    if ((baseline.fechaDesde ?? null) !== fd) patch.fechaDesde = fd;
     if ((baseline.fechaHasta ?? null) !== fh) patch.fechaHasta = fh;
   } else {
     const fd = draft.fechaDesde.trim() || null;
@@ -1818,13 +1825,14 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     const personalizado =
                       v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
                     const periodoDias = personalizado ? d.periodoDias : '';
+                    const fechaDesde = personalizado ? d.fechaDesde || d.fecha : d.fechaDesde;
                     return {
                       ...d,
                       subTipo: v,
                       periodoDias,
-                      fechaDesde: personalizado ? '' : d.fechaDesde,
+                      fechaDesde: personalizado ? fechaDesde : d.fechaDesde,
                       fechaHasta: personalizado
-                        ? syncPeriodoPersonalizadoFin(d.fecha, periodoDias, d.fechaHasta)
+                        ? syncPeriodoPersonalizadoFin(fechaDesde, periodoDias, d.fechaHasta)
                         : d.fechaHasta,
                     };
                   })
@@ -1832,22 +1840,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               />
             ) : null}
             <Input
-              label={ingresoEditEsPersonalizado ? 'Fecha inicio' : 'Fecha movimiento / pago'}
+              label="Fecha movimiento / pago"
               type="date"
               value={ingresoEditDraft.fecha}
               onChange={(e) => {
                 const fecha = e.target.value;
-                setIngresoEditDraft((d) =>
-                  d
-                    ? {
-                        ...d,
-                        fecha,
-                        fechaHasta: ingresoEditEsPersonalizado
-                          ? syncPeriodoPersonalizadoFin(fecha, d.periodoDias, d.fechaHasta)
-                          : d.fechaHasta,
-                      }
-                    : d,
-                );
+                setIngresoEditDraft((d) => (d ? { ...d, fecha } : d));
               }}
             />
             <Select
@@ -1857,7 +1855,31 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               onChange={(v) => setIngresoEditDraft((d) => (d ? { ...d, vehicleIdStr: v } : d))}
             />
             {ingresoEditEsPersonalizado ? (
-              <>
+              <div className="space-y-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900/80">
+                  Periodo cubierto por este ingreso
+                </p>
+                <Input
+                  label="Fecha inicio"
+                  type="date"
+                  value={ingresoEditDraft.fechaDesde}
+                  onChange={(e) => {
+                    const fechaDesde = e.target.value;
+                    setIngresoEditDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            fechaDesde,
+                            fechaHasta: syncPeriodoPersonalizadoFin(
+                              fechaDesde,
+                              d.periodoDias,
+                              d.fechaHasta,
+                            ),
+                          }
+                        : d,
+                    );
+                  }}
+                />
                 <Input
                   label="Cantidad de días"
                   type="number"
@@ -1871,7 +1893,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                         ? {
                             ...d,
                             periodoDias,
-                            fechaHasta: syncPeriodoPersonalizadoFin(d.fecha, periodoDias, d.fechaHasta),
+                            fechaHasta: syncPeriodoPersonalizadoFin(
+                              d.fechaDesde,
+                              periodoDias,
+                              d.fechaHasta,
+                            ),
                           }
                         : d,
                     );
@@ -1885,7 +1911,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     setIngresoEditDraft((d) => (d ? { ...d, fechaHasta: e.target.value } : d))
                   }
                 />
-              </>
+              </div>
             ) : (
               <>
                 <Input
@@ -2076,17 +2102,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     const pers = isIngresoPeriodoPersonalizado(ing)
                       ? ingresoPeriodoPersonalizadoHistorial(ing)
                       : null;
-                    const fechaInicio = pers
-                      ? ing.fechaDesde?.trim() || ing.fecha
-                      : ing.fecha;
                     return (
                       <>
                         <div className="flex justify-between gap-3">
-                          <dt className="text-xs text-gray-600 shrink-0">
-                            {pers ? 'Fecha inicio' : 'Fecha de movimiento / pago'}
-                          </dt>
+                          <dt className="text-xs text-gray-600 shrink-0">Fecha de movimiento / pago</dt>
                           <dd className="text-sm text-gray-900 text-right font-medium">
-                            {formatDate(fechaInicio)}
+                            {formatDate(ing.fecha)}
                           </dd>
                         </div>
                         <div className="flex justify-between gap-3">
@@ -2097,14 +2118,9 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                         </div>
                         {pers ? (
                           <div className="flex justify-between gap-3">
-                            <dt className="text-xs text-gray-600 shrink-0">Periodo personalizado</dt>
-                            <dd className="text-sm text-gray-900 text-right">
-                              <span className="block font-medium">{pers.etiqueta}</span>
-                              {pers.rango ? (
-                                <span className="block text-xs text-gray-600 tabular-nums mt-0.5">
-                                  {pers.rango}
-                                </span>
-                              ) : null}
+                            <dt className="text-xs text-gray-600 shrink-0">{pers.etiqueta}</dt>
+                            <dd className="text-sm text-gray-900 text-right tabular-nums font-medium">
+                              {pers.rango ?? '—'}
                             </dd>
                           </div>
                         ) : (
