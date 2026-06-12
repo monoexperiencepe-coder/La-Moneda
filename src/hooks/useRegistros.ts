@@ -1072,7 +1072,11 @@ export const useRegistros = () => {
             ? { id: profile.id, name: profile.name || profile.email }
             : null;
       const created = await insertPendiente(row, profile?.empresa_id, creator);
-      if (!created) throw new Error('No se pudo guardar el pendiente en Supabase.');
+      if (!created) {
+        throw new Error(
+          'No se pudo guardar el pendiente en Supabase. Revisa la consola: si faltan columnas (titulo, metadata), ejecuta supabase/migration_pendientes_redesign_apply.sql en el SQL Editor.',
+        );
+      }
       setPendientes((prev) => mergePendienteSorted(prev, created));
       return created;
     },

@@ -764,18 +764,39 @@ export function pendienteToInsert(
   row: Omit<Pendiente, 'id' | 'createdAt'>,
 ): Record<string, unknown> {
   const prioridad = row.prioridad ?? prioridadLegacyFromV2(row.prioridadV2 ?? 'media');
+  const titulo = row.titulo?.trim() || row.descripcion.trim().slice(0, 200);
   const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     vehicle_id: row.vehicleId,
-    titulo: row.titulo?.trim() || row.descripcion.trim().slice(0, 200),
+    titulo,
     descripcion: row.descripcion,
     estado: row.estado,
     fecha: row.fecha,
     prioridad,
     metadata: pendienteMetadataFromRow({ ...row, prioridad }),
   };
-  if (row.createdBy) payload.created_by = row.createdBy;
+  // Autoría y resolución van en metadata; columnas dedicadas son opcionales (ver migration_pendientes_resolucion.sql).
   return payload;
+}
+
+/** Insert mínimo si faltan columnas titulo/metadata (solo tabla base). */
+export function pendienteToInsertLegacy(
+  empresaId: string,
+  row: Omit<Pendiente, 'id' | 'createdAt'>,
+): Record<string, unknown> {
+  const prioridad = row.prioridad ?? prioridadLegacyFromV2(row.prioridadV2 ?? 'media');
+  const titulo = row.titulo?.trim();
+  const desc = row.descripcion.trim();
+  const descripcion =
+    titulo && desc && desc !== titulo ? `${titulo}\n${desc}` : titulo || desc || 'Pendiente';
+  return {
+    empresa_id: empresaId,
+    vehicle_id: row.vehicleId,
+    descripcion,
+    estado: row.estado,
+    fecha: row.fecha,
+    prioridad,
+  };
 }
 
 export function pendientePatchToSnake(patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>): Record<string, unknown> {
@@ -796,18 +817,9 @@ export function pendientePatchToSnake(patch: Partial<Omit<Pendiente, 'id' | 'cre
   if (patch.relacionadoId !== undefined) metaPatch.relacionado_id = patch.relacionadoId;
   if (patch.createdBy !== undefined) metaPatch.created_by = patch.createdBy;
   if (patch.createdByName !== undefined) metaPatch.created_by_name = patch.createdByName;
-  if (patch.resolvedAt !== undefined) {
-    out.resolved_at = patch.resolvedAt;
-    metaPatch.resolved_at = patch.resolvedAt;
-  }
-  if (patch.resolvedBy !== undefined) {
-    out.resolved_by = patch.resolvedBy;
-    metaPatch.resolved_by = patch.resolvedBy;
-  }
-  if (patch.deletedAt !== undefined) {
-    out.deleted_at = patch.deletedAt;
-    metaPatch.deleted_at = patch.deletedAt;
-  }
+  if (patch.resolvedAt !== undefined) metaPatch.resolved_at = patch.resolvedAt;
+  if (patch.resolvedBy !== undefined) metaPatch.resolved_by = patch.resolvedBy;
+  if (patch.deletedAt !== undefined) metaPatch.deleted_at = patch.deletedAt;
   if (Object.keys(metaPatch).length > 0) out.metadata = metaPatch;
   if (patch.prioridadV2 !== undefined && patch.prioridad === undefined) {
     out.prioridad = prioridadLegacyFromV2(patch.prioridadV2);

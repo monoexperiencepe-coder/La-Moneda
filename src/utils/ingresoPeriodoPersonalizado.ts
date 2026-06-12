@@ -33,6 +33,51 @@ export function calcPeriodoPersonalizadoFin(fechaInicio: string, dias: number): 
   return addCalendarDays(inicio, Math.round(dias) - 1);
 }
 
+/** Días inclusivos entre dos fechas ISO; null si inválido o fin antes de inicio. */
+export function diasInclusivosEnRango(fechaInicio: string, fechaFin: string): number | null {
+  const d = fechaInicio.trim().slice(0, 10);
+  const h = fechaFin.trim().slice(0, 10);
+  if (!ISO_DATE_RE.test(d) || !ISO_DATE_RE.test(h) || h < d) return null;
+  return daysInclusiveBetween(d, h);
+}
+
+export function mensajeRangoPeriodoPersonalizado(dias: number): string {
+  const n = Math.round(dias);
+  return `El rango seleccionado debe coincidir con ${n} día${n !== 1 ? 's' : ''}.`;
+}
+
+export function validatePeriodoPersonalizadoRango(
+  fechaInicio: string,
+  fechaFin: string,
+  dias: number,
+): { ok: true } | { ok: false; message: string } {
+  const diasInt = Math.round(dias);
+  if (!Number.isFinite(diasInt) || diasInt < 1 || diasInt > 366) {
+    return { ok: false, message: 'Indica cantidad de días (1–366).' };
+  }
+  const enRango = diasInclusivosEnRango(fechaInicio, fechaFin);
+  if (enRango == null) {
+    return { ok: false, message: 'Fecha fin no válida para el rango.' };
+  }
+  if (enRango !== diasInt) {
+    return { ok: false, message: mensajeRangoPeriodoPersonalizado(diasInt) };
+  }
+  return { ok: true };
+}
+
+/** Recalcula fecha fin a partir de inicio + días (mantiene fin actual si no hay datos). */
+export function syncPeriodoPersonalizadoFin(
+  fechaInicio: string,
+  periodoDias: string,
+  fechaFinActual = '',
+): string {
+  const dias = Math.round(Number(periodoDias));
+  if (!fechaInicio.trim() || !periodoDias.trim() || !Number.isFinite(dias) || dias < 1) {
+    return fechaFinActual;
+  }
+  return calcPeriodoPersonalizadoFin(fechaInicio, dias) ?? fechaFinActual;
+}
+
 export function calcPeriodoPersonalizadoRango(
   fechaInicio: string,
   dias: number,
