@@ -1065,12 +1065,18 @@ export const useRegistros = () => {
 
   const addPendiente = useCallback(
     async (row: Omit<Pendiente, 'id' | 'createdAt'>) => {
-      const created = await insertPendiente(row, profile?.empresa_id);
+      const creator =
+        profile?.id && user?.name
+          ? { id: profile.id, name: user.name }
+          : profile?.id
+            ? { id: profile.id, name: profile.name || profile.email }
+            : null;
+      const created = await insertPendiente(row, profile?.empresa_id, creator);
       if (!created) throw new Error('No se pudo guardar el pendiente en Supabase.');
       setPendientes((prev) => mergePendienteSorted(prev, created));
       return created;
     },
-    [profile?.empresa_id],
+    [profile?.empresa_id, profile?.id, profile?.name, profile?.email, user?.name],
   );
 
   const updatePendiente = useCallback(

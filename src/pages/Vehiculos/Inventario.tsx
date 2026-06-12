@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Filter, Plus } from 'lucide-react';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import SearchField from '../../components/Common/SearchField';
+import { buildSearchHaystack, matchesSearchHaystack } from '../../utils/recordSearch';
 import VehicleCard from '../../components/Cards/VehicleCard';
 import RegistrarVehiculoForm from '../../components/vehiculos/RegistrarVehiculoForm';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
@@ -23,6 +26,13 @@ const Inventario: React.FC = () => {
     useRegistrosContext();
   const { gastosReadyForUtilidad } = useEnsureGastosFullForUtilidad();
   const [showAll, setShowAll] = useState(false);
+  const {
+    inputValue: vehicleSearch,
+    setInputValue: setVehicleSearch,
+    appliedValue: vehicleSearchApplied,
+    isDebouncing: vehicleSearchDebouncing,
+    clear: clearVehicleSearch,
+  } = useDebouncedSearch('', 300);
   const [showRegistrar, setShowRegistrar] = useState(false);
   const [assignVehicle, setAssignVehicle] = useState<Vehicle | null>(null);
   const [inversionesGenerales, setInversionesGenerales] = useState<Awaited<
@@ -55,8 +65,16 @@ const Inventario: React.FC = () => {
 
   const filteredVehicles = useMemo(() => {
     const list = showAll ? vehicles : vehicles.filter((v) => v.activo);
-    return [...list].sort((a, b) => a.id - b.id);
-  }, [vehicles, showAll]);
+    const sorted = [...list].sort((a, b) => a.id - b.id);
+    const q = vehicleSearchApplied.trim();
+    if (!q) return sorted;
+    return sorted.filter((v) =>
+      matchesSearchHaystack(
+        buildSearchHaystack(v.id, v.placa, v.marca, v.modelo, v.anio, v.color),
+        q,
+      ),
+    );
+  }, [vehicles, showAll, vehicleSearchApplied]);
 
   const reloadInversiones = useCallback(() => {
     void fetchInversionesGeneralesVehiculo(profile?.empresa_id).then(setInversionesGenerales);
@@ -95,6 +113,16 @@ const Inventario: React.FC = () => {
             {showAll ? 'Mostrando todos' : 'Solo activos'}
           </button>
         </div>
+      </div>
+
+      <div className="max-w-md">
+        <SearchField
+          value={vehicleSearch}
+          onChange={setVehicleSearch}
+          debouncing={vehicleSearchDebouncing}
+          onClear={clearVehicleSearch}
+          placeholder="Buscar placa, marca, modelo o # unidad…"
+        />
       </div>
 
       {/* Vehicle grid */}

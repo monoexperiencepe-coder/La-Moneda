@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import { mapPendienteRow, pendientePatchToSnake, pendienteToInsert } from './supabaseMappers';
 import type { Pendiente } from '../data/types';
+import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -28,12 +29,19 @@ export async function fetchPendientes(tenantEmpresaId?: string | null): Promise<
 export async function insertPendiente(
   row: Omit<Pendiente, 'id' | 'createdAt'>,
   tenantEmpresaId?: string | null,
+  creator?: { id: string; name: string } | null,
 ): Promise<Pendiente | null> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return null;
+  const uid = creator?.id ?? (await getAuthenticatedUserIdForAudit());
+  const rowWithCreator: Omit<Pendiente, 'id' | 'createdAt'> = {
+    ...row,
+    createdBy: uid ?? row.createdBy ?? null,
+    createdByName: creator?.name ?? row.createdByName ?? null,
+  };
   const { data, error } = await supabase
     .from('pendientes')
-    .insert(pendienteToInsert(empresaId, row))
+    .insert(pendienteToInsert(empresaId, rowWithCreator))
     .select('*')
     .single();
   if (error) {
@@ -60,6 +68,19 @@ export async function patchPendiente(
       .maybeSingle();
     return cur ? mapPendienteRow(cur as Record<string, unknown>) : null;
   }
+  if (snake.metadata && typeof snake.metadata === 'object') {
+    const { data: cur } = await supabase
+      .from('pendientes')
+      .select('metadata')
+      .eq('id', id)
+      .eq('empresa_id', empresaId)
+      .maybeSingle();
+    const prevMeta =
+      cur?.metadata && typeof cur.metadata === 'object' && !Array.isArray(cur.metadata)
+        ? (cur.metadata as Record<string, unknown>)
+        : {};
+    snake.metadata = { ...prevMeta, ...(snake.metadata as Record<string, unknown>) };
+  }
   const { data, error } = await supabase
     .from('pendientes')
     .update(snake)
@@ -77,9 +98,32 @@ export async function patchPendiente(
 export async function removePendiente(id: number, tenantEmpresaId?: string | null): Promise<boolean> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return false;
-  const { error } = await supabase.from('pendientes').delete().eq('id', id).eq('empresa_id', empresaId);
+  const uid = await getAuthenticatedUserIdForAudit();
+  const deletedAt = new Date().toISOString();
+
+  const { data: cur, error: fetchErr } = await supabase
+    .from('pendientes')
+    .select('metadata')
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
+  if (fetchErr) {
+    console.error('[pendientes soft delete fetch]', fetchErr.message);
+    return false;
+  }
+  const prevMeta =
+    cur?.metadata && typeof cur.metadata === 'object' && !Array.isArray(cur.metadata)
+      ? (cur.metadata as Record<string, unknown>)
+      : {};
+  const metadata = { ...prevMeta, deleted_at: deletedAt, deleted_by: uid ?? null };
+
+  const { error } = await supabase
+    .from('pendientes')
+    .update({ deleted_at: deletedAt, metadata })
+    .eq('id', id)
+    .eq('empresa_id', empresaId);
   if (error) {
-    console.error('[pendientes delete]', error.message);
+    console.error('[pendientes soft delete]', error.message);
     return false;
   }
   return true;

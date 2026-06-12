@@ -34,6 +34,8 @@ import { isValidConductorId, logConductorIdDiagnostics } from '../../utils/condu
 import { RegistroCountLabel, SkeletonTableRows, UpdatingChrome } from '../../components/Loading';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { buildSearchHaystack, matchesSearchHaystack, normalizeSearchText } from '../../utils/recordSearch';
+import SearchField from '../../components/Common/SearchField';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 
 type ConductorEditState = {
   driverId: string;
@@ -147,7 +149,13 @@ const Conductores: React.FC = () => {
   } = useRegistrosContext();
   const listBootstrapping = registrosBootstrapLoading && !registrosBootstrapComplete;
 
-  const [q, setQ] = useState('');
+  const {
+    inputValue: q,
+    setInputValue: setQ,
+    appliedValue: qApplied,
+    isDebouncing: qDebouncing,
+    clear: clearQ,
+  } = useDebouncedSearch('', 300);
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>('TODOS');
   const [sortKey, setSortKey] = useState<SortKey>('vehicleId');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -168,8 +176,8 @@ const Conductores: React.FC = () => {
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
 
   const filterInputs = useMemo(
-    () => ({ q, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro }),
-    [q, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro],
+    () => ({ q: qApplied, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro }),
+    [qApplied, estadoFilter, fechaDesde, fechaHasta, mesFiltro, anioFiltro],
   );
   const { deferred: deferredFilters, isRecalculating } = useDeferredRecalc(filterInputs);
 
@@ -181,8 +189,8 @@ const Conductores: React.FC = () => {
     setFechaHasta('');
     setMesFiltro('');
     setAnioFiltro('');
-    setQ('');
-  }, []);
+    clearQ();
+  }, [clearQ]);
 
   const vehicleMap = useMemo(() => {
     const m = new Map<number, (typeof vehicles)[0]>();
@@ -534,12 +542,15 @@ const Conductores: React.FC = () => {
               </button>
             )}
             {/* search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={13} />
-              <input type="search" placeholder="Nombre, documento, comentarios o carro" value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="pl-8 pr-3 py-2 w-44 sm:w-60 rounded-xl border border-gray-200 bg-gray-50 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all" />
-            </div>
+            <SearchField
+              value={q}
+              onChange={setQ}
+              debouncing={qDebouncing}
+              onClear={clearQ}
+              type="search"
+              placeholder="Nombre, documento, comentarios o carro"
+              inputClassName="pl-8 pr-9 py-2 w-44 sm:w-60 rounded-xl border border-gray-200 bg-gray-50 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+            />
           </div>
         </div>
 

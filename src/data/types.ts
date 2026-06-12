@@ -511,6 +511,13 @@ export interface Pendiente {
   relacionadoTipo: PendienteRelacionadoTipo;
   relacionadoId: string | number | null;
   createdAt: string;
+  /** Usuario creador (columna o metadata). */
+  createdBy?: string | null;
+  createdByName?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+  /** Soft delete; null = visible. */
+  deletedAt?: string | null;
 }
 
 export type VehicleDowntimeMotivo =

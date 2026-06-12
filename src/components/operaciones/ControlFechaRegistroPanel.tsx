@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Card from '../Common/Card';
 import Input from '../Common/Input';
+import SearchField from '../Common/SearchField';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import Select from '../Common/Select';
 import Button from '../Common/Button';
 import { esControlFechaSinAlertaVencimiento, TIPOS_CONTROL_FECHA_OPTIONS } from '../../data/controlFechaCatalog';
@@ -89,7 +91,13 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   const [tipo, setTipo] = useState(TIPOS_CONTROL_FECHA_OPTIONS[0].value);
   const [fechaVencimiento, setFechaVencimiento] = useState(todayStr());
   const [comentarios, setComentarios] = useState('');
-  const [busquedaPagina, setBusquedaPagina] = useState('');
+  const {
+    inputValue: busquedaPagina,
+    setInputValue: setBusquedaPagina,
+    appliedValue: busquedaAplicada,
+    isDebouncing: busquedaDebouncing,
+    clear: clearBusquedaPagina,
+  } = useDebouncedSearch('', 300);
 
   const [histVehicleId, setHistVehicleId] = useState('');
   const [histTipo, setHistTipo] = useState('');
@@ -273,7 +281,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   );
 
   const filasPaginaFiltradas = useMemo(() => {
-    const q = busquedaPagina.trim();
+    const q = busquedaAplicada.trim();
     const base = historialSourceRows;
     const rows = !q
       ? base
@@ -291,7 +299,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
     return sortHistorialRows(rows);
   }, [
     historialSourceRows,
-    busquedaPagina,
+    busquedaAplicada,
     getVehicleLabel,
     docSearchMode,
     docSearchContextFor,
@@ -488,10 +496,15 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
               <div className="w-full sm:w-64 shrink-0">
-                <Input
-                  label={historialEnModoCompleto ? 'Buscar en historial completo' : 'Filtrar solo en esta página'}
+                <label className="label mb-0.5 text-xs font-semibold text-slate-600">
+                  {historialEnModoCompleto ? 'Buscar en historial completo' : 'Filtrar solo en esta página'}
+                </label>
+                <SearchField
                   value={busquedaPagina}
-                  onChange={(e) => setBusquedaPagina(e.target.value)}
+                  onChange={setBusquedaPagina}
+                  debouncing={busquedaDebouncing}
+                  loading={historialListLoading}
+                  onClear={clearBusquedaPagina}
                   placeholder={
                     docSearchMode
                       ? 'Buscar por documento, placa, vehículo, estado…'

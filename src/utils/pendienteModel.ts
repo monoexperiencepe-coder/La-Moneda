@@ -109,7 +109,88 @@ export function filterPendientesEquipoHoy(list: Pendiente[]): Pendiente[] {
 }
 
 export function countPendientesEquipoActivos(list: Pendiente[]): number {
-  return list.filter((p) => isPendienteActivo(p) && p.mostrarEnHoy !== false).length;
+  return list.filter((p) => isPendienteDashboardVisible(p)).length;
+}
+
+/** Pendiente activo y no eliminado (libreta del equipo). */
+export function isPendienteDashboardVisible(p: Pendiente): boolean {
+  if (p.deletedAt) return false;
+  return isPendienteActivo(p);
+}
+
+export function filterPendientesDashboardActivos(list: Pendiente[]): Pendiente[] {
+  return sortPendientesDashboard(list.filter(isPendienteDashboardVisible));
+}
+
+/** Orden: antiguos no resueltos → hoy → recientes. */
+export function sortPendientesDashboard(list: Pendiente[], today = todayStr()): Pendiente[] {
+  const bucket = (p: Pendiente): number => {
+    const f = (p.fechaObjetivo ?? p.fecha).slice(0, 10);
+    if (f < today) return 0;
+    if (f === today) return 1;
+    return 2;
+  };
+  return [...list].sort((a, b) => {
+    const ba = bucket(a);
+    const bb = bucket(b);
+    if (ba !== bb) return ba - bb;
+    const fa = a.fechaObjetivo ?? a.fecha;
+    const fb = b.fechaObjetivo ?? b.fecha;
+    if (ba === 0) return fa.localeCompare(fb) || a.id - b.id;
+    if (ba === 1) return a.id - b.id;
+    return fb.localeCompare(fa) || b.id - a.id;
+  });
+}
+
+export function countPendientesAntiguos(list: Pendiente[], today = todayStr()): number {
+  return list.filter((p) => {
+    if (!isPendienteDashboardVisible(p)) return false;
+    const f = (p.fechaObjetivo ?? p.fecha).slice(0, 10);
+    return f < today;
+  }).length;
+}
+
+export function pendienteAutorLabel(p: Pendiente): string {
+  const name = p.createdByName?.trim();
+  if (name) return name.split(' ')[0] ?? name;
+  if (p.responsable?.trim()) return p.responsable.trim().split(' ')[0] ?? p.responsable.trim();
+  return 'Equipo';
+}
+
+export function pendienteFechaCortaLabel(fecha: string, today = todayStr()): string {
+  const f = fecha.slice(0, 10);
+  if (f === today) return 'Hoy';
+  const yesterday = new Date(`${today}T12:00:00`);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = yesterday.toISOString().slice(0, 10);
+  if (f === yStr) return 'Ayer';
+  const d = new Date(`${f}T12:00:00`);
+  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }).replace('.', '');
+}
+
+export function canEditPendiente(
+  p: Pendiente,
+  userId: string | null | undefined,
+  isAdmin: boolean,
+): boolean {
+  if (isAdmin) return true;
+  const uid = (userId ?? '').trim();
+  const creator = (p.createdBy ?? '').trim();
+  return uid !== '' && creator !== '' && uid === creator;
+}
+
+export function canDeletePendiente(
+  p: Pendiente,
+  userId: string | null | undefined,
+  isAdmin: boolean,
+): boolean {
+  return canEditPendiente(p, userId, isAdmin);
+}
+
+export function filterPendientesResueltos(list: Pendiente[]): Pendiente[] {
+  return [...list]
+    .filter((p) => !p.deletedAt && isPendienteCompletado(p))
+    .sort((a, b) => (b.resolvedAt ?? b.createdAt).localeCompare(a.resolvedAt ?? a.createdAt));
 }
 
 function daysBetween(from: string, to: string): number {
@@ -145,7 +226,8 @@ export function isPendienteBacklogTab(p: Pendiente): boolean {
 }
 
 export function filterPendientesTab(list: Pendiente[], tab: PendienteTabId, today = todayStr()): Pendiente[] {
-  const sorted = sortPendientesEquipo(list);
+  const visible = list.filter((p) => !p.deletedAt);
+  const sorted = sortPendientesEquipo(visible);
   switch (tab) {
     case 'hoy':
       return sorted.filter((p) => isPendienteHoyTab(p, today));

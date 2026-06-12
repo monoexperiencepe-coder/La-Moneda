@@ -22,6 +22,7 @@ import type { CopilotFocusSpec } from '../../modules/copilot/copilotFocusTarget'
 import type { NarrativeStep } from '../../modules/copilot/navigationNarrative';
 import { resolveIncomeMonthFocusTarget } from '../../modules/copilot/navigationNarrative/resolveIncomeMonthTarget';
 import CopilotEvidenceSlot from '../../components/Copilot/CopilotEvidenceSlot';
+import { findUltimoIngreso, formatUltimoIngresoLabel } from '../../utils/ingresoUltimoRegistro';
 import {
   ingresoPromedioMensualDivisor,
   ingresoPromedioMensualLabel,
@@ -33,7 +34,7 @@ const Ingresos: React.FC = () => {
   const { formatGlobalAmount } = useAmountDisplay();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { ingresos, vehicles, deleteIngreso, addIngreso, toast } = useRegistrosContext();
+  const { ingresos, vehicles, deleteIngreso, addIngreso, upsertIngreso, toast } = useRegistrosContext();
 
   /** Ranking por vehículo: mostrar toda la flota o solo unidades con al menos 1 ingreso en el período. */
   const [rankingVehicleScope, setRankingVehicleScope] = useState<'all' | 'with_moves'>('all');
@@ -453,6 +454,17 @@ const Ingresos: React.FC = () => {
     return `Total ${chartMonthLabel} ${chartYear}`;
   }, [chartYear, chartMonth, chartMonthLabel]);
 
+  const ultimoIngresoCard = useMemo(() => {
+    let pool = ingresos;
+    if (chartYear !== 'ALL') {
+      pool = pool.filter((i) => i.fecha.slice(0, 4) === String(chartYear));
+    }
+    if (chartMonth !== 'ALL' && chartYear !== 'ALL') {
+      pool = pool.filter((i) => i.fecha.slice(5, 7) === chartMonth);
+    }
+    return formatUltimoIngresoLabel(findUltimoIngreso(pool));
+  }, [ingresos, chartYear, chartMonth]);
+
   const chartTrendTitle = useMemo(() => {
     if (chartYear === 'ALL') return chartMonth === 'ALL' ? 'Ingresos por año' : `${chartMonthLabel} por año`;
     return chartMonth === 'ALL' ? 'Tendencia mensual' : 'Tendencia por día';
@@ -594,6 +606,11 @@ const Ingresos: React.FC = () => {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{totalCardTitle}</p>
                 <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-emerald-900 sm:text-2xl">
                   {formatGlobalAmount(animatedTotal)}
+                </p>
+                <p className="mt-1.5 text-[11px] text-slate-500 leading-snug">
+                  {ultimoIngresoCard.kind === 'empty'
+                    ? 'Sin ingresos registrados'
+                    : `Último ingreso: ${ultimoIngresoCard.label}`}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100/95 bg-gradient-to-br from-white to-slate-50/80 p-3.5 shadow-sm ring-1 ring-slate-900/[0.03] sm:p-4">
@@ -958,21 +975,13 @@ const Ingresos: React.FC = () => {
             />
           </div>
         </div>
-        {ingresosHistorialFiltrados.length === 0 ? (
-          <RegistrosTable
-            mode="ingresos"
-            ingresos={[]}
-            vehicles={vehicles}
-            onDeleteIngreso={deleteIngreso}
-          />
-        ) : (
-          <RegistrosTable
-            mode="ingresos"
-            ingresos={ingresosHistorialFiltrados}
-            vehicles={vehicles}
-            onDeleteIngreso={deleteIngreso}
-          />
-        )}
+        <RegistrosTable
+          mode="ingresos"
+          ingresos={ingresosHistorialFiltrados}
+          vehicles={vehicles}
+          onDeleteIngreso={deleteIngreso}
+          onIngresoDetalleSaved={upsertIngreso}
+        />
       </div>
 
       <Modal

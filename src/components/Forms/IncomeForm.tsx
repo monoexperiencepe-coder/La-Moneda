@@ -20,7 +20,13 @@ import {
   type AlcanceIngreso,
   type CategoriaIngresoExtraordinario,
 } from '../../data/ingresoAlcanceCatalog';
-import { todayStr } from '../../utils/formatting';
+import { todayStr, formatDate } from '../../utils/formatting';
+import {
+  INGRESO_SUBTIPO_PERSONALIZADO,
+  calcPeriodoPersonalizadoRango,
+  stampPeriodoDiasExtra,
+  subtiposIngresoConPersonalizado,
+} from '../../utils/ingresoPeriodoPersonalizado';
 
 interface IncomeFormProps {
   vehicles: Vehicle[];
@@ -40,6 +46,7 @@ interface FormState {
   categoriaExtraordinaria: CategoriaIngresoExtraordinario;
   fechaDesde: string;
   fechaHasta: string;
+  periodoDias: string;
   metodoPago: string;
   metodoPagoDetalle: string;
   moneda: Moneda;
@@ -60,6 +67,7 @@ function emptyForm(): FormState {
     categoriaExtraordinaria: CATEGORIAS_INGRESO_EXTRAORDINARIO[0].value,
     fechaDesde: '',
     fechaHasta: '',
+    periodoDias: '',
     metodoPago: 'Yape',
     metodoPagoDetalle: y?.detalle ?? '',
     moneda: 'PEN',
@@ -102,11 +110,27 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
     }
   }, [prefillVehicleId, esVehicular]);
 
-  const subtipos = useMemo(() => getSubtiposIngreso(form.tipo), [form.tipo]);
+  const subtipos = useMemo(() => {
+    const base = getSubtiposIngreso(form.tipo);
+    return form.tipo === 'ALQUILER' ? subtiposIngresoConPersonalizado(base) : base;
+  }, [form.tipo]);
+  const esPeriodoPersonalizado =
+    esVehicular && form.subTipo.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
+
+  const periodoPersonalizadoRango = useMemo(() => {
+    if (!esPeriodoPersonalizado) return null;
+    const dias = Number(form.periodoDias);
+    if (!form.fecha || !form.periodoDias.trim() || !Number.isFinite(dias) || dias < 1) return null;
+    return calcPeriodoPersonalizadoRango(form.fecha, Math.round(dias));
+  }, [esPeriodoPersonalizado, form.fecha, form.periodoDias]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.fecha) newErrors.fecha = 'La fecha de movimiento / pago es requerida';
+    if (!form.fecha) {
+      newErrors.fecha = esPeriodoPersonalizado
+        ? 'La fecha inicio es requerida'
+        : 'La fecha de movimiento / pago es requerida';
+    }
     if (esVehicular) {
       if (!form.vehicleId) newErrors.vehicleId = 'Selecciona un vehículo';
       if (!form.tipo) newErrors.tipo = 'Selecciona un tipo de ingreso';
@@ -117,6 +141,12 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
       }
     }
     if (!form.monto || Number(form.monto) <= 0) newErrors.monto = 'Ingresa un monto válido';
+    if (esPeriodoPersonalizado) {
+      const dias = Number(form.periodoDias);
+      if (!form.periodoDias.trim() || !Number.isFinite(dias) || dias < 1 || dias > 366) {
+        newErrors.periodoDias = 'Indica cantidad de días (1–366)';
+      }
+    }
     if (form.moneda === 'USD') {
       const tc = Number(form.tipoCambio);
       if (!form.tipoCambio.trim() || Number.isNaN(tc) || tc <= 0) {
@@ -150,6 +180,14 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
 
       const tipo = esExtraordinario ? TIPO_INGRESO_EXTRAORDINARIO : form.tipo;
       const subTipo = esExtraordinario ? form.categoriaExtraordinaria : form.subTipo || null;
+      const periodoDias =
+        esPeriodoPersonalizado && form.periodoDias.trim()
+          ? Math.round(Number(form.periodoDias))
+          : null;
+      const rangoPersonalizado =
+        esPeriodoPersonalizado && periodoDias
+          ? calcPeriodoPersonalizadoRango(form.fecha, periodoDias)
+          : null;
 
       await Promise.resolve(
         onSubmit({
@@ -159,8 +197,17 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
           esExtraordinario,
           tipo,
           subTipo,
-          fechaDesde: esVehicular ? form.fechaDesde.trim() || null : null,
-          fechaHasta: esVehicular ? form.fechaHasta.trim() || null : null,
+          fechaDesde: rangoPersonalizado
+            ? rangoPersonalizado.desde
+            : esVehicular
+              ? form.fechaDesde.trim() || null
+              : null,
+          fechaHasta: rangoPersonalizado
+            ? rangoPersonalizado.hasta
+            : esVehicular
+              ? form.fechaHasta.trim() || null
+              : null,
+          excelExtra: esPeriodoPersonalizado ? stampPeriodoDiasExtra(null, periodoDias) : null,
           metodoPago: form.metodoPago,
           metodoPagoDetalle: form.metodoPagoDetalle.trim(),
           celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
@@ -227,23 +274,6 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
-          label="Fecha de movimiento / pago"
-          type="date"
-          value={form.fecha}
-          onChange={(e) => setForm((p) => ({ ...p, fecha: e.target.value }))}
-          error={errors.fecha}
-          required
-        />
-        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
-          <p className="text-xs font-medium text-gray-600">Fecha registro (Fact)</p>
-          <p className="text-sm text-gray-800 mt-0.5">
-            Se guarda al enviar (por defecto <strong>{todayStr()}</strong>).
-          </p>
-        </div>
-      </div>
-
       {esVehicular ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -262,37 +292,6 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
               error={errors.vehicleId}
               required
             />
-            <div className="flex flex-col justify-end">
-              <button
-                type="button"
-                onClick={() => setPeriodoOpen(true)}
-                className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
-              >
-                <CalendarRange size={18} className="text-emerald-600 shrink-0" />
-                <span className="truncate">
-                  {periodoLabel ? `Período: ${periodoLabel}` : 'Período del pago (opcional)'}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <PeriodoPagoModal
-            isOpen={periodoOpen}
-            onClose={() => setPeriodoOpen(false)}
-            fechaDesde={form.fechaDesde}
-            fechaHasta={form.fechaHasta}
-            onGuardar={(desde, hasta) => {
-              setForm((p) => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
-            }}
-          />
-
-          {form.vehicleId && (
-            <div className="bg-primary-50 rounded-lg px-4 py-2.5">
-              <p className="text-xs text-primary-600 font-medium">📋 Detalle: {getVehicleDetail(form.vehicleId)}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
               label="Tipo (Fact)"
               options={TIPOS_INGRESO_FACT.map((t) => ({ value: t, label: t }))}
@@ -304,28 +303,122 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
                   ...p,
                   tipo: v,
                   subTipo: subs[0] ?? '',
+                  periodoDias: '',
                 }));
-                setErrors((p) => ({ ...p, tipo: '', subTipo: '' }));
+                setErrors((p) => ({ ...p, tipo: '', subTipo: '', periodoDias: '' }));
               }}
               error={errors.tipo}
               required
             />
-            <Select
-              label="Sub tipo"
-              options={subtipos.map((s) => ({ value: s, label: s }))}
-              value={form.subTipo}
-              placeholder={subtipos.length ? 'Seleccionar...' : '—'}
-              onChange={(v) => {
-                setForm((p) => ({ ...p, subTipo: v }));
-                setErrors((p) => ({ ...p, subTipo: '' }));
-              }}
-              error={errors.subTipo}
-              disabled={subtipos.length === 0}
-              required={subtipos.length > 0}
-            />
           </div>
+
+          <Select
+            label="Sub tipo"
+            options={subtipos.map((s) => ({ value: s, label: s }))}
+            value={form.subTipo}
+            placeholder={subtipos.length ? 'Seleccionar...' : '—'}
+            onChange={(v) => {
+              const personalizado = v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
+              setForm((p) => ({
+                ...p,
+                subTipo: v,
+                periodoDias: personalizado ? p.periodoDias : '',
+                fechaDesde: personalizado ? '' : p.fechaDesde,
+                fechaHasta: personalizado ? '' : p.fechaHasta,
+              }));
+              setErrors((p) => ({ ...p, subTipo: '', periodoDias: '' }));
+              if (personalizado) setPeriodoOpen(false);
+            }}
+            error={errors.subTipo}
+            disabled={subtipos.length === 0}
+            required={subtipos.length > 0}
+          />
+
+          {form.vehicleId && (
+            <div className="bg-primary-50 rounded-lg px-4 py-2.5">
+              <p className="text-xs text-primary-600 font-medium">📋 Detalle: {getVehicleDetail(form.vehicleId)}</p>
+            </div>
+          )}
         </>
-      ) : (
+      ) : null}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Input
+          label={esPeriodoPersonalizado ? 'Fecha inicio' : 'Fecha de movimiento / pago'}
+          type="date"
+          value={form.fecha}
+          onChange={(e) => setForm((p) => ({ ...p, fecha: e.target.value }))}
+          error={errors.fecha}
+          required
+        />
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-3 flex flex-col justify-center">
+          <p className="text-xs font-medium text-gray-600">Fecha registro (Fact)</p>
+          <p className="text-sm text-gray-800 mt-0.5">
+            Se guarda al enviar (por defecto <strong>{todayStr()}</strong>).
+          </p>
+        </div>
+      </div>
+
+      {esVehicular && esPeriodoPersonalizado ? (
+        <div className="space-y-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+          <Input
+            label="Cantidad de días"
+            type="number"
+            min="1"
+            max="366"
+            step="1"
+            value={form.periodoDias}
+            onChange={(e) => {
+              setForm((p) => ({ ...p, periodoDias: e.target.value }));
+              setErrors((p) => ({ ...p, periodoDias: '' }));
+            }}
+            error={errors.periodoDias}
+            placeholder="Ej. 9"
+            required
+          />
+          {periodoPersonalizadoRango ? (
+            <div className="rounded-lg border border-emerald-100 bg-white/90 px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                Periodo calculado
+              </p>
+              <p className="mt-1 text-sm font-bold text-emerald-950 tabular-nums">
+                {formatDate(periodoPersonalizadoRango.desde)} → {formatDate(periodoPersonalizadoRango.hasta)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-emerald-800/90">
+                ({Math.round(Number(form.periodoDias))} día{Math.round(Number(form.periodoDias)) !== 1 ? 's' : ''})
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">Indica la cantidad de días para ver el periodo calculado.</p>
+          )}
+        </div>
+      ) : null}
+
+      {esVehicular && !esPeriodoPersonalizado ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setPeriodoOpen(true)}
+            className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+          >
+            <CalendarRange size={18} className="text-emerald-600 shrink-0" />
+            <span className="truncate">
+              {periodoLabel ? `Período: ${periodoLabel}` : 'Período del pago (opcional)'}
+            </span>
+          </button>
+          <PeriodoPagoModal
+            isOpen={periodoOpen}
+            onClose={() => setPeriodoOpen(false)}
+            fechaDesde={form.fechaDesde}
+            fechaHasta={form.fechaHasta}
+            onGuardar={(desde, hasta) => {
+              setForm((p) => ({ ...p, fechaDesde: desde, fechaHasta: hasta }));
+            }}
+          />
+        </>
+      ) : null}
+
+      {!esVehicular ? (
         <Select
           label="Categoría extraordinaria"
           options={CATEGORIAS_INGRESO_EXTRAORDINARIO.map((c) => ({ value: c.value, label: c.label }))}
@@ -337,7 +430,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
           error={errors.categoriaExtraordinaria}
           required
         />
-      )}
+      ) : null}
 
       <PagoRapidoIngreso
         metodoPago={form.metodoPago}

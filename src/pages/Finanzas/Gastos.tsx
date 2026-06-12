@@ -378,7 +378,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
   }, [registrosRemoteTick, bumpHistorial]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setHistorialSearchDebounced(historialSearchInput.trim()), 400);
+    const t = window.setTimeout(() => setHistorialSearchDebounced(historialSearchInput.trim()), 300);
     return () => window.clearTimeout(t);
   }, [historialSearchInput]);
 
@@ -2398,10 +2398,10 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
           </div>
         </div>
         {historialFullError && historialScope === 'full' && !historialFullLoading ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-8 text-center">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-4 mb-3">
             <p className="text-sm font-semibold text-amber-950">No se pudo cargar el historial completo</p>
             <p className="mt-1 text-xs text-amber-900">{historialFullError}</p>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button type="button" variant="primary" className="!text-xs !py-2 !px-3" onClick={retryHistorialFull}>
                 Reintentar
               </Button>
@@ -2410,28 +2410,8 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               </Button>
             </div>
           </div>
-        ) : historialIsLoading ? (
-          <div className="relative min-h-[240px] rounded-xl border border-slate-200 bg-white">
-            <LoadingOverlay
-              active
-              message={historialScope === 'full' ? 'Cargando historial completo…' : 'Cargando historial…'}
-              submessage={
-                historialScope === 'full'
-                  ? 'Descargando todos los registros de esta categoría'
-                  : 'Consultando registros en Supabase'
-              }
-            />
-          </div>
-        ) : historialScope === 'full' && !historialFullLoaded && !historialFullLoading && !historialFullError ? (
-          <div className="relative min-h-[240px] rounded-xl border border-slate-200 bg-white">
-            <LoadingOverlay
-              active
-              message="Preparando historial completo…"
-              submessage="Sincronizando años históricos y registros de la categoría"
-            />
-          </div>
-        ) : (
-          <div id="copilot-gastos-table">
+        ) : null}
+        <div id="copilot-gastos-table" className="relative">
           <RegistrosTable
             mode="gastos"
             gastos={historialRowsDisplayed}
@@ -2445,6 +2425,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
             fullHistoryView={historialScope === 'full' && historialFullLoaded}
             serverHistorialSearch={{
               query: historialSearchInput,
+              appliedQuery: historialSearchDebounced,
               onQueryChange: (q) => {
                 setHistorialSearchInput(q);
                 if (historialScope === 'recent') setHistorialPage(0);
@@ -2452,6 +2433,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
               serverSide: historialServerSearch,
               scopeRecent: historialScope === 'recent',
               totalInCategory: historialSourceTotal,
+              searching: historialIsLoading,
             }}
             {...(historialScope === 'recent'
               ? {
@@ -2465,8 +2447,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
                 }
               : {})}
           />
-          </div>
-        )}
+        </div>
       </div>
         </>
       )}

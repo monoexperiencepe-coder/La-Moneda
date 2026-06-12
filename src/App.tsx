@@ -51,6 +51,7 @@ const HistorialSistema = lazy(() => import('./pages/Admin/HistorialSistema'));
 const UsuariosPanel = lazy(() => import('./pages/Admin/UsuariosPanel'));
 const CopilotDebug = lazy(() => import('./pages/Admin/CopilotDebug'));
 const SubtipoConciliacion = lazy(() => import('./pages/Admin/SubtipoConciliacion'));
+const DevolucionGarantiaPreview = lazy(() => import('./pages/Admin/DevolucionGarantiaPreview'));
 
 /** Spinner mientras se verifica la sesión de Supabase. */
 const AuthLoadingScreen: React.FC = () => (
@@ -196,6 +197,14 @@ const AppContent: React.FC = () => {
                         <Route
                           path="/admin/conciliacion-subtipos"
                           element={<SubtipoConciliacion />}
+                        />
+                        <Route
+                          path="/admin/devolucion-garantia-preview"
+                          element={
+                            <AdminOnly>
+                              <DevolucionGarantiaPreview />
+                            </AdminOnly>
+                          }
                         />
                         <Route
                           path="/copilot-debug"

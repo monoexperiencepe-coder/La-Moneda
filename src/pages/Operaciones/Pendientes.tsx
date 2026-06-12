@@ -6,16 +6,21 @@ import PendienteFormPanel from '../../components/pendientes/PendienteFormPanel';
 import PendientesVirtualList from '../../components/pendientes/PendientesVirtualList';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import type { Pendiente } from '../../data/types';
+import { useAuth } from '../../context/AuthContext';
 import {
+  canEditPendiente,
   countPendientesEquipoActivos,
   emptyPendienteForm,
+  estadoFromV2,
   filterPendientesTab,
   formValuesToPendientePayload,
   pendienteToFormValues,
-  estadoFromV2,
   type PendienteFormValues,
   type PendienteTabId,
 } from '../../utils/pendienteModel';
+import SearchField from '../../components/Common/SearchField';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import { buildSearchHaystack, matchesSearchHaystack } from '../../utils/recordSearch';
 
 const TABS: { id: PendienteTabId; label: string }[] = [
   { id: 'hoy', label: 'Hoy' },
@@ -26,6 +31,7 @@ const TABS: { id: PendienteTabId; label: string }[] = [
 
 const PendientesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isAdmin, profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as PendienteTabId) || 'hoy';
   const [tab, setTab] = useState<PendienteTabId>(
@@ -46,6 +52,13 @@ const PendientesPage: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const {
+    inputValue: busqueda,
+    setInputValue: setBusqueda,
+    appliedValue: busquedaApplied,
+    isDebouncing: busquedaDebouncing,
+    clear: clearBusqueda,
+  } = useDebouncedSearch('', 300);
 
   useEffect(() => {
     const v = searchParams.get('vehicle');
@@ -68,7 +81,28 @@ const PendientesPage: React.FC = () => {
     setSearchParams(sp, { replace: true });
   };
 
-  const listaTab = useMemo(() => filterPendientesTab(pendientes, tab), [pendientes, tab]);
+  const listaTab = useMemo(() => {
+    const base = filterPendientesTab(pendientes, tab);
+    const q = busquedaApplied.trim();
+    if (!q) return base;
+    return base.filter((p) => {
+      const vLabel =
+        p.vehicleId != null ? getVehicleLabel(Number(p.vehicleId)) : '';
+      return matchesSearchHaystack(
+        buildSearchHaystack(
+          p.id,
+          p.titulo,
+          p.descripcion,
+          p.estado,
+          p.prioridad,
+          p.relacionadoTipo,
+          p.relacionadoId,
+          vLabel,
+        ),
+        q,
+      );
+    });
+  }, [pendientes, tab, busquedaApplied, getVehicleLabel]);
   const activasHoy = useMemo(() => countPendientesEquipoActivos(pendientes), [pendientes]);
 
   const startCreate = () => {
@@ -105,11 +139,18 @@ const PendientesPage: React.FC = () => {
   const completar = async (p: Pendiente) => {
     setBusyId(p.id);
     try {
-      await updatePendiente(p.id, { estado: estadoFromV2('completado') });
+      const now = new Date().toISOString();
+      await updatePendiente(p.id, {
+        estado: estadoFromV2('completado'),
+        resolvedAt: now,
+        resolvedBy: profile?.id ?? user?.id ?? null,
+      });
     } finally {
       setBusyId(null);
     }
   };
+
+  const canEdit = (p: Pendiente) => canEditPendiente(p, profile?.id ?? user?.id, isAdmin);
 
   return (
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] max-w-3xl mx-auto pb-8 animate-fade-in">
@@ -159,6 +200,17 @@ const PendientesPage: React.FC = () => {
             </button>
           ))}
         </div>
+
+        <div className="mt-3">
+          <SearchField
+            value={busqueda}
+            onChange={setBusqueda}
+            debouncing={busquedaDebouncing}
+            onClear={clearBusqueda}
+            placeholder="Buscar título, descripción, vehículo…"
+            inputClassName="input-field text-sm"
+          />
+        </div>
       </header>
 
       {formOpen ? (
@@ -203,7 +255,7 @@ const PendientesPage: React.FC = () => {
             getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
             onNavigate={navigate}
             onCompletar={tab === 'completadas' ? undefined : completar}
-            onEditar={tab === 'completadas' ? undefined : startEdit}
+            onEditar={tab === 'completadas' || !canEdit(p) ? undefined : startEdit}
             readonly={tab === 'completadas'}
             busy={busyId === p.id}
           />

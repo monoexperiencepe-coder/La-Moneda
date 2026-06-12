@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { FilterState, Ingreso, Gasto } from '../data/types';
 import { buildSearchHaystack, matchesSearchHaystack } from '../utils/recordSearch';
+import { useDebouncedSearch } from './useDebouncedSearch';
 
 const defaultFilters: FilterState = {
   mes: null,
@@ -61,11 +62,12 @@ export const useFilters = () => {
 export const useSearch = <T extends Record<string, unknown>>(
   items: T[],
   searchKeys: (keyof T)[],
+  delayMs = 300,
 ) => {
-  const [query, setQuery] = useState('');
+  const { inputValue, setInputValue, appliedValue, isDebouncing, clear } = useDebouncedSearch('', delayMs);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return items;
+    if (!appliedValue.trim()) return items;
     return items.filter((item) => {
       const parts = searchKeys.map((key) => {
         const val = item[key];
@@ -73,9 +75,9 @@ export const useSearch = <T extends Record<string, unknown>>(
         if (typeof val === 'number' || typeof val === 'boolean') return String(val);
         return '';
       });
-      return matchesSearchHaystack(buildSearchHaystack(...parts), query);
+      return matchesSearchHaystack(buildSearchHaystack(...parts), appliedValue);
     });
-  }, [items, query, searchKeys]);
+  }, [items, appliedValue, searchKeys]);
 
-  return { query, setQuery, filtered };
+  return { query: inputValue, setQuery: setInputValue, appliedQuery: appliedValue, isDebouncing, clear, filtered };
 };

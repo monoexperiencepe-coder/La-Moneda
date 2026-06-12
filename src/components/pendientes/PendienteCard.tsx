@@ -94,7 +94,7 @@ const PendienteCard: React.FC<PendienteCardProps> = ({
             className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 sm:flex-none sm:min-w-[7rem]"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Completar
+            Resolver
           </button>
         ) : null}
         {!readonly && onEditar ? (

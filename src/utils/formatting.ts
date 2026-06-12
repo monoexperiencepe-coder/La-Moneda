@@ -85,6 +85,14 @@ export const todayStr = (): string => {
   return new Date().toLocaleDateString('en-CA', { timeZone: PERU_TIME_ZONE });
 };
 
+/** Mañana en calendario Perú (YYYY-MM-DD). */
+export const tomorrowStr = (): string => {
+  const t = todayStr();
+  const d = new Date(`${t}T12:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
 /** Año mínimo para registros operativos (kilometraje, movimientos). */
 export const REGISTRO_FECHA_MIN_YEAR = 2020;
 

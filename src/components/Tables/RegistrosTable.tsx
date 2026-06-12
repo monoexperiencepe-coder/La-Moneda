@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import {
-  Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Eye, ArrowRightLeft,
   Pencil, Loader2,
 } from 'lucide-react';
 import Badge from '../Common/Badge';
@@ -17,6 +17,21 @@ import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import { mapSubtipoToFactTipo } from '../../constants/subtipos/mapSubtipoToFactTipo';
 import { subtipoBelongsToCategoria } from '../../constants/subtipos/subtipoBelongsToCategoria';
 import { updateGastoDetalleManual, type GastoDetalleManualPatch } from '../../services/gastosService';
+import {
+  updateIngresoDetalleManual,
+  type IngresoDetalleManualPatch,
+} from '../../services/ingresosService';
+import { getSubtiposIngreso, TIPOS_INGRESO_FACT } from '../../data/factCatalog';
+import {
+  getIngresoPeriodoDias,
+  INGRESO_SUBTIPO_PERSONALIZADO,
+  isIngresoPeriodoPersonalizado,
+  ingresoPeriodoPersonalizadoHistorial,
+  LM_PERIODO_DIAS_KEY,
+  calcPeriodoPersonalizadoRango,
+  stampPeriodoDiasExtra,
+  subtiposIngresoConPersonalizado,
+} from '../../utils/ingresoPeriodoPersonalizado';
 import { undoUpdateGastoDetalle } from '../../undo/factories';
 import { isGastoRecentlyReclassified } from '../../utils/gastoHistorialOrder';
 import { useRegistrosContext } from '../../context/RegistrosContext';
@@ -66,6 +81,8 @@ import { useBootstrapPending } from '../../hooks/useBootstrapPending';
 import { useGastosDataPending } from '../../hooks/useGastosDataPending';
 import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { RegistroCountLabel, SkeletonTableRows, TableBodySurface, UpdatingChrome } from '../Loading';
+import SearchField from '../Common/SearchField';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 
 type TableMode = 'ingresos' | 'gastos';
 
@@ -82,6 +99,8 @@ interface RegistrosTableProps {
   onMoveCategoriaGasto?: (gasto: Gasto) => void;
   /** Tras guardar edición manual en el modal de detalle (solo gastos); p. ej. `upsertGasto`. */
   onGastoDetalleSaved?: (gasto: Gasto) => void;
+  /** Tras guardar edición manual en el modal de detalle (solo ingresos); p. ej. `upsertIngreso`. */
+  onIngresoDetalleSaved?: (ingreso: Ingreso) => void;
   /** Paginación server-side (historial gastos desde Supabase). */
   serverPagination?: {
     total: number;
@@ -93,10 +112,14 @@ interface RegistrosTableProps {
   /** Búsqueda controlada por el padre (historial gastos server-side). */
   serverHistorialSearch?: {
     query: string;
+    /** Valor debounced del padre para filtrar sin bloquear el input. */
+    appliedQuery?: string;
     onQueryChange: (q: string) => void;
     serverSide: boolean;
     scopeRecent?: boolean;
     totalInCategory?: number;
+    /** Fetch server en curso (spinner discreto). */
+    searching?: boolean;
   };
   /** Pin local tras mover — badge «Reclasificado». */
   recentlyReclassifiedAt?: ReadonlyMap<string, number>;
@@ -248,12 +271,112 @@ function buildGastoDetallePatch(
   return { patch, error: null };
 }
 
-/** Texto para línea «Cubre» en listados de ingresos; null si no hay rango. */
+/** Texto para línea «Cubre» / periodo en listados de ingresos. */
 function ingresoCubreLabel(i: Ingreso): string | null {
+  const pers = ingresoPeriodoPersonalizadoHistorial(i);
+  if (pers) {
+    return pers.rango ? `${pers.etiqueta} · ${pers.rango}` : pers.etiqueta;
+  }
   const d = i.fechaDesde?.trim();
   const h = i.fechaHasta?.trim();
   if (!d && !h) return null;
   return `${d ? formatDate(d) : '—'} → ${h ? formatDate(h) : '—'}`;
+}
+
+function ingresoCubreLineas(i: Ingreso): { line1: string; line2: string | null } | null {
+  const pers = ingresoPeriodoPersonalizadoHistorial(i);
+  if (!pers) return null;
+  return { line1: pers.etiqueta, line2: pers.rango };
+}
+
+type IngresoEditDraft = {
+  fecha: string;
+  vehicleIdStr: string;
+  tipo: string;
+  subTipo: string;
+  periodoDias: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  montoStr: string;
+  comentarios: string;
+};
+
+function ingresoToEditDraft(i: Ingreso): IngresoEditDraft {
+  const dias = getIngresoPeriodoDias(i);
+  const esPers = isIngresoPeriodoPersonalizado(i);
+  const fechaInicio =
+    esPers && i.fechaDesde?.trim()
+      ? i.fechaDesde.slice(0, 10)
+      : i.fecha.slice(0, 10);
+  return {
+    fecha: fechaInicio,
+    vehicleIdStr: i.vehicleId != null ? String(i.vehicleId) : '',
+    tipo: i.tipo,
+    subTipo: i.subTipo ?? '',
+    periodoDias: dias != null ? String(dias) : '',
+    fechaDesde: i.fechaDesde?.slice(0, 10) ?? '',
+    fechaHasta: i.fechaHasta?.slice(0, 10) ?? '',
+    montoStr: String(i.monto),
+    comentarios: i.comentarios ?? '',
+  };
+}
+
+function buildIngresoDetallePatch(
+  baseline: Ingreso,
+  draft: IngresoEditDraft,
+): { patch: IngresoDetalleManualPatch; error: string | null } {
+  const patch: IngresoDetalleManualPatch = {};
+  const f = draft.fecha.trim().slice(0, 10);
+  if (!ISO_DATE_RE.test(f)) return { patch: {}, error: 'Fecha no válida (AAAA-MM-DD).' };
+  if (f !== baseline.fecha.slice(0, 10)) patch.fecha = f;
+
+  const vidStr = draft.vehicleIdStr.trim();
+  let vid: number | null = null;
+  if (vidStr !== '') {
+    const n = Number(vidStr);
+    if (!Number.isFinite(n) || n <= 0) return { patch: {}, error: 'Vehículo inválido.' };
+    vid = Math.round(n);
+  }
+  if ((baseline.vehicleId ?? null) !== vid) patch.vehicleId = vid;
+
+  const subTipo = draft.subTipo.trim() || null;
+  if ((baseline.subTipo ?? null) !== subTipo) patch.subTipo = subTipo;
+
+  const esPersonalizado =
+    subTipo?.toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase();
+  if (esPersonalizado) {
+    const dias = Number(draft.periodoDias);
+    if (!draft.periodoDias.trim() || !Number.isFinite(dias) || dias < 1 || dias > 366) {
+      return { patch: {}, error: 'Indica cantidad de días (1–366) para periodo personalizado.' };
+    }
+    const diasInt = Math.round(dias);
+    const rango = calcPeriodoPersonalizadoRango(f, diasInt);
+    if (!rango) return { patch: {}, error: 'No se pudo calcular el periodo (revisa fecha y días).' };
+    const extra = stampPeriodoDiasExtra(baseline.excelExtra ?? null, diasInt);
+    const prevDias = getIngresoPeriodoDias(baseline);
+    if (diasInt !== prevDias || !isIngresoPeriodoPersonalizado(baseline)) {
+      patch.excelExtra = extra;
+    }
+    if ((baseline.fechaDesde ?? null) !== rango.desde) patch.fechaDesde = rango.desde;
+    if ((baseline.fechaHasta ?? null) !== rango.hasta) patch.fechaHasta = rango.hasta;
+  } else {
+    const fd = draft.fechaDesde.trim() || null;
+    const fh = draft.fechaHasta.trim() || null;
+    if ((baseline.fechaDesde ?? null) !== fd) patch.fechaDesde = fd;
+    if ((baseline.fechaHasta ?? null) !== fh) patch.fechaHasta = fh;
+    if (isIngresoPeriodoPersonalizado(baseline) || baseline.excelExtra?.[LM_PERIODO_DIAS_KEY] != null) {
+      patch.excelExtra = stampPeriodoDiasExtra(baseline.excelExtra ?? null, null);
+    }
+  }
+
+  const m = Number(String(draft.montoStr).replace(',', '.'));
+  if (!Number.isFinite(m) || m <= 0) return { patch: {}, error: 'Monto inválido.' };
+  if (m !== baseline.monto) patch.monto = m;
+
+  const com = sanitizeComentariosPatch(draft.comentarios);
+  if (com !== sanitizeComentariosPatch(baseline.comentarios ?? '')) patch.comentarios = com;
+
+  return { patch, error: null };
 }
 
 const RegistrosTable: React.FC<RegistrosTableProps> = ({
@@ -266,6 +389,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   showClasificacionFinanciera = false,
   onMoveCategoriaGasto,
   onGastoDetalleSaved,
+  onIngresoDetalleSaved,
   serverPagination,
   serverHistorialSearch,
   recentlyReclassifiedAt,
@@ -284,12 +408,26 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const showDeleteGasto = mode !== 'gastos' || !isFinancialOperador;
   const tenantEmpresaId = profile?.empresa_id;
   const colCount = 5;
-  const [localQuery, setLocalQuery] = useState('');
-  /** Con búsqueda server del padre: siempre sincronizar input → padre para activar debounce y fetch. */
-  const query = serverHistorialSearch ? serverHistorialSearch.query : localQuery;
-  const setQuery = serverHistorialSearch
-    ? serverHistorialSearch.onQueryChange
-    : setLocalQuery;
+  const localDebouncedSearch = useDebouncedSearch('', 300);
+  const serverControlledSearch = Boolean(serverHistorialSearch);
+  const searchInputValue = serverControlledSearch
+    ? serverHistorialSearch!.query
+    : localDebouncedSearch.inputValue;
+  const setSearchInputValue = serverControlledSearch
+    ? serverHistorialSearch!.onQueryChange
+    : localDebouncedSearch.setInputValue;
+  const filterQuery = serverControlledSearch
+    ? serverHistorialSearch!.serverSide
+      ? ''
+      : (serverHistorialSearch!.appliedQuery ?? serverHistorialSearch!.query)
+    : localDebouncedSearch.appliedValue;
+  const searchDebouncing = serverControlledSearch
+    ? searchInputValue.trim() !== (serverHistorialSearch!.appliedQuery ?? serverHistorialSearch!.query).trim()
+    : localDebouncedSearch.isDebouncing;
+  const searchLoading = Boolean(serverHistorialSearch?.searching || serverPagination?.loading);
+  const clearSearch = serverControlledSearch
+    ? () => serverHistorialSearch!.onQueryChange('')
+    : localDebouncedSearch.clear;
   const [sortKey, setSortKey] = useState<string>('fecha');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
@@ -320,6 +458,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const [gastoEditDraft, setGastoEditDraft] = useState<GastoEditDraft | null>(null);
   const [gastoSaveBusy, setGastoSaveBusy] = useState(false);
   const gastoEditInitialSerialized = useRef('');
+  const [ingresoDetailEditing, setIngresoDetailEditing] = useState(false);
+  const [ingresoEditBaseline, setIngresoEditBaseline] = useState<Ingreso | null>(null);
+  const [ingresoEditDraft, setIngresoEditDraft] = useState<IngresoEditDraft | null>(null);
+  const [ingresoSaveBusy, setIngresoSaveBusy] = useState(false);
+  const ingresoEditInitialSerialized = useRef('');
 
   const ingresoDetalleUi = useMemo(() => {
     if (mode !== 'ingresos' || !viewItem) return null;
@@ -349,6 +492,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     setGastoEditDraft(null);
     setGastoSaveBusy(false);
     gastoEditInitialSerialized.current = '';
+    setIngresoDetailEditing(false);
+    setIngresoEditBaseline(null);
+    setIngresoEditDraft(null);
+    setIngresoSaveBusy(false);
+    ingresoEditInitialSerialized.current = '';
   }, []);
 
   const beginOpenDetail = useCallback((item: Ingreso | Gasto) => {
@@ -362,6 +510,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
         setGastoEditDraft(null);
         setGastoSaveBusy(false);
         gastoEditInitialSerialized.current = '';
+        setIngresoDetailEditing(false);
+        setIngresoEditBaseline(null);
+        setIngresoEditDraft(null);
+        setIngresoSaveBusy(false);
+        ingresoEditInitialSerialized.current = '';
         setViewItem(item);
         setDetailLoading(false);
       });
@@ -410,11 +563,31 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   };
 
   const gastoDetalleEditable = mode === 'gastos' && Boolean(onGastoDetalleSaved);
+  const ingresoDetalleEditable =
+    mode === 'ingresos' && Boolean(onIngresoDetalleSaved) && canMutateIngresos(role);
 
   const gastoEditDirty =
     Boolean(gastoEditDraft) &&
     gastoEditInitialSerialized.current !== '' &&
     JSON.stringify(gastoEditDraft) !== gastoEditInitialSerialized.current;
+
+  const ingresoEditDirty =
+    Boolean(ingresoEditDraft) &&
+    ingresoEditInitialSerialized.current !== '' &&
+    JSON.stringify(ingresoEditDraft) !== ingresoEditInitialSerialized.current;
+
+  const ingresoEditSubtipos = useMemo(() => {
+    if (!ingresoEditDraft) return [];
+    const base = getSubtiposIngreso(ingresoEditDraft.tipo);
+    return ingresoEditDraft.tipo === 'ALQUILER'
+      ? subtiposIngresoConPersonalizado(base).map((s) => ({ value: s, label: s }))
+      : base.map((s) => ({ value: s, label: s }));
+  }, [ingresoEditDraft]);
+
+  const ingresoEditEsPersonalizado = Boolean(
+    ingresoEditDraft &&
+      ingresoEditDraft.subTipo.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase(),
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV || mode !== 'gastos') return;
@@ -503,6 +676,58 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     gastoEditInitialSerialized.current = '';
   }, []);
 
+  const startIngresoEdit = useCallback(() => {
+    if (mode !== 'ingresos' || !viewItem || !onIngresoDetalleSaved) return;
+    const i = viewItem as Ingreso;
+    const d = ingresoToEditDraft(i);
+    setIngresoEditBaseline(i);
+    setIngresoEditDraft(d);
+    ingresoEditInitialSerialized.current = JSON.stringify(d);
+    setIngresoDetailEditing(true);
+  }, [mode, viewItem, onIngresoDetalleSaved]);
+
+  const cancelIngresoEdit = useCallback(() => {
+    setIngresoDetailEditing(false);
+    setIngresoEditBaseline(null);
+    setIngresoEditDraft(null);
+    ingresoEditInitialSerialized.current = '';
+  }, []);
+
+  const handleSaveIngresoDetail = useCallback(async () => {
+    if (!ingresoEditBaseline || !ingresoEditDraft || !onIngresoDetalleSaved || ingresoSaveBusy) return;
+    const { patch, error: buildErr } = buildIngresoDetallePatch(ingresoEditBaseline, ingresoEditDraft);
+    if (buildErr) {
+      toast.error('Revisa el formulario', buildErr);
+      return;
+    }
+    if (Object.keys(patch).length === 0) {
+      toast.info('Sin cambios', 'No hay campos modificados para guardar.');
+      return;
+    }
+    setIngresoSaveBusy(true);
+    try {
+      const res = await updateIngresoDetalleManual(ingresoEditBaseline.id, patch, tenantEmpresaId);
+      if (!res.ok) {
+        const msg = res.supabase?.hint?.trim() || res.supabase?.details?.trim() || res.error || 'Error desconocido.';
+        toast.error('No se pudo guardar', msg.length > 200 ? `${msg.slice(0, 197)}…` : msg);
+        return;
+      }
+      onIngresoDetalleSaved(res.ingreso);
+      toast.success('Ingreso actualizado', 'Cambios guardados con auditoría.');
+      closeDetail();
+    } finally {
+      setIngresoSaveBusy(false);
+    }
+  }, [
+    ingresoEditBaseline,
+    ingresoEditDraft,
+    ingresoSaveBusy,
+    onIngresoDetalleSaved,
+    tenantEmpresaId,
+    toast,
+    closeDetail,
+  ]);
+
   const handleSaveGastoDetail = useCallback(async () => {
     if (!gastoEditBaseline || !gastoEditDraft || !onGastoDetalleSaved || gastoSaveBusy) return;
     const { patch, error: buildErr } = buildGastoDetallePatch(gastoEditBaseline, gastoEditDraft);
@@ -546,11 +771,15 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const serverMode = Boolean(serverPagination);
 
   const filterInputs = useMemo(
-    () => ({ query }),
-    [query],
+    () => ({ query: filterQuery }),
+    [filterQuery],
   );
   const { deferred: deferredFilters, isRecalculating } = useDeferredRecalc(filterInputs);
   const deferredQuery = deferredFilters.query;
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterQuery]);
 
   const rawDataLenRef = useRef(rawData.length);
   useEffect(() => {
@@ -559,16 +788,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   }, [rawData.length]);
 
   const vehicleSearchIds = useMemo(
-    () => extractVehicleSearchIds(query, vehicles),
-    [query, vehicles],
+    () => extractVehicleSearchIds(searchInputValue, vehicles),
+    [searchInputValue, vehicles],
   );
 
   const vehicleSearchStrict = useMemo(
-    () => isStrictVehicleOnlyQuery(query, vehicleSearchIds),
-    [query, vehicleSearchIds],
+    () => isStrictVehicleOnlyQuery(searchInputValue, vehicleSearchIds),
+    [searchInputValue, vehicleSearchIds],
   );
 
-  const generalSearchIntent = useMemo(() => queryHasGeneralSearchIntent(query), [query]);
+  const generalSearchIntent = useMemo(() => queryHasGeneralSearchIntent(searchInputValue), [searchInputValue]);
 
   const deferredVehicleSearchIds = useMemo(
     () => extractVehicleSearchIds(deferredQuery, vehicles),
@@ -688,16 +917,16 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   const emptyMessage = (
     <div className="text-center py-10 text-gray-400 text-sm space-y-3">
       <p>
-        {query
-          ? `Sin resultados para «${query.trim()}»`
+        {searchInputValue
+          ? `Sin resultados para «${searchInputValue.trim()}»`
           : 'Sin registros disponibles'}
       </p>
-      {query.trim() ? (
+      {searchInputValue.trim() ? (
         <button
           type="button"
           className="text-sm font-semibold text-primary-600 hover:text-primary-800 hover:underline"
           onClick={() => {
-            setQuery('');
+            clearSearch();
             setPage(1);
           }}
         >
@@ -739,17 +968,17 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
         <div className="relative flex-1 w-full sm:max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={query}
-            onChange={e => { setQuery(e.target.value); setPage(1); }}
+          <SearchField
+            value={searchInputValue}
+            onChange={setSearchInputValue}
+            debouncing={searchDebouncing}
+            loading={searchLoading}
+            onClear={clearSearch}
             placeholder={
               mode === 'ingresos'
                 ? 'Buscar ingresos (texto, general, #3, carro 5, placa…)'
                 : 'Buscar gastos (texto, general, #3, carro 5, placa…)'
             }
-            className="input-field pl-9 text-sm"
             aria-describedby={vehicleSearchIds.length > 0 ? 'registros-busqueda-vehiculo' : undefined}
           />
           {vehicleSearchIds.length > 0 ? (
@@ -769,7 +998,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               <span className="font-semibold">Filtrando:</span> registros sin vehículo (generales / flota general)
             </p>
           ) : null}
-          {serverHistorialSearch?.scopeRecent && query.trim().length >= 2 && !serverHistorialSearch.serverSide ? (
+          {serverHistorialSearch?.scopeRecent && searchInputValue.trim().length >= 2 && !serverHistorialSearch.serverSide ? (
             <p className="mt-1.5 pl-1 text-[11px] leading-snug text-amber-800">
               No aparece en la carga rápida. Usa «Historial completo» para buscar en toda la categoría.
             </p>
@@ -778,7 +1007,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             <p className="mt-1.5 pl-1 text-[11px] leading-snug text-slate-500">
               {serverHistorialSearch.totalInCategory} registro
               {serverHistorialSearch.totalInCategory === 1 ? '' : 's'} en esta categoría
-              {query.trim() ? ' · búsqueda en servidor' : ''}
+              {searchInputValue.trim() ? ' · búsqueda en servidor' : ''}
             </p>
           ) : null}
         </div>
@@ -826,6 +1055,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           {paginated.map((item) => {
             const cubreIngresoMobile =
               mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+            const ingresoPeriodoLineasMobile =
+              mode === 'ingresos' ? ingresoCubreLineas(item as Ingreso) : null;
             const ingresoCommentMobile =
               mode === 'ingresos' ? ingresoComentarioParaLista((item as Ingreso).comentarios) : null;
             const ingresoSubtipoMobile =
@@ -870,7 +1101,18 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-gray-900">{formatDate(item.fecha)}</p>
-                  {mode === 'ingresos' && cubreIngresoMobile && !ingresoEsExtraordinarioMobile ? (
+                  {mode === 'ingresos' && ingresoPeriodoLineasMobile && !ingresoEsExtraordinarioMobile ? (
+                    <div className="mt-0.5 space-y-0.5">
+                      <p className="text-[10px] text-emerald-800 font-semibold leading-snug">
+                        {ingresoPeriodoLineasMobile.line1}
+                      </p>
+                      {ingresoPeriodoLineasMobile.line2 ? (
+                        <p className="text-[10px] text-emerald-700 font-medium leading-snug">
+                          {ingresoPeriodoLineasMobile.line2}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : mode === 'ingresos' && cubreIngresoMobile && !ingresoEsExtraordinarioMobile ? (
                     <p className="text-[10px] text-emerald-700 font-medium mt-0.5 leading-snug">
                       Cubre: {cubreIngresoMobile}
                     </p>
@@ -1111,7 +1353,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
             ) : canShowEmpty && paginated.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="text-center py-12 text-gray-400 text-sm">
-                  {query
+                  {searchInputValue
                     ? 'No se encontraron resultados para los filtros aplicados'
                     : 'Sin registros disponibles'}
                 </td>
@@ -1120,6 +1362,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               paginated.map((item) => {
                 const cubreIngresoRow =
                   mode === 'ingresos' ? ingresoCubreLabel(item as Ingreso) : null;
+                const ingresoPeriodoLineasRow =
+                  mode === 'ingresos' ? ingresoCubreLineas(item as Ingreso) : null;
                 const ingresoEsExtraordinarioRow =
                   mode === 'ingresos' ? isIngresoExtraordinario(item as Ingreso) : false;
                 const ingresoCategoriaRow =
@@ -1148,7 +1392,18 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                     {mode === 'ingresos' ? (
                       <div className="space-y-0.5">
                         <p className="font-semibold text-gray-900">{formatDate((item as Ingreso).fecha)}</p>
-                        {cubreIngresoRow && !ingresoEsExtraordinarioRow ? (
+                        {ingresoPeriodoLineasRow && !ingresoEsExtraordinarioRow ? (
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] text-emerald-800 font-semibold leading-snug">
+                              {ingresoPeriodoLineasRow.line1}
+                            </p>
+                            {ingresoPeriodoLineasRow.line2 ? (
+                              <p className="text-[10px] text-emerald-700 font-medium leading-snug">
+                                {ingresoPeriodoLineasRow.line2}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : cubreIngresoRow && !ingresoEsExtraordinarioRow ? (
                           <p className="text-[10px] text-emerald-800 font-medium leading-snug">
                             Cubre: {cubreIngresoRow}
                           </p>
@@ -1434,10 +1689,12 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           viewItem
             ? mode === 'gastos' && gastoDetailEditing
               ? 'Editar registro'
-              : 'Detalles del registro'
+              : mode === 'ingresos' && ingresoDetailEditing
+                ? 'Editar ingreso'
+                : 'Detalles del registro'
             : 'Abriendo registro'
         }
-        size={mode === 'gastos' && gastoDetailEditing ? 'lg' : 'sm'}
+        size={(mode === 'gastos' && gastoDetailEditing) || (mode === 'ingresos' && ingresoDetailEditing) ? 'lg' : 'sm'}
         footer={
           viewItem && mode === 'gastos' && gastoDetalleEditable ? (
             gastoDetailEditing ? (
@@ -1461,6 +1718,28 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 <Button onClick={startGastoEdit}>Editar</Button>
               </>
             )
+          ) : viewItem && mode === 'ingresos' && ingresoDetalleEditable ? (
+            ingresoDetailEditing ? (
+              <>
+                <Button variant="ghost" onClick={cancelIngresoEdit} disabled={ingresoSaveBusy}>
+                  Cancelar edición
+                </Button>
+                <Button
+                  onClick={() => void handleSaveIngresoDetail()}
+                  loading={ingresoSaveBusy}
+                  disabled={!ingresoEditDirty || ingresoSaveBusy}
+                >
+                  Guardar cambios
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={closeDetail}>
+                  Cerrar
+                </Button>
+                <Button onClick={startIngresoEdit}>Editar</Button>
+              </>
+            )
           ) : (
             <Button onClick={closeDetail}>Cerrar</Button>
           )
@@ -1470,6 +1749,121 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
           <div className="flex flex-col items-center justify-center py-14 gap-3 text-gray-600" role="status" aria-live="polite">
             <Loader2 className="h-10 w-10 animate-spin text-primary-500" aria-hidden />
             <p className="text-sm font-medium">Cargando…</p>
+          </div>
+        ) : viewItem && mode === 'ingresos' && ingresoDetailEditing && ingresoEditDraft ? (
+          <div className="space-y-3 pr-0.5">
+            {ingresoEditSubtipos.length > 0 ? (
+              <Select
+                label="Sub tipo / periodo"
+                options={ingresoEditSubtipos}
+                value={ingresoEditDraft.subTipo}
+                onChange={(v) =>
+                  setIngresoEditDraft((d) =>
+                    d
+                      ? {
+                          ...d,
+                          subTipo: v,
+                          periodoDias:
+                            v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase()
+                              ? d.periodoDias
+                              : '',
+                          fechaDesde:
+                            v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase()
+                              ? ''
+                              : d.fechaDesde,
+                          fechaHasta:
+                            v.trim().toLowerCase() === INGRESO_SUBTIPO_PERSONALIZADO.toLowerCase()
+                              ? ''
+                              : d.fechaHasta,
+                        }
+                      : d,
+                  )
+                }
+              />
+            ) : null}
+            <Input
+              label={ingresoEditEsPersonalizado ? 'Fecha inicio' : 'Fecha movimiento / pago'}
+              type="date"
+              value={ingresoEditDraft.fecha}
+              onChange={(e) => setIngresoEditDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
+            />
+            <Select
+              label="Vehículo"
+              options={vehicleSelectOptions.filter((o) => o.value !== '')}
+              value={ingresoEditDraft.vehicleIdStr}
+              onChange={(v) => setIngresoEditDraft((d) => (d ? { ...d, vehicleIdStr: v } : d))}
+            />
+            {ingresoEditEsPersonalizado ? (
+              <>
+                <Input
+                  label="Cantidad de días"
+                  type="number"
+                  min="1"
+                  max="366"
+                  value={ingresoEditDraft.periodoDias}
+                  onChange={(e) =>
+                    setIngresoEditDraft((d) => (d ? { ...d, periodoDias: e.target.value } : d))
+                  }
+                />
+                {(() => {
+                  const dias = Number(ingresoEditDraft.periodoDias);
+                  const rango =
+                    ingresoEditDraft.fecha && Number.isFinite(dias) && dias >= 1
+                      ? calcPeriodoPersonalizadoRango(ingresoEditDraft.fecha, Math.round(dias))
+                      : null;
+                  return rango ? (
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-2.5">
+                      <p className="text-[11px] font-semibold text-emerald-800">Periodo calculado</p>
+                      <p className="mt-1 text-sm font-bold text-emerald-950 tabular-nums">
+                        {formatDate(rango.desde)} → {formatDate(rango.hasta)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-emerald-800">
+                        ({Math.round(dias)} día{Math.round(dias) !== 1 ? 's' : ''})
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            ) : (
+              <>
+                <Input
+                  label="Periodo desde (opcional)"
+                  type="date"
+                  value={ingresoEditDraft.fechaDesde}
+                  onChange={(e) =>
+                    setIngresoEditDraft((d) => (d ? { ...d, fechaDesde: e.target.value } : d))
+                  }
+                />
+                <Input
+                  label="Periodo hasta (opcional)"
+                  type="date"
+                  value={ingresoEditDraft.fechaHasta}
+                  onChange={(e) =>
+                    setIngresoEditDraft((d) => (d ? { ...d, fechaHasta: e.target.value } : d))
+                  }
+                />
+              </>
+            )}
+            <Input
+              label="Monto"
+              inputMode="decimal"
+              value={ingresoEditDraft.montoStr}
+              onChange={(e) => setIngresoEditDraft((d) => (d ? { ...d, montoStr: e.target.value } : d))}
+            />
+            <div className="w-full">
+              <label htmlFor="ingreso-edit-comentarios" className="label">
+                Comentarios
+              </label>
+              <textarea
+                id="ingreso-edit-comentarios"
+                rows={3}
+                value={ingresoEditDraft.comentarios}
+                onChange={(e) =>
+                  setIngresoEditDraft((d) => (d ? { ...d, comentarios: e.target.value } : d))
+                }
+                className="input-field w-full text-sm resize-y min-h-[4rem]"
+              />
+            </div>
           </div>
         ) : viewItem && mode === 'gastos' && gastoDetailEditing && gastoEditDraft ? (
           <div className="space-y-3 pr-0.5">

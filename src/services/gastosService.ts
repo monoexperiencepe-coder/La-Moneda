@@ -73,6 +73,8 @@ export interface GastoAuditMeta {
   reason?: string | null;
   /** Flujo «mover categoría» / deshacer: una sola fila consolidada en historial. */
   sourceAction?: GastoAuditSourceAction;
+  /** Si true, no inserta fila en financial_audit_logs (el caller audita por su cuenta). */
+  skipAudit?: boolean;
 }
 
 /** Opciones de ejecución (p. ej. clasificación operador sin SELECT post-move). */
@@ -911,7 +913,9 @@ export async function updateGastoCategoriaManual(
       });
     }
     const afterSynthetic = { ...before, ...updatePayload };
-    await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+    if (!meta.skipAudit) {
+      await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+    }
     return {
       ok: true,
       gasto: synthesizeGastoRowAfterPatch(before, updatePayload, idNorm),
@@ -972,7 +976,9 @@ export async function updateGastoCategoriaManual(
   if (!data) {
     if (skipSelectForOperador && before) {
       const afterSynthetic = { ...before, ...updatePayload };
-      await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+      if (!meta.skipAudit) {
+        await auditGastoMoveCategoryLogs(idNorm, before, afterSynthetic, meta);
+      }
       return {
         ok: true,
         gasto: synthesizeGastoRowAfterPatch(before, updatePayload, idNorm),
@@ -994,7 +1000,9 @@ export async function updateGastoCategoriaManual(
   }
 
   const afterRow = data as Record<string, unknown>;
-  await auditGastoMoveCategoryLogs(idNorm, before, afterRow, meta);
+  if (!meta.skipAudit) {
+    await auditGastoMoveCategoryLogs(idNorm, before, afterRow, meta);
+  }
 
   return { ok: true, gasto: mapGastoRow(afterRow) };
 }

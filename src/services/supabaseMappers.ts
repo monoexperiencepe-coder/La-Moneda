@@ -511,6 +511,40 @@ export function ingresoToInsert(
   return payload;
 }
 
+export type IngresoDetalleManualPatchRow = {
+  fecha?: string;
+  fechaRegistro?: string;
+  vehicleId?: number | null;
+  tipo?: string;
+  subTipo?: string | null;
+  fechaDesde?: string | null;
+  fechaHasta?: string | null;
+  monto?: number;
+  moneda?: 'PEN' | 'USD';
+  tipoCambio?: number | null;
+  montoPENReferencia?: number | null;
+  comentarios?: string;
+  excelExtra?: Record<string, unknown> | null;
+};
+
+export function ingresoDetalleManualPatchToRow(patch: IngresoDetalleManualPatchRow): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (patch.fecha !== undefined) row.fecha = patch.fecha;
+  if (patch.fechaRegistro !== undefined) row.fecha_registro = patch.fechaRegistro;
+  if (patch.vehicleId !== undefined) row.vehicle_id = patch.vehicleId;
+  if (patch.tipo !== undefined) row.tipo = patch.tipo;
+  if (patch.subTipo !== undefined) row.sub_tipo = patch.subTipo;
+  if (patch.fechaDesde !== undefined) row.fecha_desde = patch.fechaDesde;
+  if (patch.fechaHasta !== undefined) row.fecha_hasta = patch.fechaHasta;
+  if (patch.monto !== undefined) row.monto = patch.monto;
+  if (patch.moneda !== undefined) row.moneda = patch.moneda;
+  if (patch.tipoCambio !== undefined) row.tipo_cambio = patch.tipoCambio;
+  if (patch.montoPENReferencia !== undefined) row.monto_pen_referencia = patch.montoPENReferencia;
+  if (patch.comentarios !== undefined) row.comentarios = patch.comentarios;
+  if (patch.excelExtra !== undefined) row.excel_extra = patch.excelExtra;
+  return row;
+}
+
 export function gastoToInsert(empresaId: string, row: Omit<Gasto, 'id' | 'createdAt'>): Record<string, unknown> {
   return {
     empresa_id: empresaId,
@@ -665,6 +699,21 @@ export function mapPendienteRow(r: Record<string, unknown>): Pendiente {
   const fechaObj = meta.fecha_objetivo ?? meta.fechaObjetivo;
   const fechaObjetivo =
     fechaObj != null && String(fechaObj).trim() !== '' ? String(fechaObj).slice(0, 10) : null;
+  const createdByCol = strOrNull(r.created_by);
+  const createdByMeta = strOrNull(meta.created_by ?? meta.createdBy);
+  const createdByNameMeta = strOrNull(meta.created_by_name ?? meta.createdByName);
+  const resolvedAtCol = r.resolved_at != null ? String(r.resolved_at) : null;
+  const resolvedAtMeta = meta.resolved_at ?? meta.resolvedAt;
+  const resolvedAt =
+    resolvedAtCol ??
+    (resolvedAtMeta != null && String(resolvedAtMeta).trim() !== '' ? String(resolvedAtMeta) : null);
+  const resolvedByCol = strOrNull(r.resolved_by);
+  const resolvedByMeta = strOrNull(meta.resolved_by ?? meta.resolvedBy);
+  const deletedAtCol = r.deleted_at != null ? String(r.deleted_at) : null;
+  const deletedAtMeta = meta.deleted_at ?? meta.deletedAt;
+  const deletedAt =
+    deletedAtCol ??
+    (deletedAtMeta != null && String(deletedAtMeta).trim() !== '' ? String(deletedAtMeta) : null);
 
   return {
     id: num(r.id),
@@ -684,11 +733,16 @@ export function mapPendienteRow(r: Record<string, unknown>): Pendiente {
     relacionadoTipo,
     relacionadoId,
     createdAt: isoCreated(r.created_at),
+    createdBy: createdByCol ?? createdByMeta,
+    createdByName: createdByNameMeta,
+    resolvedAt,
+    resolvedBy: resolvedByCol ?? resolvedByMeta,
+    deletedAt,
   };
 }
 
 function pendienteMetadataFromRow(row: Omit<Pendiente, 'id' | 'createdAt'>): Record<string, unknown> {
-  return {
+  const meta: Record<string, unknown> = {
     tipo: row.tipo,
     prioridad_v2: row.prioridadV2,
     mostrar_en_hoy: row.mostrarEnHoy,
@@ -697,6 +751,12 @@ function pendienteMetadataFromRow(row: Omit<Pendiente, 'id' | 'createdAt'>): Rec
     relacionado_tipo: row.relacionadoTipo,
     relacionado_id: row.relacionadoId,
   };
+  if (row.createdBy) meta.created_by = row.createdBy;
+  if (row.createdByName) meta.created_by_name = row.createdByName;
+  if (row.resolvedAt) meta.resolved_at = row.resolvedAt;
+  if (row.resolvedBy) meta.resolved_by = row.resolvedBy;
+  if (row.deletedAt) meta.deleted_at = row.deletedAt;
+  return meta;
 }
 
 export function pendienteToInsert(
@@ -704,7 +764,7 @@ export function pendienteToInsert(
   row: Omit<Pendiente, 'id' | 'createdAt'>,
 ): Record<string, unknown> {
   const prioridad = row.prioridad ?? prioridadLegacyFromV2(row.prioridadV2 ?? 'media');
-  return {
+  const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     vehicle_id: row.vehicleId,
     titulo: row.titulo?.trim() || row.descripcion.trim().slice(0, 200),
@@ -714,6 +774,8 @@ export function pendienteToInsert(
     prioridad,
     metadata: pendienteMetadataFromRow({ ...row, prioridad }),
   };
+  if (row.createdBy) payload.created_by = row.createdBy;
+  return payload;
 }
 
 export function pendientePatchToSnake(patch: Partial<Omit<Pendiente, 'id' | 'createdAt'>>): Record<string, unknown> {
@@ -732,6 +794,20 @@ export function pendientePatchToSnake(patch: Partial<Omit<Pendiente, 'id' | 'cre
   if (patch.fechaObjetivo !== undefined) metaPatch.fecha_objetivo = patch.fechaObjetivo;
   if (patch.relacionadoTipo !== undefined) metaPatch.relacionado_tipo = patch.relacionadoTipo;
   if (patch.relacionadoId !== undefined) metaPatch.relacionado_id = patch.relacionadoId;
+  if (patch.createdBy !== undefined) metaPatch.created_by = patch.createdBy;
+  if (patch.createdByName !== undefined) metaPatch.created_by_name = patch.createdByName;
+  if (patch.resolvedAt !== undefined) {
+    out.resolved_at = patch.resolvedAt;
+    metaPatch.resolved_at = patch.resolvedAt;
+  }
+  if (patch.resolvedBy !== undefined) {
+    out.resolved_by = patch.resolvedBy;
+    metaPatch.resolved_by = patch.resolvedBy;
+  }
+  if (patch.deletedAt !== undefined) {
+    out.deleted_at = patch.deletedAt;
+    metaPatch.deleted_at = patch.deletedAt;
+  }
   if (Object.keys(metaPatch).length > 0) out.metadata = metaPatch;
   if (patch.prioridadV2 !== undefined && patch.prioridad === undefined) {
     out.prioridad = prioridadLegacyFromV2(patch.prioridadV2);

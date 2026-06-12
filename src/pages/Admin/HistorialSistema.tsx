@@ -33,6 +33,7 @@ const ACTION_LABELS: Record<string, string> = {
   delete_expense: 'Eliminó gasto',
   fix_classification: 'Corrigió clasificación',
   move_category: 'Movió categoría',
+  move_expense_category: 'Reclasificó devolución garantía',
   undo_move_category: 'Revirtió mover categoría',
   change_vehicle_id: 'Cambió vehículo del gasto',
   change_amount: 'Cambió monto del gasto',

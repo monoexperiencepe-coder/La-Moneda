@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
-import { ingresoToInsert, mapIngresoRow } from './supabaseMappers';
+import { ingresoDetalleManualPatchToRow, ingresoToInsert, mapIngresoRow } from './supabaseMappers';
 import type { Ingreso } from '../data/types';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
 import { devPerfAsync } from '../utils/devPerf';
@@ -16,7 +16,27 @@ function resolveTenantId(tenantEmpresaId?: string | null): string | null {
 
 /** Columnas mínimas para old_data en auditoría (evita SELECT * antes del delete). */
 const INGRESO_AUDIT_SNAPSHOT_SELECT =
-  'id,empresa_id,fecha,fecha_registro,vehicle_id,tipo,sub_tipo,monto,moneda,metodo_pago,comentarios';
+  'id,empresa_id,fecha,fecha_registro,vehicle_id,tipo,sub_tipo,fecha_desde,fecha_hasta,monto,moneda,metodo_pago,comentarios,excel_extra';
+
+export type IngresoDetalleManualPatch = {
+  fecha?: string;
+  fechaRegistro?: string;
+  vehicleId?: number | null;
+  tipo?: string;
+  subTipo?: string | null;
+  fechaDesde?: string | null;
+  fechaHasta?: string | null;
+  monto?: number;
+  moneda?: 'PEN' | 'USD';
+  tipoCambio?: number | null;
+  montoPENReferencia?: number | null;
+  comentarios?: string;
+  excelExtra?: Record<string, unknown> | null;
+};
+
+export type UpdateIngresoDetalleManualResult =
+  | { ok: true; ingreso: Ingreso }
+  | { ok: false; ingreso: null; error: string; supabase?: { message: string; code?: string; details?: string; hint?: string } };
 
 export type RemoveIngresoResult =
   | { ok: true }
@@ -155,4 +175,89 @@ export async function removeIngreso(
   }
 
   return { ok: true };
+}
+
+async function fetchIngresoRawById(
+  id: string,
+  tenantEmpresaId?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) return null;
+  const { data, error } = await supabase
+    .from('ingresos')
+    .select('*')
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
+  if (error) {
+    logPostgrestError('ingresos fetchIngresoRawById', error);
+    return null;
+  }
+  return (data as Record<string, unknown>) ?? null;
+}
+
+/** UPDATE parcial en `public.ingresos` con auditoría `edit_income`. */
+export async function updateIngresoDetalleManual(
+  id: string,
+  patch: IngresoDetalleManualPatch,
+  tenantEmpresaId?: string | null,
+): Promise<UpdateIngresoDetalleManualResult> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  const fail = (
+    error: string,
+    supabase?: { message: string; code?: string; details?: string; hint?: string },
+  ): UpdateIngresoDetalleManualResult => ({ ok: false, ingreso: null, error, supabase });
+
+  if (!isValidIngresoPrimaryKey(id)) {
+    return fail('No se puede editar: el registro no tiene ID válido');
+  }
+  if (!empresaId) return fail('Empresa no configurada.');
+
+  const before = await fetchIngresoRawById(id, empresaId);
+  if (!before) return fail(`No existe ingreso #${id} para esta empresa.`);
+
+  const row = ingresoDetalleManualPatchToRow(patch);
+  if (Object.keys(row).length === 0) {
+    return fail('No hay campos para actualizar (patch vacío).');
+  }
+
+  const { data, error } = await supabase
+    .from('ingresos')
+    .update(row)
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    logPostgrestError('ingresos updateIngresoDetalleManual UPDATE', error);
+    return fail(error.message || 'Error de Supabase al actualizar el ingreso.', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+  }
+
+  if (!data) {
+    return fail(`No se pudo actualizar el ingreso #${id} (0 filas afectadas).`);
+  }
+
+  const afterRow = data as Record<string, unknown>;
+  void (async () => {
+    const uid = await getAuthenticatedUserIdForAudit();
+    if (!uid) return;
+    const logged = await insertFinancialAuditLog({
+      user_id: uid,
+      action_type: 'edit_income',
+      entity_type: 'ingreso',
+      entity_id: id,
+      old_data: before,
+      new_data: afterRow,
+      reason: 'Edición de ingreso desde historial',
+    });
+    if (!logged) console.warn('[ingresos update] Auditoría edit_income no persistida.');
+  })();
+
+  return { ok: true, ingreso: mapIngresoRow(afterRow) };
 }

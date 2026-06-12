@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, ChevronLeft, ArrowRight, Zap, Command } from 'lucide-react';
+import { Search, X, ChevronLeft, ArrowRight, Zap, Command, Loader2 } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { formatDate, todayStr } from '../../utils/formatting';
@@ -16,8 +16,10 @@ import { REGISTROS_ACCESOS, filterRegistrosAccesos } from '../../config/registro
 import { useAuth } from '../../context/AuthContext';
 import { permissionUserFromAuth } from '../../utils/permissions';
 import { useIndisponibilidadModal } from '../../context/IndisponibilidadModalContext';
+import PendientesEquipoDashboard from '../../components/pendientes/PendientesEquipoDashboard';
 import PendientesEquipoHoyBlock from '../../components/pendientes/PendientesEquipoHoyBlock';
 import { countPendientesEquipoActivos } from '../../utils/pendienteModel';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
 const MODULE_ITEMS = [
@@ -142,7 +144,12 @@ const Inicio: React.FC = () => {
   };
 
   /* Búsqueda */
-  const [query, setQuery] = useState('');
+  const {
+    inputValue: query,
+    setInputValue: setQuery,
+    appliedValue: queryApplied,
+    isDebouncing: queryDebouncing,
+  } = useDebouncedSearch('', 300);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -192,7 +199,7 @@ const Inicio: React.FC = () => {
 
   /* Sugerencias del buscador */
   const suggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = queryApplied.trim().toLowerCase();
     if (!q) return MODULE_ITEMS;
     const mods = MODULE_ITEMS.filter((m) => m.label.toLowerCase().includes(q));
     const vehs = vehicles
@@ -210,7 +217,7 @@ const Inicio: React.FC = () => {
         type: 'vehicle' as const,
       }));
     return [...vehs, ...mods.slice(0, 4)];
-  }, [query, vehicles]);
+  }, [queryApplied, vehicles]);
 
   const handleSelect = (path: string) => {
     setQuery('');
@@ -338,6 +345,9 @@ const Inicio: React.FC = () => {
         <SmartClock variant="hero" className="w-full" />
       </div>
 
+      {/* ── PENDIENTES DEL EQUIPO (libreta compartida) ─────────────────── */}
+      <PendientesEquipoDashboard pendientes={pendientes} />
+
       {/* ── RESUMEN DEL DÍA (montos) ───────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-center gap-2">
         <button
@@ -401,7 +411,13 @@ const Inicio: React.FC = () => {
             autoComplete="off"
             spellCheck={false}
           />
-          {query ? (
+          {queryDebouncing ? (
+            <Loader2
+              size={14}
+              className="absolute right-4 animate-spin text-indigo-400 pointer-events-none"
+              aria-hidden
+            />
+          ) : query ? (
             <button
               type="button"
               onClick={() => { setQuery(''); inputRef.current?.focus(); }}
@@ -542,15 +558,6 @@ const Inicio: React.FC = () => {
             </div>
           </div>
         </button>
-
-        {/* ── PENDIENTES DEL EQUIPO ─────────────────────────────────────── */}
-        <PendientesEquipoHoyBlock
-          pendientes={pendientes}
-          vehicles={vehicles}
-          conductores={conductores}
-          getVehicleLabel={(id) => getVehicleLabel(id == null ? null : Number(id))}
-          onVer={() => navigate('/operaciones/pendientes')}
-        />
       </div>
 
       {/* ── ACCIONES RÁPIDAS ───────────────────────────────────────────── */}

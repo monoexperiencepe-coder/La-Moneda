@@ -54,7 +54,7 @@ const Configuracion: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/admin/historial-sistema')}
-            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left border-b border-gray-50"
           >
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-indigo-600 bg-indigo-100">
               🧾
@@ -62,6 +62,21 @@ const Configuracion: React.FC = () => {
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900">Historial del sistema</p>
               <p className="text-xs text-gray-400">Auditoría financiera de cambios y correcciones.</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/devolucion-garantia-preview')}
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-amber-700 bg-amber-100">
+              🔍
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Preview · devoluciones garantía</p>
+              <p className="text-xs text-gray-400">
+                Reclasificación planificada operativo → financiero (solo lectura, sin aplicar).
+              </p>
             </div>
           </button>
         </div>
