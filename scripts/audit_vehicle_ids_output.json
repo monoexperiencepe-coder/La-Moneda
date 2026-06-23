@@ -1,0 +1,237 @@
+{
+  "auditedAt": "2026-06-23T15:00:01.856Z",
+  "empresaIdFilter": "07593982-08e6-450c-8abe-4bf590609dd7",
+  "vehiculos": {
+    "total": 83,
+    "activos": 83,
+    "inactivos": 0,
+    "minId": 1,
+    "maxId": 178,
+    "idsFaltantesEntreMinYMax": 95,
+    "idsFaltantesMuestra": [
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112
+    ],
+    "idsFaltantesUltimos": [
+      168,
+      169,
+      170,
+      171,
+      172,
+      173,
+      174,
+      175,
+      176,
+      177
+    ],
+    "columnasDetectadas": [
+      "id",
+      "placa",
+      "marca",
+      "modelo",
+      "activo",
+      "created_at",
+      "empresa_id"
+    ],
+    "tieneNumeroUnidad": false,
+    "ultimosCreados": [
+      {
+        "id": 178,
+        "placa": "CAU-677",
+        "activo": true,
+        "created_at": "2026-06-22T16:02:13.818551+00:00"
+      },
+      {
+        "id": 1,
+        "placa": "ANF-599",
+        "activo": true,
+        "created_at": "2026-04-29T19:12:54.659376+00:00"
+      },
+      {
+        "id": 2,
+        "placa": "ADU-698",
+        "activo": true,
+        "created_at": "2026-04-29T19:12:54.659376+00:00"
+      },
+      {
+        "id": 3,
+        "placa": "AVW-255",
+        "activo": true,
+        "created_at": "2026-04-29T19:12:54.659376+00:00"
+      },
+      {
+        "id": 4,
+        "placa": "F7S-684",
+        "activo": true,
+        "created_at": "2026-04-29T19:12:54.659376+00:00"
+      }
+    ],
+    "ultimoId": 178,
+    "siguienteIdEstimado": 179,
+    "brechaIdVsConteo": 95
+  },
+  "unidadesTabla": {
+    "totalFilas": 82,
+    "muestra": "ver unidades.numero_interno + vehicle_id"
+  },
+  "inversionesGeneralesMuestra": [
+    {
+      "vehiculo_numero": 178,
+      "vehiculo_referencia": "#178 DFSK GLORY 560",
+      "placa": "CAU-677"
+    },
+    {
+      "vehiculo_numero": 1,
+      "vehiculo_referencia": "Yaris 01",
+      "placa": "ANF-599"
+    },
+    {
+      "vehiculo_numero": 2,
+      "vehiculo_referencia": "Yaris 02",
+      "placa": "ADU-698"
+    },
+    {
+      "vehiculo_numero": 4,
+      "vehiculo_referencia": "Yaris 04",
+      "placa": "F7S-684"
+    },
+    {
+      "vehiculo_numero": 5,
+      "vehiculo_referencia": "Yaris 05",
+      "placa": "ANS-117"
+    },
+    {
+      "vehiculo_numero": 6,
+      "vehiculo_referencia": "Yaris 06",
+      "placa": "ARF-480"
+    },
+    {
+      "vehiculo_numero": 7,
+      "vehiculo_referencia": "Yaris 07",
+      "placa": "X3N-670"
+    },
+    {
+      "vehiculo_numero": 8,
+      "vehiculo_referencia": "Yaris 08",
+      "placa": "AHB-559"
+    },
+    {
+      "vehiculo_numero": 9,
+      "vehiculo_referencia": "Yaris 09",
+      "placa": "AUG-396"
+    },
+    {
+      "vehiculo_numero": 15,
+      "vehiculo_referencia": "YARIS 15",
+      "placa": "APZ-588"
+    }
+  ],
+  "referenciasPorTabla": [
+    {
+      "table": "ingresos",
+      "column": "vehicle_id",
+      "count": 3282
+    },
+    {
+      "table": "gastos",
+      "column": "vehicle_id",
+      "count": 10210
+    },
+    {
+      "table": "conductores",
+      "column": "vehicle_id",
+      "count": 81
+    },
+    {
+      "table": "control_fechas",
+      "column": "vehicle_id",
+      "count": 2038
+    },
+    {
+      "table": "kilometrajes",
+      "column": "vehicle_id",
+      "count": 8857
+    },
+    {
+      "table": "vehicle_downtime",
+      "column": "vehicle_id",
+      "count": 0
+    },
+    {
+      "table": "inversiones_vehiculo",
+      "column": "vehicle_id",
+      "count": 82
+    },
+    {
+      "table": "inversiones_generales_vehiculo",
+      "column": "vehiculo_numero",
+      "count": 83
+    },
+    {
+      "table": "caja_negocio_vehiculo",
+      "column": "vehicle_id",
+      "count": 2992
+    },
+    {
+      "table": "pendientes",
+      "column": "vehicle_id",
+      "count": 0
+    },
+    {
+      "table": "registros_tiempo",
+      "column": "vehicle_id",
+      "count": 0
+    },
+    {
+      "table": "unidades",
+      "column": "vehicle_id",
+      "count": 82
+    }
+  ],
+  "huerfanosVehicleId": {
+    "ingresos": {
+      "usedDistinct": 80,
+      "orphans": [],
+      "orphanCount": 0
+    },
+    "gastos": {
+      "usedDistinct": 80,
+      "orphans": [],
+      "orphanCount": 0
+    },
+    "kilometrajes": {
+      "usedDistinct": 83,
+      "orphans": [],
+      "orphanCount": 0
+    }
+  },
+  "notaSecuencia": "La secuencia Postgres (vehiculos_id_seq) no es consultable vía Supabase REST; usar SQL en SQL Editor."
+}

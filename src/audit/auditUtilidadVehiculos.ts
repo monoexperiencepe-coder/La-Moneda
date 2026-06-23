@@ -20,6 +20,7 @@ import {
 } from '../utils/utilidadOperativa';
 import { calcularUtilidadRealVehiculo, sumUtilidadRealFlota } from '../utils/utilidadReal';
 import { tipoGastoEffective } from '../utils/gastosTipoGasto';
+import { formatVehicleLabelFull } from '../utils/vehicleDisplayNumber';
 
 export type AuditUtilidadVehiculosInput = {
   vehicles: readonly Vehicle[];
@@ -244,7 +245,7 @@ export function auditUtilidadVehiculos(input: AuditUtilidadVehiculosInput): Audi
     const row: AuditUtilidadVehiculoRow = {
       vehicleId: v.id,
       placa: v.placa,
-      unidadLabel: `#${v.id} ${v.marca} ${v.modelo}`,
+      unidadLabel: formatVehicleLabelFull(v),
       activo: v.activo !== false,
       ingresos_total: round2(ingTotal),
       gastos_total_todos: round2(gasTotalTodos),

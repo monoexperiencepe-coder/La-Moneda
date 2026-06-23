@@ -5,6 +5,7 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import Card from '../Common/Card';
 import { Documentacion, Vehicle } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { todayStr } from '../../utils/formatting';
 
 interface DocumentationFormProps {
@@ -80,7 +81,7 @@ const DocumentationForm: React.FC<DocumentationFormProps> = ({ vehicles, onSubmi
             <Select
               label="N° Vehículo"
               options={vehicles.filter(v => v.activo).map(v => ({
-                value: v.id, label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+                value: v.id, label: formatVehicleSelectLabel(v),
               }))}
               value={form.vehicleId}
               placeholder="Seleccionar vehículo..."

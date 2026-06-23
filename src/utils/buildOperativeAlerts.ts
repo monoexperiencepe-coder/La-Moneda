@@ -2,6 +2,7 @@ import type { ControlFecha, Ingreso, Vehicle, KilometrajeRegistro } from '../dat
 import { esControlFechaExcluidoDeEstadoVencido } from '../data/controlFechaCatalog';
 import { formatDate, todayStr } from './formatting';
 import { buildKmControlRows, KM_ALERTA_VARIACION_DESDE_MANT, kmMantenimientoAlertDetail } from './kmMantenimientoControl';
+import { formatVehicleLabelFull } from './vehicleDisplayNumber';
 
 /** Ventana para alertar vencimientos (control_fechas), alineado a Control Global. */
 export const DIAS_ALERTA_VENCIMIENTO = 30;
@@ -32,7 +33,7 @@ function diffDaysFromToday(dateStr: string): number {
 
 function vehicleLabel(v: Vehicle | undefined): string {
   if (!v) return '—';
-  return `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`;
+  return formatVehicleLabelFull(v);
 }
 
 function cutoffSinIngresos(): string {

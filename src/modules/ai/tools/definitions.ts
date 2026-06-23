@@ -364,7 +364,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },
@@ -380,7 +380,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },
@@ -396,7 +396,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },
@@ -428,7 +428,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },
@@ -444,7 +444,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },
@@ -460,7 +460,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
           filtroTexto: { type: 'string', description: 'Filtro por subtipo/motivo (ej. motor)' },
         },
         required: ['numero'],
@@ -477,7 +477,7 @@ export const AI_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          numero: { type: 'number', description: 'Número de unidad / vehicle.id' },
+          numero: { type: 'number', description: 'Número visible de unidad (numero_unidad); no confundir con id técnico' },
         },
         required: ['numero'],
       },

@@ -8,6 +8,7 @@ import Button from '../Common/Button';
 import { esControlFechaSinAlertaVencimiento, TIPOS_CONTROL_FECHA_OPTIONS } from '../../data/controlFechaCatalog';
 import { formatDate, todayStr } from '../../utils/formatting';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
+import { formatVehiclePlacaMarcaLabel } from '../../utils/vehicleDisplayNumber';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAuth } from '../../context/AuthContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
@@ -83,7 +84,7 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
     { value: '', label: 'Seleccionar vehículo' },
     ...active.map((v) => ({
       value: String(v.id),
-      label: `#${v.id} — ${v.placa} — ${v.marca} ${v.modelo}`.trim(),
+      label: formatVehiclePlacaMarcaLabel(v),
     })),
   ];
 

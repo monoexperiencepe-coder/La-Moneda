@@ -1,4 +1,5 @@
 import type { Gasto, Ingreso, Vehicle } from '../data/types';
+import { formatVehicleUnitHash } from './vehicleDisplayNumber';
 import { toDateOnlyString } from './formatting';
 import { gastosOperativosSolamente } from './cajaNegocio';
 import type { FinancialKPIData } from './calculations';
@@ -166,7 +167,7 @@ export function computeFinancialFleetAlerts(rollups: VehicleFinancialIntelRollup
       kpi.gastos_administrativos === 0 &&
       gastoMotor === 0;
     if (sinActividad) continue;
-    const placa = vehicle.placa || `#${vehicle.id}`;
+    const placa = vehicle.placa || formatVehicleUnitHash(vehicle);
     if (kpi.utilidad_operativa < 0) {
       out.push({
         id: `neg-${vehicle.id}`,

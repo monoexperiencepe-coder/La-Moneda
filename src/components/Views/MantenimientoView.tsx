@@ -4,6 +4,7 @@ import MaintenanceForm from '../Forms/MaintenanceForm';
 import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Mantenimiento, Vehicle } from '../../data/types';
+import { formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { formatDate } from '../../utils/formatting';
 import { Wrench, Car } from 'lucide-react';
 
@@ -45,7 +46,7 @@ const MantenimientoView: React.FC<MantenimientoViewProps> = ({ vehicles, manteni
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})` : `Carro #${m.vehicleId}`}
+                          {vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})` : formatVehicleIdFallback(m.vehicleId)}
                         </p>
                         <p className="text-xs text-gray-400">{formatDate(m.fechaRegistro)}</p>
                       </div>

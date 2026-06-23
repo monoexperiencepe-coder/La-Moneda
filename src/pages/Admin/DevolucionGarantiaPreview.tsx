@@ -26,6 +26,7 @@ import {
   DEVOLUCION_GARANTIA_TARGET_TIPO,
   findDevolucionGarantiaCandidatos,
 } from '../../audit/devolucionGarantiaReclasificacion';
+import { formatVehicleIdPlaca, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { getOperativoSubtipoLabel } from '../../utils/operativoSubtipo';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
 
@@ -48,7 +49,7 @@ const DevolucionGarantiaPreview: React.FC = () => {
 
   const vehicleLabel = (id: number | string) => {
     const v = vehicles.find((x) => String(x.id) === String(id));
-    return v ? `#${v.id} · ${v.placa}` : `#${id}`;
+    return v ? formatVehicleIdPlaca(v) : formatVehicleIdFallback(id);
   };
 
   const candidatos = useMemo(() => findDevolucionGarantiaCandidatos(gastos), [gastos]);

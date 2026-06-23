@@ -7,6 +7,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { useUtilidadRealCalculos } from '../../hooks/useUtilidadRealCalculos';
 import { UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
+import { formatVehicleLabelFull, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import {
   UTILIDAD_OFICIAL_NOTA,
   UTILIDAD_SORT_OPTIONS,
@@ -203,8 +204,8 @@ const UtilidadOperativa: React.FC = () => {
 
   const vehicleLabel = (id: number, placa?: string) => {
     const v = vehicles.find((x) => x.id === id);
-    if (v) return `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`;
-    return placa ? `#${id} ${placa}` : `Unidad #${id}`;
+    if (v) return formatVehicleLabelFull(v);
+    return placa ? formatVehicleIdFallback(id) + ` ${placa}` : formatVehicleIdFallback(id);
   };
 
   return (

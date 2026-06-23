@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
 import { mapInversionGeneralVehiculoRow } from './supabaseMappers';
 import type { InversionGeneralVehiculo } from '../data/types';
+import { formatVehicleLabelFull } from '../utils/vehicleDisplayNumber';
 import { fetchAllSupabasePages } from './supabaseRangeFetch';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
@@ -37,11 +38,12 @@ export async function fetchInversionesGeneralesVehiculo(
 
 function vehiculoReferenciaForVehicle(vehicle: {
   id: number;
+  numeroUnidad?: number | null;
   marca: string;
   modelo: string;
   placa: string;
 }): string {
-  return `#${vehicle.id} ${vehicle.marca} ${vehicle.modelo}`.trim().slice(0, 240);
+  return formatVehicleLabelFull(vehicle).trim().slice(0, 240);
 }
 
 /** Valor de compra / inversión inicial desde registro de vehículo → tabla inversiones_generales_vehiculo. */

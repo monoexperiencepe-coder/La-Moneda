@@ -2,6 +2,7 @@ import type { Gasto, Ingreso } from '../../data/types';
 import { resolveAiDateRange, formatCurrencyByCode } from './dateRange';
 import { buildTopVehiculosUtilidad } from '../../utils/utilidadReal';
 import type { Vehicle } from '../../data/types';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 export type UtilidadRankPeriodo = 'historico' | 'mes' | 'rango';
 
@@ -75,11 +76,13 @@ export function diagnoseUtilidadRankDataSources(
 
 export function formatTopVehiculosUtilidadForLlm(
   ranking: ReturnType<typeof buildTopVehiculosUtilidad>,
+  vehicles: readonly Vehicle[] = [],
 ): string[] {
-  return ranking.map((r, idx) => {
-    const n = idx + 1;
+  return ranking.map((r) => {
+    const v = vehicles.find((x) => x.id === r.vehicleId);
+    const unit = v ? getVehicleDisplayNumber(v) : r.vehicleId;
     return [
-      `#${n} ${r.placa}`,
+      `#${unit} ${r.placa}`,
       `Ingresos: ${formatCurrencyByCode(r.ingresos, 'PEN')}`,
       `Gastos: ${formatCurrencyByCode(r.gastos, 'PEN')}`,
       `Utilidad: ${formatCurrencyByCode(r.utilidad, 'PEN')}`,
@@ -100,7 +103,7 @@ export function buildUtilidadRankToolPayload(
     hasta: period.hasta,
     limit,
   });
-  const lineasRanking = formatTopVehiculosUtilidadForLlm(ranking);
+  const lineasRanking = formatTopVehiculosUtilidadForLlm(ranking, vehicles);
   const datosFaltantes = diagnoseUtilidadRankDataSources(ingresos, gastos);
 
   return {
@@ -118,18 +121,23 @@ export function buildUtilidadRankToolPayload(
       'caja_negocio_vehiculo como proxy',
       'utilidad no disponible por falta de vehicle_id en ingresos',
     ],
-    ranking: ranking.map((r, idx) => ({
-      posicion: idx + 1,
-      vehicleId: r.vehicleId,
-      placa: r.placa,
-      ingresos: r.ingresos,
-      gastos: r.gastos,
-      utilidad: r.utilidad,
-      ingresos_formatted: formatCurrencyByCode(r.ingresos, 'PEN'),
-      gastos_formatted: formatCurrencyByCode(r.gastos, 'PEN'),
-      utilidad_formatted: formatCurrencyByCode(r.utilidad, 'PEN'),
-      linea_compacta: `${idx + 1}. ${r.placa} — Ingresos ${formatCurrencyByCode(r.ingresos, 'PEN')}, Gastos ${formatCurrencyByCode(r.gastos, 'PEN')}, Utilidad ${formatCurrencyByCode(r.utilidad, 'PEN')}`,
-    })),
+    ranking: ranking.map((r, idx) => {
+      const v = vehicles.find((x) => x.id === r.vehicleId);
+      const unit = v ? getVehicleDisplayNumber(v) : r.vehicleId;
+      return {
+        posicion: idx + 1,
+        vehicleId: r.vehicleId,
+        numeroUnidad: unit,
+        placa: r.placa,
+        ingresos: r.ingresos,
+        gastos: r.gastos,
+        utilidad: r.utilidad,
+        ingresos_formatted: formatCurrencyByCode(r.ingresos, 'PEN'),
+        gastos_formatted: formatCurrencyByCode(r.gastos, 'PEN'),
+        utilidad_formatted: formatCurrencyByCode(r.utilidad, 'PEN'),
+        linea_compacta: `#${unit} ${r.placa} — Ingresos ${formatCurrencyByCode(r.ingresos, 'PEN')}, Gastos ${formatCurrencyByCode(r.gastos, 'PEN')}, Utilidad ${formatCurrencyByCode(r.utilidad, 'PEN')}`,
+      };
+    }),
     lineas_ranking: lineasRanking,
     lineas_ranking_compact: ranking.map(
       (r, idx) =>

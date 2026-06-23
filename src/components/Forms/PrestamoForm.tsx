@@ -5,6 +5,7 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import Card from '../Common/Card';
 import { Prestamo, Vehicle, Moneda } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { todayStr } from '../../utils/formatting';
 
 interface PrestamoFormProps {
@@ -128,7 +129,7 @@ const PrestamoForm: React.FC<PrestamoFormProps> = ({ vehicles, onSubmit }) => {
           label="Vehículo (opcional)"
           options={vehicles.filter(v => v.activo).map(v => ({
             value: v.id,
-            label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+            label: formatVehicleSelectLabel(v),
           }))}
           value={form.vehicleId}
           placeholder="General / sin vehículo"

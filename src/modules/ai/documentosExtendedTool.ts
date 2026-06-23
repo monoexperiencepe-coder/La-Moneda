@@ -9,6 +9,7 @@ import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivo
 import { docColumnTone } from '../../utils/documentacionDocTone';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { esControlFechaExcluidoDeEstadoVencido } from '../../data/controlFechaCatalog';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 export const DOCUMENTOS_CRITERIO_INVENTARIO =
   'Inventario completo: celdas documento×vehículo activo con fecha. Semáforo late/soon/ok (excl. GNV instalación, BAT compra, BAT mant.).';
@@ -111,9 +112,12 @@ export async function buildDocumentosPorRangoPayload(
     fetchLatestControlFechasByVehicle(empresaId),
   ]);
   const items = rowsPorRangoFromControlFechas(vehicles, controlFechas, dias);
-  const listaBreve = items.slice(0, cap).map(
-    (it) => `#${it.vehicleId} ${it.placa} — ${it.label} vence ${it.fechaVencimiento} (${it.diasRestantes} d)`,
-  );
+  const byVehicleId = new Map(vehicles.map((v) => [v.id, v]));
+  const listaBreve = items.slice(0, cap).map((it) => {
+    const v = byVehicleId.get(it.vehicleId);
+    const unit = v ? getVehicleDisplayNumber(v) : it.vehicleId;
+    return `#${unit} ${it.placa} — ${it.label} vence ${it.fechaVencimiento} (${it.diasRestantes} d)`;
+  });
 
   return {
     dias,

@@ -3,6 +3,7 @@
  * Consola: await window.auditGastosVehiculo() o await window.auditGastosVehiculo('ANF-599')
  */
 import type { Gasto, Vehicle } from '../data/types';
+import { formatVehicleLabelFull } from '../utils/vehicleDisplayNumber';
 import { fetchGastosByTipoFullAll, fetchGastosFull } from '../services/gastosService';
 import { vehicleIdsEqual } from '../utils/vehicleId';
 import { calcularUtilidadRealVehiculo } from '../utils/utilidadReal';
@@ -78,7 +79,7 @@ export async function auditGastosVehiculo(
   console.log({
     vehicleId: vehicle.id,
     placa: vehicle.placa,
-    label: `#${vehicle.id} ${vehicle.marca} ${vehicle.modelo}`,
+    label: formatVehicleLabelFull(vehicle),
     gastos_load_scope: gastosLoadScope,
     gastos_en_memoria_count: gastos.length,
     memoria_gastos_total: sumMontos(gastos),

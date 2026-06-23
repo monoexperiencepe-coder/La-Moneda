@@ -17,6 +17,7 @@ import { TIPOS_INGRESO_FACT, TIPOS_GASTO_FACT } from '../data/factCatalog';
 import factSubtiposIngresos from '../data/factSubtiposIngresos.json';
 import factSubtiposGastos from '../data/factSubtiposGastos.json';
 import type { Vehicle } from '../data/types';
+import { formatVehicleUnitHash } from './vehicleDisplayNumber';
 import {
   REPRESENTACION_INTERNA_FACT_SUBTIPO,
   REPRESENTACION_INTERNA_FACT_TIPO,
@@ -426,7 +427,7 @@ export function previewParsed(p: ParsedEntry, vehicles: Vehicle[]): string {
   if (p.subTipo) parts.push(`· ${p.subTipo}`);
   if (p.vehicleId != null) {
     const v = vehicles.find((v) => v.id === p.vehicleId);
-    parts.push(`· ${v ? `#${v.id} ${v.marca} ${v.modelo}` : `carro #${p.vehicleId}`}`);
+    parts.push(`· ${v ? `${formatVehicleUnitHash(v)} ${v.marca} ${v.modelo}` : `carro #${p.vehicleId}`}`);
   }
   if (p.metodoPago) parts.push(`(${p.metodoPago})`);
   if (p.finanzaTipoGasto && p.finanzaSubtipoGasto) {

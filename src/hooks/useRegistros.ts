@@ -96,6 +96,11 @@ import {
   patchSummaryRemoveGasto,
 } from '../utils/gastoLocalMutations';
 import { enrichGastoHistorialActivity } from '../utils/gastoHistorialOrder';
+import {
+  formatVehicleLabelFull,
+  formatVehicleIdFallback,
+  vehicleFleetSortKey,
+} from '../utils/vehicleDisplayNumber';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -190,7 +195,7 @@ function mergeRegistroTiempoSorted(prev: RegistroTiempo[], row: RegistroTiempo):
 
 function mergeVehicleSorted(prev: Vehicle[], row: Vehicle): Vehicle[] {
   const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
-  return [...without, row].sort((a, b) => a.id - b.id);
+  return [...without, row].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b));
 }
 
 function mergeInversionVehiculoSorted(prev: InversionVehiculo[], row: InversionVehiculo): InversionVehiculo[] {
@@ -1468,7 +1473,7 @@ export const useRegistros = () => {
     (vehicleId: number | null) => {
       if (!vehicleId) return 'General';
       const v = vehicles.find((x) => x.id === vehicleId);
-      return v ? `#${v.id} ${v.marca} ${v.modelo} (${v.placa})` : `Carro #${vehicleId}`;
+      return v ? formatVehicleLabelFull(v) : formatVehicleIdFallback(vehicleId);
     },
     [vehicles],
   );

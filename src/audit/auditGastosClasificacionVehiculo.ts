@@ -5,6 +5,7 @@
  * Solo lectura — no modifica datos ni fórmulas de producción.
  */
 import type { Gasto, Ingreso, Vehicle } from '../data/types';
+import { formatVehicleLabelFull } from '../utils/vehicleDisplayNumber';
 import { isCajaNegocioGasto } from '../utils/cajaNegocio';
 import { calculateFinancialKPIs } from '../utils/calculations';
 import { matchesOperativoTipoNormalized } from '../utils/operativoTipoGasto';
@@ -238,7 +239,7 @@ export function auditGastosClasificacionVehiculo(
   const identificacion = {
     vehicleId: vehicle.id,
     placa: vehicle.placa,
-    unidad: `#${vehicle.id} ${vehicle.marca} ${vehicle.modelo}`,
+    unidad: formatVehicleLabelFull(vehicle),
     gastos_load_scope: gastosLoadScope,
     gastos_en_memoria_total: gastos.length,
   };

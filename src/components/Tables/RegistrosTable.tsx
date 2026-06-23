@@ -59,6 +59,7 @@ import {
 import { labelCategoriaIngresoExtraordinario } from '../../data/ingresoAlcanceCatalog';
 import { isIngresoExtraordinario, isIngresoVehicular } from '../../utils/ingresoAlcance';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { formatVehicleIdPlaca, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
 import {
@@ -593,15 +594,15 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
     const v = vehicles.find((x) => String(x.id) === k);
-    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${k}`;
+    return v ? `${v.marca} ${v.modelo} (${v.placa})` : formatVehicleIdFallback(k);
   }, [vehicles]);
 
   const getVehicleIdPlaca = (vehicleId: number | string | null) => {
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
     const v = vehicles.find((x) => String(x.id) === k);
-    if (!v) return `#${k}`;
-    return `#${v.id} · ${v.placa}`;
+    if (!v) return formatVehicleIdFallback(k);
+    return formatVehicleIdPlaca(v);
   };
 
   const gastoDetalleEditable = mode === 'gastos' && Boolean(onGastoDetalleSaved);

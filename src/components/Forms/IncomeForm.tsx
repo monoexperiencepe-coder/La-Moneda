@@ -7,6 +7,7 @@ import Card from '../Common/Card';
 import PeriodoPagoModal from '../Ingreso/PeriodoPagoModal';
 import PagoRapidoIngreso from '../Ingreso/PagoRapidoIngreso';
 import { Ingreso, Vehicle, Moneda } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import {
   TIPOS_INGRESO_FACT,
   getSubtiposIngreso,
@@ -282,7 +283,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
               label="N° Vehículo"
               options={activeVehicles.map((v) => ({
                 value: v.id,
-                label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+                label: formatVehicleSelectLabel(v),
               }))}
               value={form.vehicleId}
               placeholder="Seleccionar vehículo..."

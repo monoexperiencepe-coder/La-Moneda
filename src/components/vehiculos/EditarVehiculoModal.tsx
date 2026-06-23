@@ -8,6 +8,7 @@ import {
   upsertInversionGeneralVehiculoValor,
 } from '../../services/inversionesGeneralesVehiculoService';
 import type { Vehicle } from '../../data/types';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 const OBS_SEP = ' · Obs: ';
 
@@ -164,7 +165,9 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
           <p className="font-semibold text-gray-900">
             {vehicle.marca} · <span className="font-mono">{vehicle.placa}</span>
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">ID {vehicle.id}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Unidad #{getVehicleDisplayNumber(vehicle)} · ID sistema {vehicle.id}
+          </p>
         </div>
 
         {error ? (

@@ -6,6 +6,7 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import type { RegistroTiempo as RT } from '../../data/types';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { formatVehicleLabelFull, formatVehicleUnitHash } from '../../utils/vehicleDisplayNumber';
 import { Trash2, Pencil, Loader2 } from 'lucide-react';
 
 function isoToDatetimeLocal(iso: string): string {
@@ -154,7 +155,7 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
     { value: '', label: 'Todos (filtro)' },
     ...vehiclesById.map((v) => ({
       value: String(v.id),
-      label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
+      label: formatVehicleLabelFull(v),
     })),
   ];
 
@@ -162,7 +163,7 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
     { value: '', label: 'Sin vehículo / general' },
     ...vehiclesById.map((v) => ({
       value: String(v.id),
-      label: `#${v.id} ${v.marca} ${v.modelo}`,
+      label: formatVehicleUnitHash(v) + ` ${v.marca} ${v.modelo}`,
     })),
   ];
 

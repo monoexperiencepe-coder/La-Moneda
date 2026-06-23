@@ -9,7 +9,7 @@ import { summaryCategoria } from './gastosFinancialSummary';
 import { toDateOnlyString, todayStr } from './formatting';
 import { ingresoMontoPEN } from './moneda';
 import { tipoGastoEffective } from './gastosTipoGasto';
-import { vehicleIdSortRank } from './sortByVehicle';
+import { formatVehicleIdPlaca, getVehicleDisplayNumber } from './vehicleDisplayNumber';
 import {
   calcularUtilidadRealEnRango,
   type UtilidadRealMes,
@@ -78,6 +78,7 @@ export type UtilidadVehiculoFila = UtilidadRealVehiculo & {
   margenPct: number | null;
   placa: string;
   label: string;
+  numeroUnidad: number;
 };
 
 export type UtilidadInsightCard = {
@@ -368,7 +369,8 @@ export function buildFilasVehiculoEnRango(
         ...row,
         margenPct: margenPct(row.ingresosTotal, row.utilidadReal),
         placa: v.placa,
-        label: `#${v.id} ${v.placa}`,
+        label: formatVehicleIdPlaca(v),
+        numeroUnidad: getVehicleDisplayNumber(v),
       };
     });
   }
@@ -381,7 +383,8 @@ export function buildFilasVehiculoEnRango(
       utilidadReal: r.utilidadReal,
       margenPct: margenPct(r.ingresos, r.utilidadReal),
       placa: v.placa,
-      label: `#${v.id} ${v.placa}`,
+      label: formatVehicleIdPlaca(v),
+      numeroUnidad: getVehicleDisplayNumber(v),
     };
   });
 }
@@ -404,9 +407,9 @@ export function sortFilasVehiculo(
     case 'margen_asc':
       return copy.sort((a, b) => (a.margenPct ?? 999) - (b.margenPct ?? 999));
     case 'vehicle_id_asc':
-      return copy.sort((a, b) => vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId));
+      return copy.sort((a, b) => a.numeroUnidad - b.numeroUnidad);
     case 'vehicle_id_desc':
-      return copy.sort((a, b) => vehicleIdSortRank(b.vehicleId) - vehicleIdSortRank(a.vehicleId));
+      return copy.sort((a, b) => b.numeroUnidad - a.numeroUnidad);
     case 'placa_asc':
       return copy.sort((a, b) => a.placa.localeCompare(b.placa, 'es'));
     case 'utilidad_desc':
@@ -414,7 +417,7 @@ export function sortFilasVehiculo(
       return copy.sort(
         (a, b) =>
           cmpNum(b.utilidadReal, a.utilidadReal)
-          || vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId),
+          || a.numeroUnidad - b.numeroUnidad,
       );
   }
 }

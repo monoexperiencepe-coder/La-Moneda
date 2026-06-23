@@ -5,6 +5,7 @@ import Select from '../Common/Select';
 import Input from '../Common/Input';
 import type { Vehicle, VehicleDowntimeMotivo } from '../../data/types';
 import { todayStr } from '../../utils/formatting';
+import { formatVehicleMarcaPlacaLabel, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import { VEHICLE_DOWNTIME_MOTIVO_LABELS } from '../../utils/vehicleDowntimeImpact';
 import {
   cerrarVehicleDowntime,
@@ -60,7 +61,7 @@ const RegistrarIndisponibilidadModal: React.FC<Props> = ({
         .sort((a, b) => a.id - b.id)
         .map((v) => ({
           value: String(v.id),
-          label: `#${v.id} — ${v.marca} ${v.modelo} — ${v.placa}`.trim(),
+          label: formatVehicleMarcaPlacaLabel(v),
         })),
     [vehicles],
   );
@@ -148,7 +149,7 @@ const RegistrarIndisponibilidadModal: React.FC<Props> = ({
     >
       {activeVehicle ? (
         <p className="mb-4 text-sm text-slate-600">
-          Unidad #{activeVehicle.id} · {activeVehicle.placa}. El impacto económico se calcula al vuelo (no crea gastos
+          Unidad #{getVehicleDisplayNumber(activeVehicle)} · {activeVehicle.placa}. El impacto económico se calcula al vuelo (no crea gastos
           ni ingresos).
         </p>
       ) : (

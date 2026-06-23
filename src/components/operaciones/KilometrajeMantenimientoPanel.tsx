@@ -4,6 +4,10 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import { formatDate, registroFechaInputBounds, todayStr } from '../../utils/formatting';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import {
+  formatVehicleIdPlaca,
+  formatVehiclePlacaMarcaLabel,
+} from '../../utils/vehicleDisplayNumber';
 import type { KilometrajeRegistro, Vehicle } from '../../data/types';
 import {
   buildKmControlRows,
@@ -150,7 +154,7 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
       { value: '', label: 'Todos los vehículos' },
       ...active.map((v) => ({
         value: String(v.id),
-        label: `#${v.id} — ${v.placa} — ${v.marca} ${v.modelo}`.trim(),
+        label: formatVehiclePlacaMarcaLabel(v),
       })),
     ],
     [active],
@@ -223,7 +227,10 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Select
             label="Vehículo"
-            options={active.map((v) => ({ value: String(v.id), label: `#${v.id} · ${v.placa} · ${v.marca}` }))}
+            options={active.map((v) => ({
+              value: String(v.id),
+              label: `${formatVehicleIdPlaca(v)} · ${v.marca}`,
+            }))}
             value={km.vehicleId}
             placeholder="Elegir"
             onChange={(v) => setKm((p) => ({ ...p, vehicleId: v }))}

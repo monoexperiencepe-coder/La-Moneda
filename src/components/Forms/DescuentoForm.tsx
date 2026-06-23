@@ -5,6 +5,7 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import Card from '../Common/Card';
 import { Descuento, Vehicle } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { CATEGORIAS_DESCUENTO, LABEL_CATEGORIA_DESCUENTO } from '../../data/descuentosCatalog';
 import { todayStr } from '../../utils/formatting';
 
@@ -104,7 +105,7 @@ const DescuentoForm: React.FC<DescuentoFormProps> = ({ vehicles, onSubmit }) => 
             label="N° Vehículo (opcional)"
             options={vehicles.filter(v => v.activo).map(v => ({
               value: v.id,
-              label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+              label: formatVehicleSelectLabel(v),
             }))}
             value={form.vehicleId}
             placeholder="General / sin vehículo"

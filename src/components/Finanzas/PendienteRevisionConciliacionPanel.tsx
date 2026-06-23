@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, History, Layers, Sparkles, Zap } from 'lucide-react';
 import type { Gasto, Vehicle } from '../../data/types';
+import { formatVehicleLabelFull } from '../../utils/vehicleDisplayNumber';
 ;
 import { sugerirClasificacionGasto } from '../../utils/gastoClasificacionSugerencia';
 import { moveGastoCategoria } from '../../utils/gastoCategoriaMove';
@@ -167,7 +168,7 @@ const PendienteRevisionConciliacionPanel: React.FC<Props> = ({
       { value: '', label: 'Seleccionar vehículo' },
       ...vehicles.map((v) => ({
         value: String(v.id),
-        label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
+        label: formatVehicleLabelFull(v),
       })),
     ],
     [vehicles],

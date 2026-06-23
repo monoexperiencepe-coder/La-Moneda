@@ -4,6 +4,7 @@ import { ChevronLeft, Filter, Plus } from 'lucide-react';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import SearchField from '../../components/Common/SearchField';
 import { buildSearchHaystack, matchesSearchHaystack } from '../../utils/recordSearch';
+import { vehicleFleetSortKey, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import VehicleCard from '../../components/Cards/VehicleCard';
 import RegistrarVehiculoForm from '../../components/vehiculos/RegistrarVehiculoForm';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
@@ -65,12 +66,20 @@ const Inventario: React.FC = () => {
 
   const filteredVehicles = useMemo(() => {
     const list = showAll ? vehicles : vehicles.filter((v) => v.activo);
-    const sorted = [...list].sort((a, b) => a.id - b.id);
+    const sorted = [...list].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b));
     const q = vehicleSearchApplied.trim();
     if (!q) return sorted;
     return sorted.filter((v) =>
       matchesSearchHaystack(
-        buildSearchHaystack(v.id, v.placa, v.marca, v.modelo, v.anio, v.color),
+        buildSearchHaystack(
+          getVehicleDisplayNumber(v),
+          v.id,
+          v.placa,
+          v.marca,
+          v.modelo,
+          v.anio,
+          v.color,
+        ),
         q,
       ),
     );
@@ -127,7 +136,7 @@ const Inventario: React.FC = () => {
 
       {/* Vehicle grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filteredVehicles.map((vehicle, idx) => (
+        {filteredVehicles.map((vehicle) => (
           <VehicleCard
             key={vehicle.id}
             vehicle={vehicle}
@@ -140,7 +149,7 @@ const Inventario: React.FC = () => {
               generalesIndex,
               inversionesVehiculo,
             )}
-            listaIndice={idx + 1}
+            listaIndice={getVehicleDisplayNumber(vehicle)}
             conductores={conductores}
             canAssignConductor={canRegister}
             onAsignarConductor={() => setAssignVehicle(vehicle)}

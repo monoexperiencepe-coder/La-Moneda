@@ -5,6 +5,7 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import Card from '../Common/Card';
 import { Mantenimiento, Vehicle } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { TIPOS_DOCUMENTO, TIPOS_DOMICILIO } from '../../data/catalogs';
 import { todayStr } from '../../utils/formatting';
 
@@ -104,7 +105,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({ vehicles, onSubmit })
             <Select
               label="Carro Asignado"
               options={vehicles.filter(v => v.activo).map(v => ({
-                value: v.id, label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+                value: v.id, label: formatVehicleSelectLabel(v),
               }))}
               value={form.vehicleId}
               placeholder="Seleccionar vehículo..."

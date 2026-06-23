@@ -3,6 +3,7 @@ import DocumentationForm from '../Forms/DocumentationForm';
 import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Documentacion, Vehicle } from '../../data/types';
+import { formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { vehicleIdSortRank } from '../../utils/sortByVehicle';
 import { formatDate, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { FileText, Car, AlertTriangle } from 'lucide-react';
@@ -83,7 +84,7 @@ const DocumentacionView: React.FC<DocumentacionViewProps> = ({ vehicles, documen
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})` : `Carro #${d.vehicleId}`}
+                          {vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})` : formatVehicleIdFallback(d.vehicleId)}
                         </p>
                         <p className="text-xs text-gray-400">{d.motivo} · {formatDate(d.fecha)}</p>
                       </div>

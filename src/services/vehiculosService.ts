@@ -12,6 +12,23 @@ function resolveTenantId(tenantEmpresaId?: string | null): string | null {
 
 export type InsertVehiculoInput = Omit<Vehicle, 'id'>;
 
+async function fetchNextNumeroUnidad(empresaId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('vehiculos')
+    .select('numero_unidad')
+    .eq('empresa_id', empresaId)
+    .not('numero_unidad', 'is', null)
+    .order('numero_unidad', { ascending: false })
+    .limit(1);
+  if (error) {
+    console.error('[vehiculos next numero_unidad]', error.message);
+    return 1;
+  }
+  const max = data?.[0]?.numero_unidad;
+  const n = max != null && Number.isFinite(Number(max)) ? Math.round(Number(max)) : 0;
+  return n + 1;
+}
+
 /** Comprueba si ya existe un vehículo con la misma placa (normalizada) en el tenant. */
 export async function vehiculoPlacaExists(
   placa: string,
@@ -47,6 +64,7 @@ export async function fetchVehiculos(tenantEmpresaId?: string | null): Promise<V
       .from('vehiculos')
       .select('*')
       .eq('empresa_id', empresaId)
+      .order('numero_unidad', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true });
     if (error) {
       console.error('[vehiculos]', error.message);
@@ -83,6 +101,7 @@ export async function insertVehiculo(
     marca,
     modelo,
     color: row.color?.trim() || undefined,
+    numeroUnidad: await fetchNextNumeroUnidad(empresaId),
   });
 
   const { data, error } = await supabase
@@ -103,6 +122,7 @@ export async function insertVehiculo(
   if (import.meta.env.DEV && created) {
     console.log('[vehiculos:insert]', {
       id: created.id,
+      numeroUnidad: created.numeroUnidad,
       placa: created.placa,
       activo: created.activo,
     });

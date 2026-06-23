@@ -97,14 +97,21 @@ function numOrNull(v: unknown): number | null {
 }
 
 export function mapVehiculoRow(r: Record<string, unknown>): Vehicle {
+  const numeroRaw = r.numero_unidad;
+  const numeroUnidad =
+    numeroRaw != null && numeroRaw !== '' && Number.isFinite(Number(numeroRaw))
+      ? Math.round(Number(numeroRaw))
+      : null;
   return {
     id: num(r.id),
+    numeroUnidad,
     marca: str(r.marca),
     modelo: str(r.modelo),
     placa: str(r.placa),
     anio: r.anio != null && r.anio !== '' ? num(r.anio) : undefined,
     color: strOrNull(r.color) ?? undefined,
     activo: r.activo === undefined ? true : bool(r.activo),
+    propietarioNombre: strOrNull(r.propietario_nombre),
   };
 }
 
@@ -112,7 +119,7 @@ export function vehiculoToInsert(
   empresaId: string,
   row: Omit<Vehicle, 'id'>,
 ): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     marca: row.marca.trim(),
     modelo: row.modelo.trim(),
@@ -121,6 +128,13 @@ export function vehiculoToInsert(
     color: row.color?.trim() ? row.color.trim() : null,
     activo: row.activo,
   };
+  if (row.numeroUnidad != null && Number.isFinite(row.numeroUnidad) && row.numeroUnidad > 0) {
+    payload.numero_unidad = Math.round(row.numeroUnidad);
+  }
+  if (row.propietarioNombre !== undefined) {
+    payload.propietario_nombre = row.propietarioNombre?.trim() || null;
+  }
+  return payload;
 }
 
 export function vehiculoPatchToSnake(
@@ -137,6 +151,15 @@ export function vehiculoPatchToSnake(
     out.color = patch.color?.trim() ? patch.color.trim() : null;
   }
   if (patch.activo !== undefined) out.activo = patch.activo;
+  if (patch.numeroUnidad !== undefined) {
+    out.numero_unidad =
+      patch.numeroUnidad != null && Number.isFinite(patch.numeroUnidad) && patch.numeroUnidad > 0
+        ? Math.round(patch.numeroUnidad)
+        : null;
+  }
+  if (patch.propietarioNombre !== undefined) {
+    out.propietario_nombre = patch.propietarioNombre?.trim() || null;
+  }
   return out;
 }
 

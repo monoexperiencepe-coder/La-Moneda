@@ -1,18 +1,28 @@
 import type { Vehicle } from '../data/types';
+import { getVehicleDisplayNumber } from './vehicleDisplayNumber';
+
+function resolveVehicleIdFromSearchNumber(vehicles: readonly Vehicle[], n: number): number | null {
+  if (!Number.isFinite(n)) return null;
+  const byDisplay = vehicles.find((v) => getVehicleDisplayNumber(v) === n);
+  if (byDisplay) return byDisplay.id;
+  const byTech = vehicles.find((v) => v.id === n);
+  return byTech ? byTech.id : null;
+}
 
 /**
- * Extrae N° de vehículo mencionados en el texto de búsqueda (solo IDs que existan en `vehicles`).
+ * Extrae N° de vehículo mencionados en el texto de búsqueda (solo IDs técnicos que existan en `vehicles`).
+ * Soporta número visible (#83) o id técnico legacy (#178).
  * Soporta: #12, carro 3, vehículo 5, unidad 2, id 8, nº 4, o solo el número si el query completo coincide con un id válido.
  */
 export function extractVehicleSearchIds(raw: string, vehicles: Vehicle[]): number[] {
   const q = raw.trim();
   if (!q || vehicles.length === 0) return [];
 
-  const validIds = new Set(vehicles.map((v) => v.id));
   const found = new Set<number>();
 
   const tryAdd = (n: number) => {
-    if (Number.isFinite(n) && validIds.has(n)) found.add(n);
+    const id = resolveVehicleIdFromSearchNumber(vehicles, n);
+    if (id != null) found.add(id);
   };
 
   for (const m of q.matchAll(/#\s*(\d+)/gi)) {

@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, UserCog, Pencil } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate } from '../../utils/formatting';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { conductorAsignadoLabel, formatConductorDisplayLabel } from '../../utils/fleetPanel';
@@ -262,7 +263,10 @@ const VehiculoDetalle: React.FC = () => {
               <Badge variant={vehicle.activo ? 'success' : 'neutral'} dot>
                 {vehicle.activo ? 'Activo' : 'Inactivo'}
               </Badge>
-              <span className="text-xs text-gray-500">Centro de control · unidad #{vehicle.id}</span>
+              <span className="text-xs text-gray-500">
+                Centro de control · unidad #{getVehicleDisplayNumber(vehicle)}
+                <span className="text-gray-400"> · ID {vehicle.id}</span>
+              </span>
             </div>
           </div>
         </div>

@@ -12,6 +12,7 @@ import {
 } from '../../utils/utilidadReal';
 import { tipoGastoEffective } from '../../utils/gastosTipoGasto';
 import { labelTipoGastoFinanciero } from '../../utils/tipoGastoLabels';
+import { findVehicleByDisplayNumber, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 type MontoRow = { key: string; label: string; total: number; count: number };
 
@@ -73,7 +74,7 @@ export async function buildUtilidadVehiculoDetallePayload(
   numero: number,
 ): Promise<Record<string, unknown>> {
   const { vehicles, ingresos, gastosAll } = await getCachedFinanzasVehiculoBundle(empresaId);
-  const vehicle = vehicles.find((v) => v.id === numero) ?? null;
+  const vehicle = findVehicleByDisplayNumber(vehicles, numero);
   if (!vehicle) {
     return {
       encontrado: false,
@@ -82,13 +83,15 @@ export async function buildUtilidadVehiculoDetallePayload(
     };
   }
 
+  const vehicleId = vehicle.id;
+  const displayNum = getVehicleDisplayNumber(vehicle);
   const gastosVisibles = filterGastosForUser(user, gastosAll);
   const { ingresosTotal, gastosTotal, utilidadReal } = calcularUtilidadRealVehiculo(
-    numero,
+    vehicleId,
     ingresos,
     gastosVisibles,
   );
-  const gastosV = gastosVehiculoUtilidad(gastosVisibles, numero);
+  const gastosV = gastosVehiculoUtilidad(gastosVisibles, vehicleId);
 
   const porTipoGasto = sumGroup(
     gastosV,
@@ -126,8 +129,8 @@ export async function buildUtilidadVehiculoDetallePayload(
     _tipo_metrica: 'utilidad_vehiculo_detalle',
     _preserve_summary: true,
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: displayNum,
+    vehicleId,
     placa: vehicle.placa,
     ingresos: ingresosTotal,
     gastos: gastosTotal,
@@ -151,7 +154,7 @@ export async function buildGastosVehiculoDesglosePayload(
   filtroTexto?: string,
 ): Promise<Record<string, unknown>> {
   const { vehicles, gastosAll } = await getCachedFinanzasVehiculoBundle(empresaId);
-  const vehicle = vehicles.find((v) => v.id === numero) ?? null;
+  const vehicle = findVehicleByDisplayNumber(vehicles, numero);
   if (!vehicle) {
     return {
       encontrado: false,
@@ -160,8 +163,10 @@ export async function buildGastosVehiculoDesglosePayload(
     };
   }
 
+  const vehicleId = vehicle.id;
+  const displayNum = getVehicleDisplayNumber(vehicle);
   const gastosVisibles = filterGastosForUser(user, gastosAll);
-  let gastosV = gastosVehiculoUtilidad(gastosVisibles, numero);
+  let gastosV = gastosVehiculoUtilidad(gastosVisibles, vehicleId);
   const totalSinFiltro = gastosV.reduce((s, g) => s + g.monto, 0);
 
   if (filtroTexto?.trim()) {
@@ -200,8 +205,8 @@ export async function buildGastosVehiculoDesglosePayload(
     _tipo_metrica: 'gastos_vehiculo_desglose',
     _preserve_summary: true,
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: displayNum,
+    vehicleId,
     placa: vehicle.placa,
     filtroTexto: filtroTexto?.trim() || null,
     total,

@@ -5,6 +5,10 @@ import Input from '../Common/Input';
 import Select from '../Common/Select';
 import type { Vehicle } from '../../data/types';
 import {
+  formatVehicleLabelFull,
+  vehicleFleetSortKey,
+} from '../../utils/vehicleDisplayNumber';
+import {
   PENDIENTE_PRIORIDADES_V2,
   PENDIENTE_RELACION_TIPOS,
   PENDIENTE_TIPOS,
@@ -35,9 +39,9 @@ const PendienteFormPanel: React.FC<PendienteFormPanelProps> = ({
   const showRelId = values.relacionadoTipo !== 'ninguno';
   const vehicleOpts = [
     { value: '', label: '— Elegir —' },
-    ...[...vehicles].sort((a, b) => a.id - b.id).map((v) => ({
+    ...[...vehicles].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b)).map((v) => ({
       value: String(v.id),
-      label: `#${v.id} ${v.marca} ${v.modelo} (${v.placa})`,
+      label: formatVehicleLabelFull(v),
     })),
   ];
 

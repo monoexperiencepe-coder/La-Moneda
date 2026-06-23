@@ -7,6 +7,7 @@ import Card from '../Common/Card';
 import MetodoCuentaPicker from '../Common/MetodoCuentaPicker';
 import PeriodoPagoModal from '../Ingreso/PeriodoPagoModal';
 import { Gasto, Vehicle } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import {
   TIPOS_GASTO_FACT,
   getSubtiposGasto,
@@ -716,7 +717,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   }
                   options={vehicles.filter((v) => v.activo).map((v) => ({
                     value: String(v.id),
-                    label: `#${v.id} — ${v.marca} ${v.modelo} (${v.placa})`,
+                    label: formatVehicleSelectLabel(v),
                   }))}
                   value={form.vehicleId}
                   placeholder="General / sin vehículo"

@@ -1,11 +1,14 @@
 export interface Vehicle {
   id: number;
+  /** Número visible de unidad (#1…N); distinto del id técnico. */
+  numeroUnidad?: number | null;
   marca: string;
   modelo: string;
   placa: string;
   anio?: number;
   color?: string;
   activo: boolean;
+  propietarioNombre?: string | null;
 }
 
 export type AppRole = 'admin' | 'socio' | 'contador' | 'operador';

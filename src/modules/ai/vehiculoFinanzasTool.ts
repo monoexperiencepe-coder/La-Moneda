@@ -1,5 +1,6 @@
 /**
- * Utilidad / ingresos / gastos por número de unidad (vehicle.id).
+ * Utilidad / ingresos / gastos por número de unidad visible (numero_unidad).
+ * Las consultas usan vehicle.id (PK técnica) internamente.
  */
 import type { Gasto, Ingreso, Vehicle } from '../../data/types';
 import { getCachedFinanzasVehiculoBundle } from './aiToolDataCache';
@@ -10,9 +11,10 @@ import {
   sumIngresosVehiculoTotal,
   UTILIDAD_REAL_TOOLTIP,
 } from '../../utils/utilidadReal';
+import { findVehicleByDisplayNumber, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 function resolveVehicle(vehicles: Vehicle[], numero: number): Vehicle | null {
-  return vehicles.find((v) => v.id === numero) ?? null;
+  return findVehicleByDisplayNumber(vehicles, numero);
 }
 
 export type VehiculoFinanzasBase = {
@@ -90,16 +92,18 @@ export async function buildUtilidadVehiculoPayload(
       nota: `No se encontró vehículo #${numero}.`,
     };
   }
+  const vehicleId = vehicle.id;
+  const displayNum = getVehicleDisplayNumber(vehicle);
   const gastos = filterGastosForUser(user, gastosAll);
   const { ingresosTotal, gastosTotal, utilidadReal } = calcularUtilidadRealVehiculo(
-    numero,
+    vehicleId,
     ingresos,
     gastos,
   );
   return {
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: displayNum,
+    vehicleId,
     placa: vehicle.placa,
     marca: vehicle.marca,
     modelo: vehicle.modelo,
@@ -130,18 +134,20 @@ export async function buildIngresosVehiculoPayload(
       nota: `No se encontró vehículo #${numero}.`,
     };
   }
-  const total = sumIngresosVehiculoTotal(ingresos, numero);
+  const vehicleId = vehicle.id;
+  const displayNum = getVehicleDisplayNumber(vehicle);
+  const total = sumIngresosVehiculoTotal(ingresos, vehicleId);
   return {
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: displayNum,
+    vehicleId,
     placa: vehicle.placa,
     marca: vehicle.marca,
     modelo: vehicle.modelo,
     _tipo_metrica: 'ingresos_vehiculo',
     ingresos: total,
     ingresos_total: total,
-    count: countIngresosVehiculo(ingresos, numero),
+    count: countIngresosVehiculo(ingresos, vehicleId),
     fuente: 'public.ingresos',
     nota: 'Suma histórica de ingresos del vehículo (PEN).',
   };
@@ -164,19 +170,21 @@ export async function buildGastosVehiculoPayload(
       nota: `No se encontró vehículo #${numero}.`,
     };
   }
+  const vehicleId = vehicle.id;
+  const displayNum = getVehicleDisplayNumber(vehicle);
   const gastos = filterGastosForUser(user, gastosAll);
-  const total = sumGastosVehiculoTodos(gastos, numero);
+  const total = sumGastosVehiculoTodos(gastos, vehicleId);
   return {
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: displayNum,
+    vehicleId,
     placa: vehicle.placa,
     marca: vehicle.marca,
     modelo: vehicle.modelo,
     _tipo_metrica: 'gastos_vehiculo',
     gastos: total,
     gastos_total: total,
-    count: countGastosVehiculo(gastos, numero),
+    count: countGastosVehiculo(gastos, vehicleId),
     fuente: 'public.gastos (utilidad real)',
     nota: 'Gastos operativos del vehículo incluidos en utilidad real.',
   };

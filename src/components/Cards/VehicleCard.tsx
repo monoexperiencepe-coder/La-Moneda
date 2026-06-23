@@ -9,6 +9,7 @@ import { ingresoMontoPEN } from '../../utils/moneda';
 import { calcularUtilidadRealVehiculo, UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
 import type { Moneda } from '../../data/types';
 import type { VehicleInversionDisplay } from '../../utils/vehicleInversionDisplay';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import { Eye, Edit } from 'lucide-react';
 
 interface VehicleCardProps {
@@ -115,7 +116,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-[10px] text-gray-500 font-medium tabular-nums">
-                {listaIndice != null ? <>Lista #{listaIndice} · </> : null}ID {vehicle.id}
+                Unidad #{getVehicleDisplayNumber(vehicle)}
+                <span className="text-gray-400 font-normal"> · ID {vehicle.id}</span>
               </p>
               <h3 className="text-sm font-bold text-gray-900 leading-tight">{vehicle.marca} {vehicle.modelo}</h3>
               <p className="text-[11px] text-gray-500 font-mono">{vehicle.placa}</p>

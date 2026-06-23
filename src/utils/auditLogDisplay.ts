@@ -4,6 +4,7 @@ import { toDateOnlyString } from './formatting';
 import { labelTipoGastoFinanciero } from './tipoGastoLabels';
 import { getSubtipoFinancieroLabel } from './subtipoFinancieroLabel';
 import { vehicleIdAuditScalar } from './uuidColumn';
+import { formatVehicleIdFallback } from './vehicleDisplayNumber';
 import { TIPOS_CONTROL_FECHA_OPTIONS } from '../data/controlFechaCatalog';
 
 function controlFechaTipoLabel(tipo: unknown): string {
@@ -17,11 +18,11 @@ function vehicleLabel(vehicles: Vehicle[], vehicleId: unknown): string {
   const id = typeof vehicleId === 'number' ? vehicleId : Number(vehicleId);
   if (Number.isNaN(id)) return '—';
   const v = vehicles.find((x) => x.id === id);
-  if (!v) return `#${id}`;
+  if (!v) return formatVehicleIdFallback(id);
   const p = v.placa?.trim();
   if (p) return p;
   const mm = `${v.marca} ${v.modelo}`.trim();
-  return mm || `#${id}`;
+  return mm || formatVehicleIdFallback(id);
 }
 
 function formatMontoCompact(monto: unknown, moneda: unknown): string {

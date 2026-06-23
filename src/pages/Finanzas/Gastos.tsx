@@ -13,6 +13,7 @@ import ExpenseForm from '../../components/Forms/ExpenseForm';
 import Button from '../../components/Common/Button';
 import type { Gasto } from '../../data/types';
 import { todayStr } from '../../utils/formatting';
+import { formatVehicleLabelFull, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
@@ -1515,7 +1516,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
     (vehicleId: number | null) => {
       if (!vehicleId) return 'General / sin unidad';
       const v = vehicles.find((x) => x.id === vehicleId);
-      return v ? `#${v.id} ${v.marca} ${v.modelo} (${v.placa})` : `Carro #${vehicleId}`;
+      return v ? formatVehicleLabelFull(v) : formatVehicleIdFallback(vehicleId);
     },
     [vehicles],
   );
