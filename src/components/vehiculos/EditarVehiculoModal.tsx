@@ -8,7 +8,14 @@ import {
   upsertInversionGeneralVehiculoValor,
 } from '../../services/inversionesGeneralesVehiculoService';
 import type { Vehicle } from '../../data/types';
-import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import { formatVehicleUnitLabel } from '../../utils/vehicleDisplayNumber';
+import {
+  emptyVehicleFichaTecnicaDraft,
+  fichaDraftToVehiclePatch,
+  vehicleToFichaDraft,
+  type VehicleFichaTecnicaDraft,
+} from '../../utils/vehicleFichaTecnica';
+import VehicleFichaTecnicaFields from './VehicleFichaTecnicaFields';
 
 const OBS_SEP = ' · Obs: ';
 
@@ -40,6 +47,8 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
   const [color, setColor] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [valorCompraUsd, setValorCompraUsd] = useState('');
+  const [ficha, setFicha] = useState<VehicleFichaTecnicaDraft>(() => emptyVehicleFichaTecnicaDraft());
+  const [showFicha, setShowFicha] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -50,6 +59,7 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
     setModelo(base);
     setColor(vehicle.color ?? '');
     setObservaciones(obs);
+    setFicha(vehicleToFichaDraft(vehicle));
     setValorCompraUsd('');
     setError('');
     setConfirmDelete(false);
@@ -79,6 +89,14 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
     setBusy(true);
     try {
       const updated = await updateVehicle(vehicle.id, {
+        ...fichaDraftToVehiclePatch({
+          ...ficha,
+          placa: vehicle.placa,
+          marca: vehicle.marca,
+          modelo: modeloFinal,
+          anio: vehicle.anio != null ? String(vehicle.anio) : '',
+          color,
+        }),
         modelo: modeloFinal,
         color: color.trim() || undefined,
       });
@@ -100,7 +118,7 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
     } finally {
       setBusy(false);
     }
-  }, [busy, color, modelo, observaciones, onSaved, profile?.empresa_id, resetAndClose, updateVehicle, valorCompraUsd, vehicle]);
+  }, [busy, color, ficha, modelo, observaciones, onSaved, profile?.empresa_id, resetAndClose, updateVehicle, valorCompraUsd, vehicle]);
 
   const handleDelete = useCallback(async () => {
     if (!vehicle || busy) return;
@@ -165,9 +183,7 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
           <p className="font-semibold text-gray-900">
             {vehicle.marca} · <span className="font-mono">{vehicle.placa}</span>
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Unidad #{getVehicleDisplayNumber(vehicle)} · ID sistema {vehicle.id}
-          </p>
+          <p className="text-xs text-gray-500 mt-0.5">{formatVehicleUnitLabel(vehicle)}</p>
         </div>
 
         {error ? (
@@ -241,6 +257,29 @@ const EditarVehiculoModal: React.FC<Props> = ({ vehicle, isOpen, onClose, onDele
               placeholder="Notas internas sobre la unidad"
             />
           </label>
+        </div>
+
+        <div className="border border-gray-100 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowFicha((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            Ficha técnica
+            <span className="text-xs text-gray-400">{showFicha ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+          {showFicha ? (
+            <div className="p-3 border-t border-gray-100">
+              <VehicleFichaTecnicaFields
+                draft={{ ...ficha, color, modelo: mergeModeloObs(modelo, observaciones) }}
+                hideIdentity
+                onChange={(p) => {
+                  if (p.color !== undefined) setColor(p.color);
+                  setFicha((prev) => ({ ...prev, ...p }));
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </Modal>

@@ -13,6 +13,10 @@ import {
 } from '../../utils/documentacionDocTone';
 import { DOC_MODULE_UI_COLUMNS } from '../../data/controlFechaCatalog';
 import type { TipoControlFecha, Vehicle } from '../../data/types';
+import {
+  formatVehicleIdPlaca,
+  vehicleFleetSortKey,
+} from '../../utils/vehicleDisplayNumber';
 
 const DOC_TIPOS = DOC_MODULE_UI_COLUMNS.map((c) => c.tipo);
 
@@ -99,7 +103,7 @@ const MobileDocCard: React.FC<{ v: Vehicle; doc: DocPivot | undefined; status: R
   <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
     <div className="flex justify-between items-start gap-2 mb-3">
       <div className="min-w-0">
-        <p className="font-bold text-gray-900 text-sm">#{v.id} · {v.placa}</p>
+        <p className="font-bold text-gray-900 text-sm">{formatVehicleIdPlaca(v)}</p>
         <p className="text-xs text-gray-500 truncate">
           {v.marca} {v.modelo}
         </p>
@@ -171,9 +175,11 @@ const Documentacion: React.FC = () => {
     else if (docQuery === 'alertas') rows = allRows.filter((r) => r.statusTone === 'late' || r.statusTone === 'soon');
     else if (soloProblemas) rows = allRows.filter((r) => r.statusTone === 'late' || r.statusTone === 'soon');
     if (sortBy === 'unidad') {
-      rows = [...rows].sort((a, b) => a.v.id - b.v.id);
+      rows = [...rows].sort((a, b) => vehicleFleetSortKey(a.v) - vehicleFleetSortKey(b.v));
     } else if (sortBy === 'vencimiento') {
-      rows = [...rows].sort((a, b) => a.nearest.localeCompare(b.nearest) || a.v.id - b.v.id);
+      rows = [...rows].sort(
+        (a, b) => a.nearest.localeCompare(b.nearest) || vehicleFleetSortKey(a.v) - vehicleFleetSortKey(b.v),
+      );
     } else {
       rows = [...rows].sort((a, b) => a.v.placa.localeCompare(b.v.placa));
     }
@@ -333,7 +339,7 @@ const Documentacion: React.FC = () => {
                       <tr key={v.id} className={`transition-colors border-b border-gray-50 ${rowAccent}`}>
                         <td className={`py-2.5 pl-3 pr-2 align-top ${DOC_TD_UNIT} ${unitBg}`}>
                           <div className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">
-                            #{v.id} · {v.placa}
+                            {formatVehicleIdPlaca(v)}
                           </div>
                           <div className="text-[10px] text-gray-500 truncate max-w-[9rem] sm:max-w-[13rem]">
                             {v.marca} {v.modelo}

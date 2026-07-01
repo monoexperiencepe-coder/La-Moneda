@@ -7,6 +7,14 @@ import { upsertInversionGeneralVehiculoValor } from '../../services/inversionesG
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { normalizePlaca, placasMatch } from '../../utils/normalizePlaca';
 import type { InsertVehiculoInput } from '../../services/vehiculosService';
+import {
+  emptyVehicleFichaTecnicaDraft,
+  fichaDraftToVehiclePatch,
+  fichaTechnicalFromDraft,
+  vehicleToFichaDraft,
+  type VehicleFichaTecnicaDraft,
+} from '../../utils/vehicleFichaTecnica';
+import VehicleFichaTecnicaFields from './VehicleFichaTecnicaFields';
 
 type EstadoForm = 'activo' | 'inactivo';
 
@@ -33,6 +41,8 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) =>
   const { vehicles, conductores, addVehicle } = useRegistrosContext();
   const { profile } = useAuth();
   const [form, setForm] = useState(emptyForm);
+  const [ficha, setFicha] = useState<VehicleFichaTecnicaDraft>(emptyVehicleFichaTecnicaDraft);
+  const [showFicha, setShowFicha] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +56,8 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) =>
 
   const resetAndClose = useCallback(() => {
     setForm(emptyForm());
+    setFicha(emptyVehicleFichaTecnicaDraft());
+    setShowFicha(false);
     setError('');
     onClose();
   }, [onClose]);
@@ -84,6 +96,7 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) =>
       anio,
       color: form.color.trim() || undefined,
       activo: form.estado === 'activo',
+      ...fichaTechnicalFromDraft({ ...ficha, color: form.color }),
     };
 
     setBusy(true);
@@ -104,7 +117,7 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) =>
     } finally {
       setBusy(false);
     }
-  }, [addVehicle, busy, form, onSaved, profile?.empresa_id, resetAndClose, vehicles]);
+  }, [addVehicle, busy, ficha, form, onSaved, profile?.empresa_id, resetAndClose, vehicles]);
 
   return (
     <Modal
@@ -232,6 +245,29 @@ const RegistrarVehiculoForm: React.FC<Props> = ({ isOpen, onClose, onSaved }) =>
               <p className="mt-1 text-xs text-gray-500">No hay conductores vigentes sin vehículo asignado.</p>
             ) : null}
           </label>
+        </div>
+
+        <div className="border border-gray-100 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowFicha((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            Ficha técnica (opcional)
+            <span className="text-xs text-gray-400">{showFicha ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+          {showFicha ? (
+            <div className="p-3 border-t border-gray-100">
+              <VehicleFichaTecnicaFields
+                draft={{ ...ficha, color: form.color }}
+                hideIdentity
+                onChange={(p) => {
+                  if (p.color !== undefined) setForm((prev) => ({ ...prev, color: p.color ?? '' }));
+                  setFicha((prev) => ({ ...prev, ...p }));
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </Modal>

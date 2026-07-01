@@ -31,6 +31,7 @@ import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import {
   getDefaultFactTipoSubtipoForOperativoCanon,
   getOperativoSubtipoLabel,
+  normalizeOperativoSubtipo,
 } from '../../utils/operativoSubtipo';
 import {
   getDefaultFactTipoSubtipoForInversionCanon,
@@ -43,6 +44,8 @@ import {
   tipoGastoUsaSubtipoAdministrativoCanon,
   tipoGastoUsaSubtipoFinancieroCanon,
   tipoGastoUsaSubtipoOperativo,
+  tipoGastoRequiereVehiculo,
+  getDefaultSubtipoForTipoGasto,
 } from '../../utils/gastoMoveCategoriaDefaults';
 import {
   getDefaultFactTipoSubtipoForFinancieroSubtipo,
@@ -251,7 +254,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   }, [prefillVehicleId]);
 
   useEffect(() => {
-    if (form.categoriaFinanciera === 'gastos_globales') {
+    if (form.categoriaFinanciera === 'gastos_globales' || form.categoriaFinanciera === 'operativo_flota_general') {
       setForm((f) => (f.vehicleId ? { ...f, vehicleId: '' } : f));
     }
   }, [form.categoriaFinanciera]);
@@ -351,23 +354,23 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
   const buildExpenseValidationErrors = (): Partial<Record<keyof FormState, string>> => {
     const newErrors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.categoriaFinanciera) newErrors.categoriaFinanciera = 'Elige categoría financiera';
+    const cat = form.categoriaFinanciera;
+    if (!cat) newErrors.categoriaFinanciera = 'Elige categoría financiera';
     if (!form.fecha) newErrors.fecha = 'La fecha de movimiento es requerida';
-    const esFinancieroCanon =
-      form.categoriaFinanciera && tipoGastoUsaSubtipoFinancieroCanon(form.categoriaFinanciera);
-    const esAdministrativoCanon =
-      form.categoriaFinanciera && tipoGastoUsaSubtipoAdministrativoCanon(form.categoriaFinanciera);
-    if (!esFinancieroCanon && !esAdministrativoCanon) {
+    const esFinancieroCanon = cat && tipoGastoUsaSubtipoFinancieroCanon(cat);
+    const esAdministrativoCanon = cat && tipoGastoUsaSubtipoAdministrativoCanon(cat);
+    const esOperativoCanon = cat && tipoGastoUsaSubtipoOperativo(cat);
+    if (!esFinancieroCanon && !esAdministrativoCanon && !esOperativoCanon) {
       if (!form.tipo) {
         newErrors.tipo = 'Selecciona el tipo de gasto';
-      } else if (form.categoriaFinanciera && form.categoriaFinanciera !== 'representacion_interna') {
-        const permitidos = getFactTiposForFinanza(form.categoriaFinanciera);
+      } else if (cat && cat !== 'representacion_interna') {
+        const permitidos = getFactTiposForFinanza(cat);
         if (!permitidos.includes(form.tipo)) {
           newErrors.tipo = 'Elige un tipo Fact válido para esta categoría';
         }
       }
     }
-    if (form.categoriaFinanciera === 'representacion_interna') {
+    if (cat === 'representacion_interna') {
       if (!form.subtipoRepresentacion.trim()) {
         newErrors.subtipoRepresentacion = 'Elige subtipo de representación interna';
       }
@@ -379,12 +382,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       if (!form.subtipoAdministrativoCanon.trim()) {
         newErrors.subtipoAdministrativoCanon = 'Elige subtipo administrativo';
       }
-    } else if (
-      form.categoriaFinanciera &&
-      tipoGastoUsaSubtipoOperativo(form.categoriaFinanciera)
-    ) {
-      if (!form.subtipoOperativoCanon.trim()) {
+    } else if (esOperativoCanon) {
+      const rawCanon = form.subtipoOperativoCanon.trim();
+      if (!rawCanon) {
         newErrors.subtipoOperativoCanon = 'Elige subtipo operativo';
+      } else if (!normalizeOperativoSubtipo(rawCanon)) {
+        newErrors.subtipoOperativoCanon = 'Subtipo operativo no válido para esta categoría';
       }
     } else if (subtipos.length > 0 && !form.subTipo) {
       newErrors.subTipo = 'Selecciona sub tipo';
@@ -394,7 +397,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       newErrors.monto = 'Ingresa un monto válido';
     }
     if (!form.metodoPagoDetalle.trim()) newErrors.metodoPagoDetalle = 'Selecciona la cuenta de pago';
-    if (form.categoriaFinanciera === 'operativo_vehiculo' && !form.vehicleId.trim()) {
+    if (cat && tipoGastoRequiereVehiculo(cat) && !form.vehicleId.trim()) {
       newErrors.vehicleId = 'Operativo por vehículo: indica el N° de unidad.';
     }
     return newErrors;
@@ -407,6 +410,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     const esRep = catFin === 'representacion_interna';
     const esFinanciero = tipoGastoUsaSubtipoFinancieroCanon(catFin);
     const esAdministrativo = tipoGastoUsaSubtipoAdministrativoCanon(catFin);
+    const esOperativo = tipoGastoUsaSubtipoOperativo(catFin);
     const subtipoFinCanon = esFinanciero
       ? (normalizeFinancieroPrestamoSubtipo(form.subtipoFinancieroCanon)
         ?? form.subtipoFinancieroCanon.trim())
@@ -415,11 +419,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       ? (normalizeAdministrativoSubtipo(form.subtipoAdministrativoCanon)
         ?? form.subtipoAdministrativoCanon.trim())
       : '';
+    const subtipoOpCanon = esOperativo
+      ? (normalizeOperativoSubtipo(form.subtipoOperativoCanon)
+        ?? form.subtipoOperativoCanon.trim())
+      : '';
     const factDerived = esFinanciero
       ? getDefaultFactTipoSubtipoForFinancieroSubtipo(subtipoFinCanon)
       : esAdministrativo
         ? getDefaultFactTipoSubtipoForAdministrativoSubtipo(subtipoAdminCanon)
-        : null;
+        : esOperativo && subtipoOpCanon
+          ? getDefaultFactTipoSubtipoForOperativoCanon(subtipoOpCanon)
+          : null;
     const factTipo = esRep
       ? REPRESENTACION_INTERNA_FACT_TIPO
       : factDerived?.tipo ?? form.tipo;
@@ -433,8 +443,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         ? subtipoFinCanon
         : esAdministrativo
           ? subtipoAdminCanon
-          : tipoGastoUsaSubtipoOperativo(catFin)
-          ? form.subtipoOperativoCanon.trim()
+          : esOperativo
+          ? subtipoOpCanon
           : esInversion
             ? (normalizeInversionSubtipo(form.subtipoInversionCanon) ?? 'adquisicion_vehiculo')
             : (form.subTipo || null)
@@ -446,8 +456,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
         ? getFinancieroPrestamoSubtipoLabel(subtipoFin)
         : esAdministrativo
           ? getAdministrativoSubtipoLabel(subtipoFin)
-          : tipoGastoUsaSubtipoOperativo(catFin) && form.subtipoOperativoCanon.trim()
-          ? getOperativoSubtipoLabel(form.subtipoOperativoCanon.trim())
+          : esOperativo && subtipoOpCanon
+          ? getOperativoSubtipoLabel(subtipoOpCanon)
           : esInversion && form.subtipoInversionCanon.trim()
             ? getInversionSubtipoLabel(form.subtipoInversionCanon.trim())
             : (form.subTipo || form.tipo);
@@ -487,6 +497,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     const newErrors = buildExpenseValidationErrors();
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
+      if (import.meta.env.DEV) {
+        console.warn('[gasto:create:validation_errors]', newErrors);
+      }
       console.warn('[gasto:create:validation_blocked]', {
         reason: 'client_validation',
         errors: newErrors,
@@ -571,7 +584,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 };
               }
               if (cat === 'operativo_vehiculo' || cat === 'operativo_flota_general') {
-                const canon = 'motor';
+                const canon =
+                  normalizeOperativoSubtipo(getDefaultSubtipoForTipoGasto(cat))
+                  ?? getDefaultSubtipoForTipoGasto(cat);
                 const { tipo: tOp, subTipo: sOp } = getDefaultFactTipoSubtipoForOperativoCanon(canon);
                 return {
                   ...p,
@@ -581,6 +596,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   subtipoOperativoCanon: canon,
                   subtipoRepresentacion: '',
                   subtipoFinancieroCanon: '',
+                  subtipoAdministrativoCanon: '',
                   vehicleId: cat === 'operativo_flota_general' ? '' : p.vehicleId,
                 };
               }
@@ -900,9 +916,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     placeholder="Seleccionar…"
                     onChange={(v) => {
                       if (!v) return;
-                      const { tipo: tOp, subTipo: sOp } = getDefaultFactTipoSubtipoForOperativoCanon(v);
-                      setForm((p) => ({ ...p, subtipoOperativoCanon: v, tipo: tOp, subTipo: sOp }));
-                      setErrors((e) => ({ ...e, subtipoOperativoCanon: '' }));
+                      const canon = normalizeOperativoSubtipo(v) ?? v;
+                      const { tipo: tOp, subTipo: sOp } =
+                        getDefaultFactTipoSubtipoForOperativoCanon(canon);
+                      setForm((p) => ({
+                        ...p,
+                        subtipoOperativoCanon: canon,
+                        tipo: tOp,
+                        subTipo: sOp,
+                      }));
+                      setErrors((e) => ({ ...e, subtipoOperativoCanon: '', tipo: '' }));
                     }}
                     error={errors.subtipoOperativoCanon}
                     required

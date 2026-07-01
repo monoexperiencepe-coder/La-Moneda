@@ -1,6 +1,10 @@
 import type { Conductor, Vehicle } from '../../data/types';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { normalizePlaca, placasMatch } from '../../utils/normalizePlaca';
+import {
+  findVehicleByDisplayNumber,
+  getVehicleDisplayNumber,
+} from '../../utils/vehicleDisplayNumber';
 
 function dedupeConductores(conductores: readonly Conductor[]): Conductor[] {
   const seen = new Set<string>();
@@ -341,13 +345,13 @@ export type VehiculoPorNumeroPayload = {
   fuente: 'public.vehiculos';
 };
 
-/** Busca vehículo por id/unidad (#3 → vehicles.id === 3). */
+/** Busca vehículo por número visible (numero_unidad) o, en transición, por id técnico. */
 export function getVehiculoPorNumero(
   vehicles: readonly Vehicle[],
   conductores: readonly Conductor[],
   numero: number,
 ): VehiculoPorNumeroPayload {
-  const v = vehicles.find((x) => x.id === numero) ?? null;
+  const v = findVehicleByDisplayNumber(vehicles, numero);
   if (!v) {
     return {
       encontrado: false,
@@ -365,7 +369,7 @@ export function getVehiculoPorNumero(
   return {
     encontrado: true,
     vehicleId: v.id,
-    numeroUnidad: v.id,
+    numeroUnidad: getVehicleDisplayNumber(v),
     placa: v.placa,
     marca: v.marca,
     modelo: v.modelo,
@@ -421,7 +425,7 @@ export function getConductorPorNumero(
     nombre: formatConductorDisplayLabel(c),
     estado: c.estado,
     vehiculoAsignado: v
-      ? { id: v.id, placa: v.placa, numeroUnidad: v.id }
+      ? { id: v.id, placa: v.placa, numeroUnidad: getVehicleDisplayNumber(v) }
       : null,
     fuente: 'public.conductores',
   };

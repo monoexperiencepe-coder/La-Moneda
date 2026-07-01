@@ -9,6 +9,7 @@ import { fetchKilometrajes } from '../../services/kilometrajesService';
 import { fetchVehiculos } from '../../services/vehiculosService';
 import { diffDaysFromToday, DIAS_ALERTA_SIN_INGRESO } from '../../utils/fleetPanel';
 import { buildKmControlRows, kmMantenimientoAlertDetail } from '../../utils/kmMantenimientoControl';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 export type AlertasDetalleTipo =
   | 'documentos_vencidos'
@@ -49,7 +50,8 @@ function fmtTipo(tipo: string): string {
 }
 
 function makeItem(
-  vehiculo: number,
+  vehicleId: number,
+  numeroUnidad: number,
   placa: string,
   motivo: string,
   diasRestantes: number | null,
@@ -58,12 +60,12 @@ function makeItem(
   modelo: string,
 ): AlertaDetalleItem {
   return {
-    vehiculo,
+    vehiculo: numeroUnidad,
     placa,
     motivo,
     diasRestantes,
-    vehicleId: vehiculo,
-    numeroUnidad: vehiculo,
+    vehicleId,
+    numeroUnidad,
     detail: motivo,
     categoria,
     marca,
@@ -85,7 +87,7 @@ function rowToItem(
     d < 0
       ? `${fmtTipo(c.tipo)} · vencido hace ${Math.abs(d)} días (${c.fechaVencimiento})`
       : `${fmtTipo(c.tipo)} · vence en ${d} días (${c.fechaVencimiento})`;
-  return makeItem(vid, v.placa, motivo, d, categoria, v.marca, v.modelo);
+  return makeItem(vid, getVehicleDisplayNumber(v), v.placa, motivo, d, categoria, v.marca, v.modelo);
 }
 
 function buildSinIngresoItems(vehicles: Vehicle[], ingresos: Ingreso[], umbral: number): AlertaDetalleItem[] {
@@ -100,6 +102,7 @@ function buildSinIngresoItems(vehicles: Vehicle[], ingresos: Ingreso[], umbral: 
       items.push(
         makeItem(
           v.id,
+          getVehicleDisplayNumber(v),
           v.placa,
           `${dias} días sin ingreso registrado`,
           dias,
@@ -126,7 +129,18 @@ function buildMantenimientoItems(
     const v = vehicles.find((x) => x.id === r.vehicleId && x.activo);
     if (!v || r.diffKm == null) continue;
     const motivo = kmMantenimientoAlertDetail(r);
-    items.push(makeItem(r.vehicleId, v.placa, motivo, null, 'mantenimientos', v.marca, v.modelo));
+    items.push(
+      makeItem(
+        r.vehicleId,
+        getVehicleDisplayNumber(v),
+        v.placa,
+        motivo,
+        null,
+        'mantenimientos',
+        v.marca,
+        v.modelo,
+      ),
+    );
   }
   return items;
 }

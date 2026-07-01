@@ -8,6 +8,7 @@ import { formatDate, todayStr } from '../../utils/formatting';
 import { esControlFechaExcluidoDeEstadoVencido } from '../../data/controlFechaCatalog';
 import { buildOperativeAlerts, countAlertsByKind } from '../../utils/buildOperativeAlerts';
 import { gastosOperativosSolamente } from '../../utils/cajaNegocio';
+import { formatVehiclePlacaMarcaLabel, vehicleFleetSortKey } from '../../utils/vehicleDisplayNumber';
 
 const ID_TIPOS_INGRESO = ['ALQUILER', 'GARANTIA', 'PAPELETAS', 'CHOQUES / DANOS', 'INTERESES', 'PRESTAMOS'];
 const ID_G_MECANICOS = ['AIRE A/C', 'AUTOPARTES', 'Batería', 'DIRECCION Y SUSPENSION', 'GNV', 'GPS'];
@@ -78,7 +79,7 @@ const ControlGlobal: React.FC = () => {
         const rank = { CRITICO: 0, ALERTA: 1, OK: 2 };
         const r = rank[a.estadoGeneral] - rank[b.estadoGeneral];
         if (r !== 0) return r;
-        return a.vehicle.id - b.vehicle.id;
+        return vehicleFleetSortKey(a.vehicle) - vehicleFleetSortKey(b.vehicle);
       });
   }, [vehicles, controlFechas, ingresos, gastos]);
 
@@ -254,7 +255,7 @@ const ControlGlobal: React.FC = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-bold text-gray-900 text-sm leading-tight">
-                        #{v.id} — {v.marca} {v.modelo}
+                        {formatVehiclePlacaMarcaLabel(v)}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">{v.placa}</p>
                     </div>

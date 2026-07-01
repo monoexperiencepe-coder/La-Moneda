@@ -12,6 +12,13 @@ function resolveTenantId(tenantEmpresaId?: string | null): string | null {
 
 export type InsertVehiculoInput = Omit<Vehicle, 'id'>;
 
+function assertValidNumeroUnidad(n: number): number {
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+    throw new Error('No se pudo asignar número de unidad');
+  }
+  return n;
+}
+
 async function fetchNextNumeroUnidad(empresaId: string): Promise<number> {
   const { data, error } = await supabase
     .from('vehiculos')
@@ -22,11 +29,11 @@ async function fetchNextNumeroUnidad(empresaId: string): Promise<number> {
     .limit(1);
   if (error) {
     console.error('[vehiculos next numero_unidad]', error.message);
-    return 1;
+    throw new Error('No se pudo asignar número de unidad');
   }
   const max = data?.[0]?.numero_unidad;
   const n = max != null && Number.isFinite(Number(max)) ? Math.round(Number(max)) : 0;
-  return n + 1;
+  return assertValidNumeroUnidad(n + 1);
 }
 
 /** Comprueba si ya existe un vehículo con la misma placa (normalizada) en el tenant. */
@@ -95,13 +102,15 @@ export async function insertVehiculo(
     throw new Error(`Ya existe un vehículo con la placa ${placa}.`);
   }
 
+  const nextNumeroUnidad = assertValidNumeroUnidad(await fetchNextNumeroUnidad(empresaId));
+
   const payload = vehiculoToInsert(empresaId, {
     ...row,
     placa,
     marca,
     modelo,
     color: row.color?.trim() || undefined,
-    numeroUnidad: await fetchNextNumeroUnidad(empresaId),
+    numeroUnidad: nextNumeroUnidad,
   });
 
   const { data, error } = await supabase
@@ -119,14 +128,16 @@ export async function insertVehiculo(
   }
 
   const created = data ? mapVehiculoRow(data as Record<string, unknown>) : null;
-  if (import.meta.env.DEV && created) {
-    console.log('[vehiculos:insert]', {
-      id: created.id,
-      numeroUnidad: created.numeroUnidad,
-      placa: created.placa,
-      activo: created.activo,
-    });
+  if (!created?.numeroUnidad || !Number.isFinite(created.numeroUnidad) || created.numeroUnidad <= 0) {
+    throw new Error('Vehículo creado sin número de unidad');
   }
+
+  console.log('[vehiculos:create:numero_unidad]', {
+    id: created.id,
+    placa: created.placa,
+    numeroUnidad: created.numeroUnidad,
+  });
+
   return created;
 }
 

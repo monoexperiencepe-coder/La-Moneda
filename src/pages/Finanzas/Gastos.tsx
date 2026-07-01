@@ -13,7 +13,7 @@ import ExpenseForm from '../../components/Forms/ExpenseForm';
 import Button from '../../components/Common/Button';
 import type { Gasto } from '../../data/types';
 import { todayStr } from '../../utils/formatting';
-import { formatVehicleLabelFull, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
+import { formatVehicleLabelFull, formatVehicleIdFallback, formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { MESES } from '../../data/catalogs';
 import { filterRowsByYearMonth } from '../../utils/filterByYearMonth';
@@ -84,7 +84,7 @@ import {
   logSubtipoInversionDebug,
   logSubtipoMoverOperativoVehiculoDebug,
 } from '../../constants/gastosSubtipos';
-import { normalizeGastoVehicleFkForDb, vehicleSelectOptionLabel } from '../../utils/vehicleId';
+import { normalizeGastoVehicleFkForDb } from '../../utils/vehicleId';
 import PendienteRevisionConciliacionPanel from '../../components/Finanzas/PendienteRevisionConciliacionPanel';
 import { cleanOperationalCommentForUi, gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import {
@@ -1595,7 +1595,7 @@ const Gastos: React.FC<GastosProps> = ({ mode = 'default', embeddedInParent = fa
       { value: '', label: 'Seleccionar vehículo' },
       ...vehicles.map((v) => ({
         value: String(v.id),
-        label: vehicleSelectOptionLabel(v),
+        label: formatVehicleSelectLabel(v),
       })),
     ],
     [vehicles],

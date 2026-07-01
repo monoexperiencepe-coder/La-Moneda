@@ -43,6 +43,11 @@ type ConductorEditState = {
   baseline: ConductorEditDraft;
 };
 import type { Conductor, TipoDocumento, TipoDomicilio } from '../../data/types';
+import {
+  formatVehicleSelectLabel,
+  formatVehicleUnitHash,
+  vehicleFleetSortKey,
+} from '../../utils/vehicleDisplayNumber';
 
 /* â”€â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 type EstadoFilter = 'TODOS' | 'VIGENTE' | 'SUSPENDIDO';
@@ -199,7 +204,7 @@ const Conductores: React.FC = () => {
   }, [vehicles]);
 
   const vehiclesSorted = useMemo(
-    () => [...vehicles].sort((a, b) => a.id - b.id),
+    () => [...vehicles].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b)),
     [vehicles],
   );
 
@@ -702,7 +707,7 @@ const Conductores: React.FC = () => {
                 <option value="">Sin vehículo asignado</option>
                 {vehiclesSorted.map((v) => (
                   <option key={v.id} value={String(v.id)}>
-                    #{v.id} · {v.placa} · {v.marca} {v.modelo}
+                    {formatVehicleSelectLabel(v)}
                   </option>
                 ))}
               </select>
@@ -933,7 +938,7 @@ const Conductores: React.FC = () => {
                     <td className={`py-2 px-2 border-b ${isEditingThisRow ? 'border-transparent' : 'border-gray-100'} whitespace-nowrap`}>
                       {v ? (
                         <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
-                          <span className="text-[11px] font-bold text-slate-700">#{v.id}</span>
+                          <span className="text-[11px] font-bold text-slate-700">{formatVehicleUnitHash(v)}</span>
                           <span className="text-[11px] text-slate-500 hidden sm:inline">{v.marca} {v.modelo}</span>
                           <span className="text-[10px] font-mono text-slate-400">{v.placa}</span>
                         </div>

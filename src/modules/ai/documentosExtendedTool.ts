@@ -9,7 +9,10 @@ import { buildControlFechasPivotMapByTipos } from '../../utils/controlFechasPivo
 import { docColumnTone } from '../../utils/documentacionDocTone';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
 import { esControlFechaExcluidoDeEstadoVencido } from '../../data/controlFechaCatalog';
-import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import {
+  findVehicleByDisplayNumber,
+  getVehicleDisplayNumber,
+} from '../../utils/vehicleDisplayNumber';
 
 export const DOCUMENTOS_CRITERIO_INVENTARIO =
   'Inventario completo: celdas documento×vehículo activo con fecha. Semáforo late/soon/ok (excl. GNV instalación, BAT compra, BAT mant.).';
@@ -141,7 +144,7 @@ export async function buildDocumentosVehiculoPayload(
     fetchVehiculos(empresaId),
     fetchLatestControlFechasByVehicle(empresaId),
   ]);
-  const vehicle = vehicles.find((v) => v.id === numero) ?? null;
+  const vehicle = findVehicleByDisplayNumber(vehicles, numero);
   if (!vehicle) {
     return {
       encontrado: false,
@@ -163,7 +166,7 @@ export async function buildDocumentosVehiculoPayload(
 
   const tipos = DOC_MODULE_UI_COLUMNS.map((c) => c.tipo);
   const pivot = buildControlFechasPivotMapByTipos(controlFechas, tipos);
-  const doc = pivot.get(numero);
+  const doc = pivot.get(vehicle.id);
 
   const faltantes: { tipo: string; label: string }[] = [];
   const vencidos: DocumentoItem[] = [];
@@ -186,8 +189,8 @@ export async function buildDocumentosVehiculoPayload(
 
   return {
     encontrado: true,
-    numeroUnidad: numero,
-    vehicleId: numero,
+    numeroUnidad: getVehicleDisplayNumber(vehicle),
+    vehicleId: vehicle.id,
     placa: vehicle.placa,
     faltantes,
     vencidos,

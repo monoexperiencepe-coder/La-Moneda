@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, UserCog, Pencil } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate } from '../../utils/formatting';
-import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import { formatVehicleUnitLabel } from '../../utils/vehicleDisplayNumber';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { conductorAsignadoLabel, formatConductorDisplayLabel } from '../../utils/fleetPanel';
@@ -34,6 +34,7 @@ import RegistrosTable from '../../components/Tables/RegistrosTable';
 import ControlFechaRegistroPanel from '../../components/operaciones/ControlFechaRegistroPanel';
 import KilometrajeMantenimientoPanel from '../../components/operaciones/KilometrajeMantenimientoPanel';
 import AsignarConductorModal from '../../components/vehiculos/AsignarConductorModal';
+import VehicleFichaTecnicaPanel from '../../components/vehiculos/VehicleFichaTecnicaPanel';
 import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
 import RegistrarIndisponibilidadModal from '../../components/vehiculos/RegistrarIndisponibilidadModal';
 import { useAuth } from '../../context/AuthContext';
@@ -57,6 +58,7 @@ type DocPivot = Partial<Record<TipoControlFecha, string>>;
 
 const TABS = [
   { id: 'resumen', label: 'Resumen' },
+  { id: 'ficha', label: 'Ficha técnica' },
   { id: 'finanzas', label: 'Finanzas' },
   { id: 'documentacion', label: 'Documentación' },
   { id: 'mantenimiento', label: 'Mantenimiento' },
@@ -106,6 +108,7 @@ const VehiculoDetalle: React.FC = () => {
     pendientes,
     getVehicleById,
     getVehicleLabel,
+    updateVehicle,
     deleteIngreso,
     deleteGasto,
     addKilometraje,
@@ -264,8 +267,7 @@ const VehiculoDetalle: React.FC = () => {
                 {vehicle.activo ? 'Activo' : 'Inactivo'}
               </Badge>
               <span className="text-xs text-gray-500">
-                Centro de control · unidad #{getVehicleDisplayNumber(vehicle)}
-                <span className="text-gray-400"> · ID {vehicle.id}</span>
+                Centro de control · {formatVehicleUnitLabel(vehicle, { lowercase: true })}
               </span>
             </div>
           </div>
@@ -591,6 +593,14 @@ const VehiculoDetalle: React.FC = () => {
             </div>
           </div>
         )}
+
+        {tab === 'ficha' && vehicle ? (
+          <VehicleFichaTecnicaPanel
+            vehicle={vehicle}
+            canEdit={canAssign}
+            onSave={(patch) => updateVehicle(vehicle.id, patch)}
+          />
+        ) : null}
 
         {tab === 'finanzas' && (
           <div className="space-y-6">

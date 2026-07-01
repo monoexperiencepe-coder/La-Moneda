@@ -112,6 +112,15 @@ export function mapVehiculoRow(r: Record<string, unknown>): Vehicle {
     color: strOrNull(r.color) ?? undefined,
     activo: r.activo === undefined ? true : bool(r.activo),
     propietarioNombre: strOrNull(r.propietario_nombre),
+    combustible: strOrNull(r.combustible),
+    tipoCarroceria: strOrNull(r.tipo_carroceria) ?? undefined,
+    numeroMotor: strOrNull(r.numero_motor) ?? undefined,
+    cantidadLlaves: r.cantidad_llaves != null && r.cantidad_llaves !== '' ? num(r.cantidad_llaves) : null,
+    gps1: strOrNull(r.gps_1) ?? undefined,
+    gps2: strOrNull(r.gps_2) ?? undefined,
+    impuesto: strOrNull(r.impuesto) ?? undefined,
+    kmInicial: r.km_inicial != null && r.km_inicial !== '' ? num(r.km_inicial) : null,
+    tarjetaPropiedad: strOrNull(r.tarjeta_propiedad) ?? undefined,
   };
 }
 
@@ -133,6 +142,22 @@ export function vehiculoToInsert(
   }
   if (row.propietarioNombre !== undefined) {
     payload.propietario_nombre = row.propietarioNombre?.trim() || null;
+  }
+  if (row.combustible !== undefined) payload.combustible = row.combustible?.trim() || null;
+  if (row.tipoCarroceria !== undefined) payload.tipo_carroceria = row.tipoCarroceria?.trim() || null;
+  if (row.numeroMotor !== undefined) payload.numero_motor = row.numeroMotor?.trim() || null;
+  if (row.cantidadLlaves !== undefined) {
+    payload.cantidad_llaves =
+      row.cantidadLlaves != null && Number.isFinite(row.cantidadLlaves) ? row.cantidadLlaves : null;
+  }
+  if (row.gps1 !== undefined) payload.gps_1 = row.gps1?.trim() || null;
+  if (row.gps2 !== undefined) payload.gps_2 = row.gps2?.trim() || null;
+  if (row.impuesto !== undefined) payload.impuesto = row.impuesto?.trim() || null;
+  if (row.kmInicial !== undefined) {
+    payload.km_inicial = row.kmInicial != null && Number.isFinite(row.kmInicial) ? row.kmInicial : null;
+  }
+  if (row.tarjetaPropiedad !== undefined) {
+    payload.tarjeta_propiedad = row.tarjetaPropiedad?.trim() || null;
   }
   return payload;
 }
@@ -159,6 +184,25 @@ export function vehiculoPatchToSnake(
   }
   if (patch.propietarioNombre !== undefined) {
     out.propietario_nombre = patch.propietarioNombre?.trim() || null;
+  }
+  if (patch.combustible !== undefined) out.combustible = patch.combustible?.trim() || null;
+  if (patch.tipoCarroceria !== undefined) out.tipo_carroceria = patch.tipoCarroceria?.trim() || null;
+  if (patch.numeroMotor !== undefined) out.numero_motor = patch.numeroMotor?.trim() || null;
+  if (patch.cantidadLlaves !== undefined) {
+    out.cantidad_llaves =
+      patch.cantidadLlaves != null && Number.isFinite(patch.cantidadLlaves)
+        ? patch.cantidadLlaves
+        : null;
+  }
+  if (patch.gps1 !== undefined) out.gps_1 = patch.gps1?.trim() || null;
+  if (patch.gps2 !== undefined) out.gps_2 = patch.gps2?.trim() || null;
+  if (patch.impuesto !== undefined) out.impuesto = patch.impuesto?.trim() || null;
+  if (patch.kmInicial !== undefined) {
+    out.km_inicial =
+      patch.kmInicial != null && Number.isFinite(patch.kmInicial) ? patch.kmInicial : null;
+  }
+  if (patch.tarjetaPropiedad !== undefined) {
+    out.tarjeta_propiedad = patch.tarjetaPropiedad?.trim() || null;
   }
   return out;
 }

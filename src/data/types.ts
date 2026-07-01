@@ -9,6 +9,16 @@ export interface Vehicle {
   color?: string;
   activo: boolean;
   propietarioNombre?: string | null;
+  /** Ficha técnica (opcional). */
+  combustible?: string | null;
+  tipoCarroceria?: string | null;
+  numeroMotor?: string | null;
+  cantidadLlaves?: number | null;
+  gps1?: string | null;
+  gps2?: string | null;
+  impuesto?: string | null;
+  kmInicial?: number | null;
+  tarjetaPropiedad?: string | null;
 }
 
 export type AppRole = 'admin' | 'socio' | 'contador' | 'operador';

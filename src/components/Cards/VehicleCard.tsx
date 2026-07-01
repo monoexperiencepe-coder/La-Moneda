@@ -9,7 +9,7 @@ import { ingresoMontoPEN } from '../../utils/moneda';
 import { calcularUtilidadRealVehiculo, UTILIDAD_REAL_TOOLTIP } from '../../utils/utilidadReal';
 import type { Moneda } from '../../data/types';
 import type { VehicleInversionDisplay } from '../../utils/vehicleInversionDisplay';
-import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import { formatVehicleUnitLabel } from '../../utils/vehicleDisplayNumber';
 import { Eye, Edit } from 'lucide-react';
 
 interface VehicleCardProps {
@@ -116,8 +116,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-[10px] text-gray-500 font-medium tabular-nums">
-                Unidad #{getVehicleDisplayNumber(vehicle)}
-                <span className="text-gray-400 font-normal"> · ID {vehicle.id}</span>
+                {formatVehicleUnitLabel(vehicle)}
               </p>
               <h3 className="text-sm font-bold text-gray-900 leading-tight">{vehicle.marca} {vehicle.modelo}</h3>
               <p className="text-[11px] text-gray-500 font-mono">{vehicle.placa}</p>
@@ -208,7 +207,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={() => navigate(`/vehiculos/${vehicle.id}`)}
+            onClick={() => navigate(`/vehiculos/${vehicle.id}?tab=ficha`)}
             className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-semibold hover:bg-primary-100 transition-colors"
           >
             <Eye size={13} /> Ver

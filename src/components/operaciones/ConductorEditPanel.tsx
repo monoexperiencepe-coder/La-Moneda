@@ -3,6 +3,7 @@ import { Save, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Vehicle } from '../../data/types';
 import type { ConductorEditDraft } from '../../utils/conductorForm';
 import type { TipoDocumento, TipoDomicilio } from '../../data/types';
+import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 
 const TIPO_DOC_OPTS: { value: TipoDocumento; label: string }[] = [
   { value: 'DNI', label: 'DNI' },
@@ -122,7 +123,7 @@ const ConductorEditPanel: React.FC<Props> = ({
           <option value="">Sin asignar</option>
           {vehiclesSorted.map((v) => (
             <option key={v.id} value={String(v.id)}>
-              #{v.id} · {v.placa} · {v.marca} {v.modelo}
+              {formatVehicleSelectLabel(v)}
             </option>
           ))}
         </select>

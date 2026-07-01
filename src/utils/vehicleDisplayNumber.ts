@@ -2,11 +2,26 @@ import type { Vehicle } from '../data/types';
 
 /** Número visible de unidad (#83); fallback al id técnico si aún no hay backfill. */
 export function getVehicleDisplayNumber(
-  vehicle: Pick<Vehicle, 'id' | 'numeroUnidad'>,
+  vehicle: Pick<Vehicle, 'id' | 'numeroUnidad'> & { placa?: string | null },
 ): number {
   const n = vehicle.numeroUnidad;
   if (n != null && Number.isFinite(n) && n > 0) return Math.round(n);
+  if (import.meta.env.DEV) {
+    console.warn('[vehiculo:display:fallback_id]', {
+      id: vehicle.id,
+      placa: vehicle.placa ?? null,
+    });
+  }
   return vehicle.id;
+}
+
+/** Etiqueta visible «Unidad #N». Sin id técnico en UI. */
+export function formatVehicleUnitLabel(
+  vehicle: Pick<Vehicle, 'id' | 'numeroUnidad'>,
+  opts?: { lowercase?: boolean },
+): string {
+  const word = opts?.lowercase ? 'unidad' : 'Unidad';
+  return `${word} #${getVehicleDisplayNumber(vehicle)}`;
 }
 
 export function formatVehicleUnitHash(vehicle: Pick<Vehicle, 'id' | 'numeroUnidad'>): string {

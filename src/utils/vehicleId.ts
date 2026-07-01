@@ -1,4 +1,5 @@
 import { UUID_REGEX_FLAT } from './uuidColumn';
+import { formatVehicleSelectLabel } from './vehicleDisplayNumber';
 
 /** Clave estable para comparar FK vehículo (bigint o uuid en BD). */
 export type VehicleIdLike = number | string | null | undefined;
@@ -35,6 +36,7 @@ export function vehicleIdsEqual(a: VehicleIdLike, b: VehicleIdLike): boolean {
 
 export type VehicleSelectLabelFields = {
   id: number | string;
+  numeroUnidad?: number | null;
   marca?: string | null;
   modelo?: string | null;
   placa?: string | null;
@@ -42,16 +44,11 @@ export type VehicleSelectLabelFields = {
 
 /** Etiqueta visible en selects de vehículo (value sigue siendo `String(id)`). */
 export function vehicleSelectOptionLabel(v: VehicleSelectLabelFields): string {
-  const idStr = String(v.id).trim();
-  const marcaModelo = [v.marca, v.modelo]
-    .map((x) => (typeof x === 'string' ? x.trim() : ''))
-    .filter(Boolean)
-    .join(' ');
-  const placa = typeof v.placa === 'string' ? v.placa.trim() : '';
-  const parts: string[] = [`Unidad ${idStr}`];
-  if (marcaModelo && placa) parts.push(`${marcaModelo} (${placa})`);
-  else if (marcaModelo) parts.push(marcaModelo);
-  else if (placa) parts.push(placa);
-  parts.push(`ID: ${idStr}`);
-  return parts.join(' · ');
+  return formatVehicleSelectLabel({
+    id: typeof v.id === 'number' ? v.id : Number(v.id) || 0,
+    numeroUnidad: v.numeroUnidad ?? null,
+    marca: v.marca ?? '',
+    modelo: v.modelo ?? '',
+    placa: v.placa ?? '',
+  });
 }
