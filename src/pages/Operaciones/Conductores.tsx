@@ -36,6 +36,10 @@ import { useDeferredRecalc } from '../../hooks/useDeferredRecalc';
 import { buildSearchHaystack, matchesSearchHaystack, normalizeSearchText } from '../../utils/recordSearch';
 import SearchField from '../../components/Common/SearchField';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import ConductorGarantiaWidget from '../../components/garantias/ConductorGarantiaWidget';
+import { isGuaranteesModuleEnabled } from '../../config/featureFlags';
+import { useAuth } from '../../context/AuthContext';
+import { permissionUserFromAuth } from '../../utils/permissions';
 
 type ConductorEditState = {
   driverId: string;
@@ -142,6 +146,8 @@ const SortTh: React.FC<{
 const Conductores: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user, profile } = useAuth();
+  const permissionUser = user ? permissionUserFromAuth(user, profile?.email ?? null) : null;
   const {
     conductores,
     vehicles,
@@ -1061,6 +1067,15 @@ const Conductores: React.FC = () => {
                           onCancel={closeEdit}
                           onSave={() => void handleSaveConductor(c.id, editState.draft, editState.baseline)}
                         />
+                        {isGuaranteesModuleEnabled() ? (
+                          <div className="mt-3 max-w-md">
+                            <ConductorGarantiaWidget
+                              driverId={c.id}
+                              empresaId={profile?.empresa_id}
+                              user={permissionUser}
+                            />
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   )}

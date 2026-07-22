@@ -93,6 +93,14 @@ export async function assignConductorToVehicle(
   };
   logFleetAssignment(log);
 
+  // FASE2_GARANTIAS: cuando FEATURE_FLAGS.GUARANTEES_AUTO_ASSIGNMENT esté activo:
+  // 1) Cerrar/abrir fila en vehicle_driver_assignments (start_date/end_date).
+  // 2) Buscar driver_guarantees activa del conductor.
+  // 3) Actualizar current_vehicle_id + required_amount según tipo auto/camioneta.
+  // 4) Registrar guarantee_movements tipo required_amount_change (sin devolución automática).
+  // 5) Nunca reutilizar garantía de otro conductor.
+  // NO implementar aquí hasta aprobar Fase 1.
+
   return { log, updatedConductores };
 }
 

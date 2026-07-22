@@ -38,12 +38,15 @@ import VehicleFichaTecnicaPanel from '../../components/vehiculos/VehicleFichaTec
 import EditarVehiculoModal from '../../components/vehiculos/EditarVehiculoModal';
 import RegistrarIndisponibilidadModal from '../../components/vehiculos/RegistrarIndisponibilidadModal';
 import { useAuth } from '../../context/AuthContext';
-import { canMutateVehiculos } from '../../utils/permissions';
+import { canMutateVehiculos, permissionUserFromAuth } from '../../utils/permissions';
 import { fetchVehicleDowntimesByVehicle } from '../../services/vehicleDowntimeService';
 import {
   calcularImpactoIndisponibilidad,
   VEHICLE_DOWNTIME_MOTIVO_LABELS,
 } from '../../utils/vehicleDowntimeImpact';
+import VehiculoGarantiaWidget from '../../components/garantias/VehiculoGarantiaWidget';
+import { conductorVigentePorVehiculo } from '../../modules/fleet/fleetAnalytics';
+import { isGuaranteesModuleEnabled } from '../../config/featureFlags';
 
 const EMPTY_INTEL_KPI: FinancialKPIData = {
   gastos_operativos: 0,
@@ -201,6 +204,7 @@ const VehiculoDetalle: React.FC = () => {
     [vid, kilometrajes],
   );
   const conductorActual = vehicle ? conductorAsignadoLabel(conductores, vehicle.id) : '—';
+  const conductorObj = vehicle ? conductorVigentePorVehiculo(conductores, vehicle.id) : null;
 
   const pendientesVehiculo = useMemo(
     () => pendientes.filter((p) => p.vehicleId != null && Number(p.vehicleId) === vid),
@@ -577,6 +581,16 @@ const VehiculoDetalle: React.FC = () => {
                     Ver conductores →
                   </button>
                 </div>
+                {isGuaranteesModuleEnabled() && vehicle ? (
+                  <div className="mt-3">
+                    <VehiculoGarantiaWidget
+                      vehicleId={vehicle.id}
+                      conductorActual={conductorObj}
+                      empresaId={profile?.empresa_id}
+                      user={user ? permissionUserFromAuth(user, profile?.email ?? null) : null}
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4 md:col-span-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase">Pendientes (esta unidad)</p>

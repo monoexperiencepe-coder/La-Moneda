@@ -3,8 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Filter } from 'lucide-react';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { buildFleetPanelRows, type EstadoFlota } from '../../utils/fleetPanel';
+import { isGuaranteesModuleEnabled } from '../../config/featureFlags';
+import { useAuth } from '../../context/AuthContext';
+import { canViewGarantias } from '../../utils/garantiasPermissions';
+import { permissionUserFromAuth } from '../../utils/permissions';
 
-const SUBLINKS: { title: string; path: string; emoji: string; hint?: string }[] = [
+const SUBLINKS: { title: string; path: string; emoji: string; hint?: string; requiresGuarantees?: boolean }[] = [
   { title: 'Control global', path: '/operaciones/control-global', emoji: '🧭', hint: 'Resumen y alertas' },
   { title: 'Pendientes', path: '/operaciones/pendientes', emoji: '📌', hint: 'Trabajo pendiente y prioridades' },
   { title: 'Documentación', path: '/operaciones/docs', emoji: '📋', hint: 'SOAT, RT, vencimientos (Supabase)' },
@@ -15,6 +19,13 @@ const SUBLINKS: { title: string; path: string; emoji: string; hint?: string }[] 
     path: '/operaciones/disponibilidad',
     emoji: '🚫',
     hint: 'Indisponibilidad y pérdida de oportunidad',
+  },
+  {
+    title: 'Garantías',
+    path: '/operaciones/garantias',
+    emoji: '🛡️',
+    hint: 'Depósitos de conductor (módulo aislado)',
+    requiresGuarantees: true,
   },
 ];
 
@@ -29,7 +40,18 @@ const OperacionesHub: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const sinIngresoFilter = searchParams.get('flota') === 'sinIngreso';
   const { vehicles, ingresos, controlFechas, kilometrajes, conductores } = useRegistrosContext();
+  const { user, profile } = useAuth();
+  const permissionUser = user ? permissionUserFromAuth(user, profile?.email ?? null) : null;
   const [soloProblemas, setSoloProblemas] = useState(false);
+
+  const visibleSublinks = useMemo(
+    () =>
+      SUBLINKS.filter((l) => {
+        if (!l.requiresGuarantees) return true;
+        return isGuaranteesModuleEnabled() && canViewGarantias(permissionUser);
+      }),
+    [permissionUser],
+  );
 
   const clearFlotaQuery = () => {
     const next = new URLSearchParams(searchParams);
@@ -80,7 +102,7 @@ const OperacionesHub: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-        {SUBLINKS.map((l) => (
+        {visibleSublinks.map((l) => (
           <button
             key={l.path}
             type="button"

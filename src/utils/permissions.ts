@@ -48,6 +48,7 @@ export type AppSection =
   | 'finanzas_ia_clasificacion'
   | 'vehiculos'
   | 'operaciones'
+  | 'operaciones_garantias'
   | 'reportes'
   | 'metas'
   | 'configuracion'
@@ -221,6 +222,10 @@ export function canViewSection(user: PermissionUser | null | undefined, section:
       return user.role === 'admin' || user.role === 'operador' || user.role === 'socio' || user.role === 'contador';
     case 'operaciones':
       return user.role === 'admin' || user.role === 'operador' || user.role === 'socio' || user.role === 'contador';
+    case 'operaciones_garantias': {
+      // Módulo Garantías: admin/socio/contador; feature flag se valida en UI.
+      return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+    }
     case 'reportes':
       return canUseReports(user);
     case 'metas':

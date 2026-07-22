@@ -44,6 +44,8 @@ const RegistroTiempo = lazy(() => import('./pages/Operaciones/RegistroTiempo'));
 const Conductores = lazy(() => import('./pages/Operaciones/Conductores'));
 const Pendientes = lazy(() => import('./pages/Operaciones/Pendientes'));
 const DisponibilidadOperativa = lazy(() => import('./pages/Operaciones/DisponibilidadOperativa'));
+const Garantias = lazy(() => import('./pages/Operaciones/Garantias'));
+const GarantiaDetalle = lazy(() => import('./pages/Operaciones/GarantiaDetalle'));
 const Metas = lazy(() => import('./pages/Metas/Metas'));
 const Configuracion = lazy(() => import('./pages/Configuracion/Configuracion'));
 const AIPage = lazy(() => import('./pages/AIPage'));
@@ -166,6 +168,13 @@ const AppContent: React.FC = () => {
                         <Route path="/operaciones/conductores" element={<SectionGuard section="operaciones"><Conductores /></SectionGuard>} />
                         <Route path="/operaciones/pendientes" element={<SectionGuard section="operaciones"><Pendientes /></SectionGuard>} />
                         <Route path="/operaciones/disponibilidad" element={<SectionGuard section="operaciones"><DisponibilidadOperativa /></SectionGuard>} />
+                        <Route path="/operaciones/garantias" element={<SectionGuard section="operaciones_garantias"><Garantias /></SectionGuard>} />
+                        <Route path="/operaciones/garantias/:id" element={<SectionGuard section="operaciones_garantias"><GarantiaDetalle /></SectionGuard>} />
+                        <Route path="/admin/garantias" element={<Navigate to="/operaciones/garantias" replace />} />
+                        <Route
+                          path="/admin/garantias/:id"
+                          element={<Navigate to="/operaciones/garantias" replace />}
+                        />
 
                         {/* Reportes */}
                         <Route path="/reportes" element={<SectionGuard section="reportes"><ReportesHub /></SectionGuard>} />
