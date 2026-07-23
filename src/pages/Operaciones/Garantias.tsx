@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, RefreshCw, Search } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -6,14 +6,14 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { isGuaranteesModuleEnabled } from '../../config/featureFlags';
 import { GUARANTEE_STATUS_LABELS } from '../../data/garantiasTypes';
-import type { DriverGuarantee, GuaranteeStatus } from '../../data/garantiasTypes';
+import type { GuaranteeStatus } from '../../data/garantiasTypes';
 import { GUARANTEE_VEHICLE_TYPE_LABELS } from '../../config/guaranteeAmounts';
-import { fetchDriverGuarantees } from '../../services/garantiasService';
 import { canCreateGarantia, canViewGarantias } from '../../utils/garantiasPermissions';
 import { permissionUserFromAuth } from '../../utils/permissions';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { formatVehicleSelectLabel, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import CrearGarantiaModal from '../../components/garantias/CrearGarantiaModal';
+import { useGarantiasListData } from '../../hooks/garantias/useGarantiasListData';
 
 const Garantias: React.FC = () => {
   const navigate = useNavigate();
@@ -21,31 +21,16 @@ const Garantias: React.FC = () => {
   const permissionUser = user ? permissionUserFromAuth(user, profile?.email ?? null) : null;
   const { formatGlobalAmount } = useAmountDisplay();
   const { conductores, vehicles } = useRegistrosContext();
-  const [rows, setRows] = useState<DriverGuarantee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const canView = canViewGarantias(permissionUser);
+  const moduleEnabled = isGuaranteesModuleEnabled();
+  const { rows, initialLoading, refreshing, error, load, refreshAfterMutation } = useGarantiasListData(
+    profile?.empresa_id,
+    moduleEnabled && canView,
+  );
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<GuaranteeStatus | ''>('');
   const [vehicleFilter, setVehicleFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await fetchDriverGuarantees(profile?.empresa_id);
-      setRows(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar');
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.empresa_id]);
-
-  useEffect(() => {
-    if (!isGuaranteesModuleEnabled() || !canViewGarantias(permissionUser)) return;
-    void load();
-  }, [load, permissionUser]);
 
   const conductorById = useMemo(() => {
     const m = new Map<string, string>();
@@ -81,7 +66,10 @@ const Garantias: React.FC = () => {
     return { total: active.length, completa, incompleta, saldo };
   }, [rows]);
 
-  if (!isGuaranteesModuleEnabled()) {
+  const showTableLoading = initialLoading && rows.length === 0;
+  const showEmptyState = !initialLoading && !refreshing && filtered.length === 0;
+
+  if (!moduleEnabled) {
     return (
       <div className="p-8 text-center text-gray-500">
         <p className="font-semibold">Módulo Garantías desactivado</p>
@@ -90,7 +78,7 @@ const Garantias: React.FC = () => {
     );
   }
 
-  if (!canViewGarantias(permissionUser)) {
+  if (!canView) {
     return (
       <div className="p-8 text-center text-gray-500">
         <p className="font-semibold">Sin permiso para ver garantías</p>
@@ -113,10 +101,11 @@ const Garantias: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void load()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm border border-gray-200 bg-white hover:bg-gray-50"
+            onClick={() => void load({ background: rows.length > 0 })}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-60"
           >
-            <RefreshCw size={14} /> Actualizar
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} /> Actualizar
           </button>
           {canCreateGarantia(permissionUser) ? (
             <button
@@ -208,13 +197,13 @@ const Garantias: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {loading ? (
+              {showTableLoading ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-gray-400">
                     Cargando…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : showEmptyState ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-gray-400">
                     No hay garantías
@@ -263,7 +252,7 @@ const Garantias: React.FC = () => {
         vehicles={vehicles}
         empresaId={profile?.empresa_id}
         userId={user?.id}
-        onCreated={() => void load()}
+        onCreated={refreshAfterMutation}
       />
     </div>
   );

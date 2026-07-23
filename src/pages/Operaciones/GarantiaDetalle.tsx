@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
@@ -12,13 +12,7 @@ import {
   getGuaranteeExternalReference,
   isMovementReverted,
   isReversalMovement,
-  type DriverGuarantee,
-  type GuaranteeMovement,
 } from '../../data/garantiasTypes';
-import {
-  fetchDriverGuaranteeById,
-  fetchGuaranteeMovements,
-} from '../../services/garantiasService';
 import { mergeGuaranteeComputed } from '../../utils/garantiasCalc';
 import {
   canRegisterDeposit,
@@ -33,6 +27,7 @@ import { formatDate } from '../../utils/formatting';
 import RegistrarMovimientoModal from '../../components/garantias/RegistrarMovimientoModal';
 import CambioTipoVehiculoModal from '../../components/garantias/CambioTipoVehiculoModal';
 import RevertirMovimientoModal from '../../components/garantias/RevertirMovimientoModal';
+import { useGarantiaDetalleData } from '../../hooks/garantias/useGarantiaDetalleData';
 
 const GarantiaDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,36 +38,21 @@ const GarantiaDetalle: React.FC = () => {
   const { formatGlobalAmount } = useAmountDisplay();
   const { conductores, vehicles } = useRegistrosContext();
 
-  const [guarantee, setGuarantee] = useState<DriverGuarantee | null>(null);
-  const [movements, setMovements] = useState<GuaranteeMovement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const canView = canViewGarantias(permissionUser);
+  const moduleEnabled = isGuaranteesModuleEnabled();
+  const {
+    guarantee,
+    movements,
+    initialLoading,
+    refreshing,
+    error,
+    load,
+    refreshAfterMutation,
+  } = useGarantiaDetalleData(gid, profile?.empresa_id, moduleEnabled && canView);
+
   const [movMode, setMovMode] = useState<'deposit' | 'deduction' | 'adjustment' | 'refund' | null>(null);
   const [showTipo, setShowTipo] = useState(false);
-  const [revertTarget, setRevertTarget] = useState<GuaranteeMovement | null>(null);
-
-  const load = useCallback(async () => {
-    if (!Number.isFinite(gid)) return;
-    setLoading(true);
-    setError('');
-    try {
-      const [g, movs] = await Promise.all([
-        fetchDriverGuaranteeById(gid, profile?.empresa_id),
-        fetchGuaranteeMovements(gid, profile?.empresa_id),
-      ]);
-      setGuarantee(g);
-      setMovements(movs);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar');
-    } finally {
-      setLoading(false);
-    }
-  }, [gid, profile?.empresa_id]);
-
-  useEffect(() => {
-    if (!isGuaranteesModuleEnabled() || !canViewGarantias(permissionUser)) return;
-    void load();
-  }, [load, permissionUser]);
+  const [revertTarget, setRevertTarget] = useState<(typeof movements)[number] | null>(null);
 
   const computed = useMemo(() => {
     if (!guarantee) return null;
@@ -97,7 +77,11 @@ const GarantiaDetalle: React.FC = () => {
     guarantee?.status === 'cerrada' ||
     guarantee?.status === 'devuelta';
 
-  if (!isGuaranteesModuleEnabled() || !canViewGarantias(permissionUser)) {
+  const showPageLoading = initialLoading && !guarantee;
+  const showNotFound = !initialLoading && !refreshing && !guarantee;
+  const showMovementsEmpty = movements.length === 0 && !initialLoading && !refreshing;
+
+  if (!moduleEnabled || !canView) {
     return (
       <div className="p-8 text-center text-gray-500">
         Módulo no disponible o sin permiso.
@@ -105,11 +89,11 @@ const GarantiaDetalle: React.FC = () => {
     );
   }
 
-  if (loading) {
+  if (showPageLoading) {
     return <div className="p-8 text-center text-gray-400">Cargando ficha…</div>;
   }
 
-  if (!guarantee || !computed) {
+  if (showNotFound || !guarantee || !computed) {
     return (
       <div className="p-8 text-center text-gray-500">
         Garantía no encontrada.{' '}
@@ -145,9 +129,22 @@ const GarantiaDetalle: React.FC = () => {
             <p className="text-sm text-gray-500">
               {vehicleLabel} · {GUARANTEE_VEHICLE_TYPE_LABELS[guarantee.vehicleType]} ·{' '}
               <span className="font-semibold text-gray-700">{GUARANTEE_STATUS_LABELS[computed.status]}</span>
+              {refreshing ? (
+                <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-gray-400">
+                  <RefreshCw size={12} className="animate-spin" /> Actualizando…
+                </span>
+              ) : null}
             </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => void load({ background: true })}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-60"
+        >
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} /> Actualizar
+        </button>
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -247,7 +244,7 @@ const GarantiaDetalle: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {movements.length === 0 ? (
+              {showMovementsEmpty ? (
                 <tr>
                   <td colSpan={10} className="px-3 py-6 text-center text-gray-400">
                     Sin movimientos
@@ -348,7 +345,7 @@ const GarantiaDetalle: React.FC = () => {
           vehicles={vehicles}
           user={permissionUser}
           empresaId={profile?.empresa_id}
-          onSaved={() => void load()}
+          onSaved={refreshAfterMutation}
         />
       ) : null}
 
@@ -360,7 +357,7 @@ const GarantiaDetalle: React.FC = () => {
         vehicles={vehicles}
         empresaId={profile?.empresa_id}
         userId={user?.id}
-        onSaved={() => void load()}
+        onSaved={refreshAfterMutation}
       />
 
       {revertTarget ? (
@@ -373,7 +370,7 @@ const GarantiaDetalle: React.FC = () => {
           user={permissionUser}
           userId={user?.id}
           empresaId={profile?.empresa_id}
-          onSaved={() => void load()}
+          onSaved={refreshAfterMutation}
         />
       ) : null}
     </div>
