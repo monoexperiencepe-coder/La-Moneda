@@ -9,6 +9,9 @@ import { GUARANTEE_VEHICLE_TYPE_LABELS } from '../../config/guaranteeAmounts';
 import {
   GUARANTEE_MOVEMENT_LABELS,
   GUARANTEE_STATUS_LABELS,
+  getGuaranteeExternalReference,
+  isMovementReverted,
+  isReversalMovement,
   type DriverGuarantee,
   type GuaranteeMovement,
 } from '../../data/garantiasTypes';
@@ -20,6 +23,7 @@ import { mergeGuaranteeComputed } from '../../utils/garantiasCalc';
 import {
   canRegisterDeposit,
   canRegisterSensitiveMovement,
+  canRevertMovement,
   canViewGarantias,
 } from '../../utils/garantiasPermissions';
 import { permissionUserFromAuth } from '../../utils/permissions';
@@ -28,6 +32,7 @@ import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { formatDate } from '../../utils/formatting';
 import RegistrarMovimientoModal from '../../components/garantias/RegistrarMovimientoModal';
 import CambioTipoVehiculoModal from '../../components/garantias/CambioTipoVehiculoModal';
+import RevertirMovimientoModal from '../../components/garantias/RevertirMovimientoModal';
 
 const GarantiaDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +49,7 @@ const GarantiaDetalle: React.FC = () => {
   const [error, setError] = useState('');
   const [movMode, setMovMode] = useState<'deposit' | 'deduction' | 'adjustment' | 'refund' | null>(null);
   const [showTipo, setShowTipo] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<GuaranteeMovement | null>(null);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(gid)) return;
@@ -87,7 +93,9 @@ const GarantiaDetalle: React.FC = () => {
 
   const lastMov = movements[0] ?? null;
   const closed =
-    !!guarantee?.closedAt || guarantee?.status === 'cerrada' || guarantee?.status === 'devuelta';
+    !!guarantee?.closedAt ||
+    guarantee?.status === 'cerrada' ||
+    guarantee?.status === 'devuelta';
 
   if (!isGuaranteesModuleEnabled() || !canViewGarantias(permissionUser)) {
     return (
@@ -211,14 +219,16 @@ const GarantiaDetalle: React.FC = () => {
         </div>
       ) : (
         <p className="text-sm text-gray-500 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-          Garantía cerrada / devuelta. Historial de solo lectura (sin eliminación de movimientos).
+          Garantía cerrada / devuelta. Puede revertir movimientos según permisos; el historial no se elimina.
         </p>
       )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100">
           <h2 className="font-bold text-gray-900">Historial de movimientos</h2>
-          <p className="text-[11px] text-gray-500">Inmutable · correcciones solo vía ajuste</p>
+          <p className="text-[11px] text-gray-500">
+            Inmutable · correcciones vía ajuste o reversión compensatoria
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -230,23 +240,45 @@ const GarantiaDetalle: React.FC = () => {
                 <th className="px-3 py-2">Dir.</th>
                 <th className="px-3 py-2">Vehículo</th>
                 <th className="px-3 py-2">Observación</th>
+                <th className="px-3 py-2">Ref. externa</th>
+                <th className="px-3 py-2">Estado</th>
                 <th className="px-3 py-2">Registro</th>
+                <th className="px-3 py-2 w-24">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {movements.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
+                  <td colSpan={10} className="px-3 py-6 text-center text-gray-400">
                     Sin movimientos
                   </td>
                 </tr>
               ) : (
                 movements.map((m) => {
                   const v = m.vehicleId != null ? vehicles.find((x) => x.id === m.vehicleId) : null;
+                  const reverted = isMovementReverted(movements, m.id);
+                  const isRev = isReversalMovement(m);
+                  const canRevert = canRevertMovement(permissionUser, m, movements);
+                  const obsText = isRev
+                    ? [m.reason, m.observation].filter(Boolean).join(' · ')
+                    : m.observation || m.reason || '—';
                   return (
-                    <tr key={m.id}>
+                    <tr
+                      key={m.id}
+                      className={
+                        reverted ? 'bg-gray-50/80' : isRev ? 'bg-amber-50/50' : undefined
+                      }
+                    >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(m.movementDate)}</td>
-                      <td className="px-3 py-2">{GUARANTEE_MOVEMENT_LABELS[m.movementType]}</td>
+                      <td className="px-3 py-2">
+                        {isRev ? (
+                          <span className="font-medium text-amber-900">
+                            {GUARANTEE_MOVEMENT_LABELS[m.movementType]}
+                          </span>
+                        ) : (
+                          GUARANTEE_MOVEMENT_LABELS[m.movementType]
+                        )}
+                      </td>
                       <td className="px-3 py-2 tabular-nums font-semibold">{formatGlobalAmount(m.amount)}</td>
                       <td className="px-3 py-2">
                         <span
@@ -260,11 +292,43 @@ const GarantiaDetalle: React.FC = () => {
                       <td className="px-3 py-2 text-xs text-gray-600">
                         {v ? formatVehicleSelectLabel(v) : m.vehicleId != null ? `#${m.vehicleId}` : '—'}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-600 max-w-[14rem] truncate" title={m.observation ?? ''}>
-                        {m.observation || m.reason || '—'}
+                      <td className="px-3 py-2 text-xs text-gray-600 max-w-[14rem]" title={obsText}>
+                        <span className="line-clamp-2">{obsText}</span>
+                      </td>
+                      <td
+                        className="px-3 py-2 text-xs text-gray-600 max-w-[10rem] truncate"
+                        title={getGuaranteeExternalReference(m.metadata) ?? ''}
+                      >
+                        {getGuaranteeExternalReference(m.metadata) ?? '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {reverted ? (
+                          <span className="inline-flex px-1.5 py-0.5 rounded-md bg-gray-200 text-gray-700 font-semibold">
+                            Movimiento revertido
+                          </span>
+                        ) : isRev ? (
+                          <span className="inline-flex px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-semibold">
+                            Reversión
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-3 py-2 text-[11px] text-gray-400 whitespace-nowrap">
                         {new Date(m.createdAt).toLocaleString('es-PE')}
+                      </td>
+                      <td className="px-3 py-2">
+                        {canRevert ? (
+                          <button
+                            type="button"
+                            onClick={() => setRevertTarget(m)}
+                            className="text-[11px] font-semibold text-amber-800 underline hover:text-amber-950"
+                          >
+                            Revertir
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-gray-300">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -298,6 +362,20 @@ const GarantiaDetalle: React.FC = () => {
         userId={user?.id}
         onSaved={() => void load()}
       />
+
+      {revertTarget ? (
+        <RevertirMovimientoModal
+          isOpen
+          onClose={() => setRevertTarget(null)}
+          movement={revertTarget}
+          guarantee={guarantee}
+          movements={movements}
+          user={permissionUser}
+          userId={user?.id}
+          empresaId={profile?.empresa_id}
+          onSaved={() => void load()}
+        />
+      ) : null}
     </div>
   );
 };

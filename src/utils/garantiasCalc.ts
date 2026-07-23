@@ -1,6 +1,12 @@
 import {
   CREDIT_MOVEMENT_TYPES,
   DEBIT_MOVEMENT_TYPES,
+  getReversalOriginalMovementType,
+  hasActiveFinalRefund,
+  isContributionMovementType,
+  isMovementReverted,
+  isReversalMovement,
+  isSensitiveReversalType,
   type DriverGuarantee,
   type GuaranteeComputed,
   type GuaranteeDirection,
@@ -15,6 +21,8 @@ function round2(n: number): number {
 
 export function directionForMovementType(type: GuaranteeMovementType): GuaranteeDirection {
   if (type === 'required_amount_change') return 'credit'; // amount ignored for balance
+  if (type === 'reversal_credit') return 'credit';
+  if (type === 'reversal_debit') return 'debit';
   if ((CREDIT_MOVEMENT_TYPES as readonly string[]).includes(type)) return 'credit';
   if ((DEBIT_MOVEMENT_TYPES as readonly string[]).includes(type)) return 'debit';
   return 'credit';
@@ -35,7 +43,10 @@ export function isDeductionType(type: GuaranteeMovementType): boolean {
  */
 export function computeGuaranteeFromMovements(
   requiredAmount: number,
-  movements: readonly Pick<GuaranteeMovement, 'movementType' | 'amount' | 'direction'>[],
+  movements: readonly Pick<
+    GuaranteeMovement,
+    'movementType' | 'amount' | 'direction' | 'metadata' | 'id' | 'relatedMovementId'
+  >[],
   opts?: { closed?: boolean; fullyRefunded?: boolean },
 ): GuaranteeComputed {
   let totalContributed = 0;
@@ -49,39 +60,66 @@ export function computeGuaranteeFromMovements(
     if (m.movementType === 'required_amount_change') continue;
     const amt = round2(Math.abs(Number(m.amount) || 0));
     if (amt <= 0) continue;
+
+    const isRev = isReversalMovement(m);
+    const origType = isRev
+      ? getReversalOriginalMovementType(m) ?? m.movementType
+      : m.movementType;
+
     if (m.direction === 'credit') {
       balance = round2(balance + amt);
-      if (
-        m.movementType === 'initial_deposit' ||
-        m.movementType === 'deposit' ||
-        m.movementType === 'replenishment' ||
-        m.movementType === 'adjustment_credit'
-      ) {
-        totalContributed = round2(totalContributed + amt);
-      }
-      if (m.movementType === 'replenishment') {
-        replenishmentSum = round2(replenishmentSum + amt);
+      if (isRev) {
+        if (isDeductionType(origType) || origType === 'adjustment_debit') {
+          totalDeducted = round2(totalDeducted - amt);
+        }
+        if (origType === 'final_refund') {
+          totalRefunded = round2(totalRefunded - amt);
+        }
+        if (origType === 'replenishment') {
+          replenishmentSum = round2(replenishmentSum - amt);
+        }
+        if (isDeductionType(origType)) {
+          deductionSum = round2(deductionSum - amt);
+        }
+      } else {
+        if (isContributionMovementType(m.movementType)) {
+          totalContributed = round2(totalContributed + amt);
+        }
+        if (m.movementType === 'replenishment') {
+          replenishmentSum = round2(replenishmentSum + amt);
+        }
       }
     } else {
       balance = round2(balance - amt);
-      if (isDeductionType(m.movementType) || m.movementType === 'adjustment_debit') {
-        totalDeducted = round2(totalDeducted + amt);
-      }
-      if (isDeductionType(m.movementType)) {
-        deductionSum = round2(deductionSum + amt);
-      }
-      if (m.movementType === 'final_refund') {
-        totalRefunded = round2(totalRefunded + amt);
+      if (isRev) {
+        if (isContributionMovementType(origType)) {
+          totalContributed = round2(totalContributed - amt);
+        }
+      } else {
+        if (isDeductionType(m.movementType) || m.movementType === 'adjustment_debit') {
+          totalDeducted = round2(totalDeducted + amt);
+        }
+        if (isDeductionType(m.movementType)) {
+          deductionSum = round2(deductionSum + amt);
+        }
+        if (m.movementType === 'final_refund') {
+          totalRefunded = round2(totalRefunded + amt);
+        }
       }
     }
   }
 
+  totalContributed = round2(Math.max(0, totalContributed));
+  totalDeducted = round2(Math.max(0, totalDeducted));
+  totalRefunded = round2(Math.max(0, totalRefunded));
+
   const pendingAmount = round2(Math.max(0, requiredAmount - balance));
   const refundableAmount = round2(Math.max(0, balance));
   const hasOpenDeductionGap = deductionSum > replenishmentSum + 0.001;
+  const activeFinalRefund = hasActiveFinalRefund(movements as GuaranteeMovement[]);
 
   let status: GuaranteeStatus;
-  if (opts?.fullyRefunded || (opts?.closed && totalRefunded > 0 && balance <= 0.001)) {
+  if (opts?.fullyRefunded || (activeFinalRefund && balance <= 0.001)) {
     status = 'devuelta';
   } else if (opts?.closed) {
     status = 'cerrada';
@@ -113,11 +151,12 @@ export function mergeGuaranteeComputed(
   guarantee: DriverGuarantee,
   movements: readonly GuaranteeMovement[],
 ): DriverGuarantee & GuaranteeComputed {
+  const activeFinalRefund = hasActiveFinalRefund(movements);
   const closed =
-    guarantee.closedAt != null ||
+    (guarantee.closedAt != null && activeFinalRefund) ||
     guarantee.status === 'cerrada' ||
-    guarantee.status === 'devuelta';
-  const fullyRefunded = guarantee.status === 'devuelta';
+    (guarantee.status === 'devuelta' && activeFinalRefund);
+  const fullyRefunded = activeFinalRefund && guarantee.status === 'devuelta';
   const computed = computeGuaranteeFromMovements(guarantee.requiredAmount, movements, {
     closed,
     fullyRefunded,
@@ -128,7 +167,7 @@ export function mergeGuaranteeComputed(
     currentBalance: computed.currentBalance,
     totalContributed: computed.totalContributed,
     totalDeducted: computed.totalDeducted,
-    status: closed ? (fullyRefunded || guarantee.status === 'devuelta' ? 'devuelta' : 'cerrada') : computed.status,
+    status: closed && fullyRefunded ? 'devuelta' : closed ? 'cerrada' : computed.status,
   };
 }
 
@@ -153,7 +192,7 @@ export function validateNewMovement(args: {
     return { code: 'closed', message: 'La garantía está cerrada o ya fue devuelta.' };
   }
   const computed = computeGuaranteeFromMovements(guarantee.requiredAmount, movements);
-  const hasFinalRefund = movements.some((m) => m.movementType === 'final_refund');
+  const hasFinalRefund = hasActiveFinalRefund(movements);
   if (hasFinalRefund) {
     return { code: 'already_refunded', message: 'Ya existe una devolución final. Use un ajuste si hace falta corregir.' };
   }
@@ -173,6 +212,96 @@ export function validateNewMovement(args: {
       };
     }
   }
+  return null;
+}
+
+const REVERT_ERROR_MESSAGES: Record<string, string> = {
+  usuario_no_autenticado: 'Debes iniciar sesión.',
+  rol_sin_permiso: 'No tienes permiso para revertir movimientos.',
+  empresa_no_configurada: 'Empresa no configurada.',
+  movimiento_invalido: 'Movimiento inválido.',
+  motivo_reversion_obligatorio: 'El motivo de la reversión es obligatorio.',
+  movimiento_no_encontrado: 'Movimiento no encontrado.',
+  no_revertir_reversion: 'No se puede revertir un movimiento que ya es una reversión.',
+  tipo_no_reversible: 'Este tipo de movimiento no se puede revertir.',
+  movimiento_ya_revertido: 'Este movimiento ya fue revertido.',
+  reversion_sensible_solo_admin: 'Revertir este movimiento requiere permiso de administrador.',
+  solo_revertir_propios_movimientos: 'Solo puedes revertir movimientos que registraste tú.',
+  garantia_no_encontrada: 'Garantía no encontrada.',
+  garantia_cerrada_revertir_devolucion_primero:
+    'La garantía está cerrada. Revierte primero la devolución final (administrador).',
+  reversion_genera_saldo_negativo: 'La reversión dejaría el saldo en negativo.',
+  reversion_genera_totales_incoherentes: 'La reversión generaría totales incoherentes.',
+  reversion_fallida: 'No se pudo revertir el movimiento.',
+};
+
+export function mapRevertRpcError(code: string): string {
+  return REVERT_ERROR_MESSAGES[code] ?? `Error al revertir: ${code}`;
+}
+
+export type RevertValidationError =
+  | { code: 'forbidden'; message: string }
+  | { code: 'already_reverted'; message: string }
+  | { code: 'is_reversal'; message: string }
+  | { code: 'not_reversible'; message: string }
+  | { code: 'negative_balance'; message: string }
+  | { code: 'closed'; message: string };
+
+export function validateRevertMovement(args: {
+  movement: GuaranteeMovement;
+  movements: readonly GuaranteeMovement[];
+  guarantee: DriverGuarantee;
+  userId: string | null | undefined;
+  isAdmin: boolean;
+}): RevertValidationError | null {
+  const { movement, movements, guarantee, userId, isAdmin } = args;
+
+  if (isReversalMovement(movement)) {
+    return { code: 'is_reversal', message: 'No se puede revertir un movimiento que ya es una reversión.' };
+  }
+  if (movement.movementType === 'required_amount_change') {
+    return { code: 'not_reversible', message: 'Los cambios de monto requerido no se revierten desde aquí.' };
+  }
+  if (isMovementReverted(movements, movement.id)) {
+    return { code: 'already_reverted', message: 'Este movimiento ya fue revertido.' };
+  }
+
+  const sensitive = isSensitiveReversalType(movement.movementType);
+  if (sensitive && !isAdmin) {
+    return {
+      code: 'forbidden',
+      message: 'Revertir devoluciones, ajustes o cierres requiere permiso de administrador.',
+    };
+  }
+  if (!isAdmin && (!movement.createdBy || movement.createdBy !== userId)) {
+    return { code: 'forbidden', message: 'Solo puedes revertir movimientos que registraste tú.' };
+  }
+
+  const activeFinalRefund = hasActiveFinalRefund(movements);
+  if (
+    guarantee.closedAt &&
+    movement.movementType !== 'final_refund' &&
+    activeFinalRefund &&
+    !isAdmin
+  ) {
+    return {
+      code: 'closed',
+      message: 'La garantía está cerrada. Revierte primero la devolución final.',
+    };
+  }
+
+  const computed = computeGuaranteeFromMovements(guarantee.requiredAmount, movements);
+  const simBalance =
+    movement.direction === 'credit'
+      ? round2(computed.currentBalance - movement.amount)
+      : round2(computed.currentBalance + movement.amount);
+  if (simBalance < -0.001) {
+    return {
+      code: 'negative_balance',
+      message: `La reversión dejaría el saldo en negativo (S/ ${simBalance.toFixed(2)}).`,
+    };
+  }
+
   return null;
 }
 

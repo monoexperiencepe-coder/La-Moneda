@@ -1,7 +1,12 @@
 import type { PermissionUser } from './permissions';
 import { getUserRole, isFinancialOperadorRestricted } from './permissions';
 import { isGuaranteesModuleEnabled } from '../config/featureFlags';
-import type { GuaranteeMovementType } from '../data/garantiasTypes';
+import type { GuaranteeMovementType, GuaranteeMovement } from '../data/garantiasTypes';
+import {
+  isMovementReverted,
+  isReversalMovement,
+  isSensitiveReversalType,
+} from '../data/garantiasTypes';
 import { isDeductionType } from './garantiasCalc';
 
 export function canViewGarantias(user: PermissionUser | null | undefined): boolean {
@@ -42,9 +47,33 @@ export function canRegisterMovementType(
   if (isDeductionType(type) || type === 'adjustment_credit' || type === 'adjustment_debit' || type === 'final_refund') {
     return canRegisterSensitiveMovement(user);
   }
+  if (type === 'reversal_credit' || type === 'reversal_debit') {
+    return false;
+  }
   return false;
 }
 
 export function canAuditGarantias(user: PermissionUser | null | undefined): boolean {
   return canViewGarantias(user);
+}
+
+/** Revertir movimiento: admin cualquiera; socio/contador solo propios; sensibles solo admin. */
+export function canRevertMovement(
+  user: PermissionUser | null | undefined,
+  movement: Pick<GuaranteeMovement, 'movementType' | 'metadata' | 'createdBy' | 'id' | 'relatedMovementId'>,
+  movements: readonly Pick<GuaranteeMovement, 'relatedMovementId' | 'metadata' | 'movementType'>[],
+): boolean {
+  if (!canViewGarantias(user) || !user) return false;
+  const role = getUserRole(user);
+  if (role !== 'admin' && role !== 'socio' && role !== 'contador') return false;
+
+  if (isReversalMovement(movement)) return false;
+  if (movement.movementType === 'required_amount_change') return false;
+  if (isMovementReverted(movements, movement.id)) return false;
+
+  if (isSensitiveReversalType(movement.movementType)) {
+    return role === 'admin';
+  }
+  if (role === 'admin') return true;
+  return !!movement.createdBy && movement.createdBy === user.id;
 }

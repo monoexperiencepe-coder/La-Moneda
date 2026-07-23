@@ -10,6 +10,7 @@ import type {
 import {
   computeGuaranteeFromMovements,
   directionForMovementType,
+  mapRevertRpcError,
   validateNewMovement,
 } from '../utils/garantiasCalc';
 import {
@@ -384,4 +385,61 @@ export async function updateGuaranteeVehicleType(
   }
 
   return mapDriverGuaranteeRow(data as Record<string, unknown>);
+}
+
+export type RevertMovementResult = {
+  guarantee: DriverGuarantee;
+  reversalMovementId: number;
+  originalMovementId: number;
+};
+
+type RevertRpcResponse = {
+  ok: boolean;
+  error?: string;
+  detail?: string;
+  reversal_movement_id?: number;
+  original_movement_id?: number;
+  guarantee_id?: number;
+};
+
+export async function revertGuaranteeMovement(
+  movementId: number,
+  reason: string,
+  tenantEmpresaId?: string | null,
+): Promise<RevertMovementResult> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) throw new Error('Empresa no configurada.');
+  if (!Number.isFinite(movementId)) throw new Error('Movimiento inválido.');
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) throw new Error('El motivo de la reversión es obligatorio.');
+
+  const { data, error } = await supabase.rpc('revert_guarantee_movement', {
+    p_movement_id: movementId,
+    p_reason: trimmedReason,
+    p_empresa_id: empresaId,
+  });
+
+  if (error) {
+    console.error('[garantias revert rpc]', error.message);
+    throw new Error(error.message || 'No se pudo revertir el movimiento.');
+  }
+
+  const payload = data as RevertRpcResponse;
+  if (!payload?.ok) {
+    const code = payload?.error ?? 'reversion_fallida';
+    const msg = mapRevertRpcError(code);
+    throw new Error(payload?.detail ? `${msg} (${payload.detail})` : msg);
+  }
+
+  const guaranteeId = payload.guarantee_id;
+  if (!guaranteeId) throw new Error('Respuesta incompleta del servidor.');
+
+  const guarantee = await fetchDriverGuaranteeById(guaranteeId, empresaId);
+  if (!guarantee) throw new Error('Garantía no encontrada tras la reversión.');
+
+  return {
+    guarantee,
+    reversalMovementId: payload.reversal_movement_id ?? 0,
+    originalMovementId: payload.original_movement_id ?? movementId,
+  };
 }

@@ -22,7 +22,9 @@ export type GuaranteeMovementType =
   | 'adjustment_credit'
   | 'adjustment_debit'
   | 'final_refund'
-  | 'required_amount_change';
+  | 'required_amount_change'
+  | 'reversal_credit'
+  | 'reversal_debit';
 
 export type GuaranteeDirection = 'credit' | 'debit';
 
@@ -105,6 +107,8 @@ export const GUARANTEE_MOVEMENT_LABELS: Record<GuaranteeMovementType, string> = 
   adjustment_debit: 'Ajuste negativo',
   final_refund: 'Devolución final',
   required_amount_change: 'Cambio de monto requerido',
+  reversal_credit: 'Reversión de movimiento',
+  reversal_debit: 'Reversión de movimiento',
 };
 
 export const CREDIT_MOVEMENT_TYPES: readonly GuaranteeMovementType[] = [
@@ -122,3 +126,74 @@ export const DEBIT_MOVEMENT_TYPES: readonly GuaranteeMovementType[] = [
   'adjustment_debit',
   'final_refund',
 ] as const;
+
+/** Clave en `metadata` para referencia externa (papeleta, comprobante, etc.). */
+export const GUARANTEE_EXTERNAL_REF_METADATA_KEY = 'external_reference';
+
+export function getGuaranteeExternalReference(metadata: Record<string, unknown>): string | null {
+  const value = metadata[GUARANTEE_EXTERNAL_REF_METADATA_KEY];
+  if (value == null || value === '') return null;
+  return String(value);
+}
+
+export const GUARANTEE_REVERSAL_METADATA_KEY = 'is_reversal';
+export const GUARANTEE_ORIGINAL_MOVEMENT_TYPE_KEY = 'original_movement_type';
+
+export function isReversalMovement(
+  movement: Pick<GuaranteeMovement, 'movementType' | 'metadata'>,
+): boolean {
+  return (
+    movement.movementType === 'reversal_credit' ||
+    movement.movementType === 'reversal_debit' ||
+    movement.metadata[GUARANTEE_REVERSAL_METADATA_KEY] === true
+  );
+}
+
+export function getReversalOriginalMovementType(
+  movement: Pick<GuaranteeMovement, 'movementType' | 'metadata'>,
+): GuaranteeMovementType | null {
+  const raw = movement.metadata[GUARANTEE_ORIGINAL_MOVEMENT_TYPE_KEY];
+  if (raw == null || raw === '') return null;
+  return String(raw) as GuaranteeMovementType;
+}
+
+/** Indica si otro movimiento ya revirtió este (related_movement_id + is_reversal). */
+export function isMovementReverted(
+  movements: readonly Pick<GuaranteeMovement, 'relatedMovementId' | 'metadata' | 'movementType'>[],
+  movementId: number,
+): boolean {
+  return movements.some(
+    (m) =>
+      isReversalMovement(m) &&
+      m.relatedMovementId === movementId,
+  );
+}
+
+/** Devolución final activa (no revertida). */
+export function hasActiveFinalRefund(
+  movements: readonly GuaranteeMovement[],
+): boolean {
+  return movements.some(
+    (m) => m.movementType === 'final_refund' && !isMovementReverted(movements, m.id),
+  );
+}
+
+export const REVERSAL_SENSITIVE_MOVEMENT_TYPES: readonly GuaranteeMovementType[] = [
+  'final_refund',
+  'adjustment_credit',
+  'adjustment_debit',
+  'required_amount_change',
+] as const;
+
+export function isSensitiveReversalType(type: GuaranteeMovementType): boolean {
+  return (REVERSAL_SENSITIVE_MOVEMENT_TYPES as readonly string[]).includes(type);
+}
+
+export function isContributionMovementType(type: GuaranteeMovementType): boolean {
+  return (
+    type === 'initial_deposit' ||
+    type === 'deposit' ||
+    type === 'replenishment' ||
+    type === 'adjustment_credit'
+  );
+}

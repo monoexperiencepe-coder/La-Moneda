@@ -69,6 +69,7 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
   );
   const [observation, setObservation] = useState('');
   const [reason, setReason] = useState('');
+  const [externalReference, setExternalReference] = useState('');
   const [movementDate, setMovementDate] = useState(todayStr());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +80,7 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
     setAmount('');
     setObservation('');
     setReason('');
+    setExternalReference('');
     setError('');
     setMovementDate(todayStr());
     setVehicleId(guarantee.currentVehicleId != null ? String(guarantee.currentVehicleId) : '');
@@ -115,6 +117,9 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
           reason: reason.trim() || null,
           createdBy: user?.id ?? null,
           movementDate,
+          metadata: externalReference.trim()
+            ? { external_reference: externalReference.trim() }
+            : undefined,
         },
         empresaId,
       );
@@ -202,6 +207,12 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
           placeholder="Sin vehículo"
         />
         <Input label="Motivo" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <Input
+          label="Referencia externa (opcional)"
+          value={externalReference}
+          onChange={(e) => setExternalReference(e.target.value)}
+          placeholder="N.º papeleta, comprobante, gasto…"
+        />
         <label className="block">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Observación</span>
           <textarea
