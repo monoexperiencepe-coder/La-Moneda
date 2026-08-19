@@ -3,7 +3,6 @@ import type { Descuento, Gasto, Ingreso } from '../../../data/types';
 import { MESES } from '../../../data/catalogs';
 import { useAmountDisplay } from '../../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../../utils/moneda';
-import { gastosOperativosSolamente } from '../../../utils/cajaNegocio';
 import { useDeferredRecalc } from '../../../hooks/useDeferredRecalc';
 import { UpdatingChrome } from '../../../components/Loading';
 
@@ -17,13 +16,13 @@ type MesRow = {
   mesLabel: string;
   ingresos: number;
   gastos: number;
+  descuentos: number;
   resultado: number;
   hayMovimiento: boolean;
 };
 
 const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ ingresos, gastos, descuentos }) => {
   const { formatGlobalAmount } = useAmountDisplay();
-  const gastosOp = useMemo(() => gastosOperativosSolamente(gastos), [gastos]);
 
   const availableYears = useMemo(() => {
     const ys = new Set<number>();
@@ -32,10 +31,10 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
       if (Number.isFinite(y) && y > 0) ys.add(y);
     };
     for (const i of ingresos) touch(i.fecha);
-    for (const g of gastosOp) touch(g.fecha);
+    for (const g of gastos) touch(g.fecha);
     for (const d of descuentos) touch(d.fecha);
     return [...ys].sort((a, b) => b - a);
-  }, [ingresos, gastosOp, descuentos]);
+  }, [ingresos, gastos, descuentos]);
 
   const [chartYear, setChartYear] = useState('');
 
@@ -61,6 +60,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
         mesLabel: mes.label,
         ingresos: 0,
         gastos: 0,
+        descuentos: 0,
         resultado: 0,
         hayMovimiento: false,
       }));
@@ -71,22 +71,23 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
       const ing = ingresos
         .filter((i) => i.fecha.startsWith(prefix) && i.fecha.slice(5, 7) === mm)
         .reduce((s, i) => s + ingresoMontoPEN(i), 0);
-      const gas = gastosOp
+      const gas = gastos
         .filter((g) => g.fecha.startsWith(prefix) && g.fecha.slice(5, 7) === mm)
         .reduce((s, g) => s + g.monto, 0);
       const reb = descuentos
         .filter((d) => d.fecha.startsWith(prefix) && d.fecha.slice(5, 7) === mm)
         .reduce((s, d) => s + d.monto, 0);
-      const resultado = ing - gas + reb;
+      const resultado = ing - gas;
       return {
         mesLabel: mes.label,
         ingresos: ing,
         gastos: gas,
+        descuentos: reb,
         resultado,
         hayMovimiento: ing !== 0 || gas !== 0 || reb !== 0,
       };
     });
-  }, [ingresos, gastosOp, descuentos, chartYearNum]);
+  }, [ingresos, gastos, descuentos, chartYearNum]);
 
   const totalesAnio = useMemo(
     () =>
@@ -94,9 +95,10 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
         (acc, row) => ({
           ingresos: acc.ingresos + row.ingresos,
           gastos: acc.gastos + row.gastos,
+          descuentos: acc.descuentos + row.descuentos,
           resultado: acc.resultado + row.resultado,
         }),
-        { ingresos: 0, gastos: 0, resultado: 0 },
+        { ingresos: 0, gastos: 0, descuentos: 0, resultado: 0 },
       ),
     [filasMes],
   );
@@ -127,12 +129,11 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
   return (
     <section className="space-y-5 content-enter">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Rendimiento mensual</h2>
+        <h2 className="text-lg font-bold text-slate-900">Resultado general mensual</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Resultado operativo por mes (ingresos − gastos operativos + descuentos). No es resultado neto global ni
-          utilidad acumulada importada.
+          Resultado del negocio por mes: ingresos − todos los gastos (misma definición que Resumen).
         </p>
-        <p className="mt-1 text-sm text-slate-600">Mes por mes: cuánto entró, cuánto salió en gastos de flota y qué quedó.</p>
+        <p className="mt-1 text-sm text-slate-600">Mes por mes: cuánto entró, cuánto salió en total y qué quedó.</p>
       </div>
 
       {/* Año */}
@@ -180,21 +181,28 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
               {resultadoPositivo ? (
                 <>
-                  En {displayYear}, después de los gastos operativos de la flota, el negocio cerró con{' '}
+                  En {displayYear}, después de todos los gastos registrados, el negocio cerró con{' '}
                   <strong>{formatGlobalAmount(totalesAnio.resultado)}</strong> a favor.
                 </>
               ) : (
                 <>
-                  En {displayYear} los gastos operativos superaron lo que entró por{' '}
+                  En {displayYear} los gastos superaron lo que entró por{' '}
                   <strong>{formatGlobalAmount(Math.abs(totalesAnio.resultado))}</strong>.
                 </>
               )}
             </p>
+            {totalesAnio.descuentos > 0 ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Descuentos del período:{' '}
+                <strong className="text-slate-700">{formatGlobalAmount(totalesAnio.descuentos)}</strong>{' '}
+                (no incluidos en el resultado; son una métrica operativa separada).
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <ResumenChip label="Total que entró" value={formatGlobalAmount(totalesAnio.ingresos)} tone="emerald" />
-            <ResumenChip label="Total que salió (flota)" value={formatGlobalAmount(totalesAnio.gastos)} tone="rose" />
+            <ResumenChip label="Total que salió" value={formatGlobalAmount(totalesAnio.gastos)} tone="rose" />
             {statsMeses ? (
               <ResumenChip
                 label="Mejor mes"
@@ -211,7 +219,7 @@ const RendimientoMensualSection: React.FC<RendimientoMensualSectionProps> = ({ i
           <div className="glass-panel overflow-hidden border-slate-200 p-0">
             <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-5">
               <h3 className="text-sm font-bold text-slate-900">Detalle mes a mes</h3>
-              <p className="mt-0.5 text-xs text-slate-500">Solo gastos operativos de vehículos en la columna «Salió».</p>
+              <p className="mt-0.5 text-xs text-slate-500">Todos los gastos del negocio en la columna «Salió» (misma fórmula que Resumen).</p>
             </div>
 
             <div className="overflow-x-auto">

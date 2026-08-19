@@ -6,7 +6,6 @@ import { useRegistrosContext } from '../../context/RegistrosContext';
 import { todayStr, toDateOnlyString } from '../../utils/formatting';
 import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import { ingresoMontoPEN } from '../../utils/moneda';
-import { vehicleIdKey } from '../../utils/vehicleId';
 import {
   financialKpiSourceLabel,
   resolveResultadoNetoKpi,
@@ -18,6 +17,12 @@ import {
 } from '../../utils/gastosFinancialSummary';
 import type { Gasto, Ingreso } from '../../data/types';
 import { matchesOperativoTipoNormalized } from '../../utils/operativoTipoGasto';
+import { buildCascadaFinanciera, calculateBusinessResult, ingresosSinTipoCambio } from '../../utils/businessResult';
+import { buildTopVehiculosUtilidad } from '../../utils/utilidadReal';
+import { useAuth } from '../../context/AuthContext';
+import { aporteMontoNeto, fetchAportesAccionistas } from '../../services/aportesAccionistasService';
+import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
+import type { AporteAccionista, InversionGeneralVehiculo } from '../../data/types';
 
 type ResumenPreset = 'mes_actual' | 'mes_anterior' | 'anio_actual' | 'todo' | 'personalizado';
 
@@ -31,6 +36,7 @@ const CATEGORIA_MAP = [
   { key: 'representacion_interna', label: 'Representación interna' },
   { key: 'otros_gastos_varios', label: 'Otros gastos / Gastos varios' },
   { key: 'gastos_globales', label: 'Globales' },
+  { key: 'pendiente_revision', label: 'Pendiente de clasificación' },
 ] as const;
 
 const MESES_LARGO = [
@@ -157,26 +163,8 @@ function aggregatePeriodTotals(
   desde: string | null,
   hasta: string | null,
 ): PeriodTotals {
-  let ing = 0;
-  let gas = 0;
-  let hasMovement = false;
-  const bounded = Boolean(desde && hasta);
-
-  for (const i of ingresos) {
-    const d = toDateOnlyString(i.fecha);
-    if (!d) continue;
-    if (bounded && (d < desde! || d > hasta!)) continue;
-    ing += ingresoMontoPEN(i);
-    hasMovement = true;
-  }
-  for (const g of gastos) {
-    const d = toDateOnlyString(g.fecha);
-    if (!d) continue;
-    if (bounded && (d < desde! || d > hasta!)) continue;
-    gas += g.monto;
-    hasMovement = true;
-  }
-  return { ingresos: ing, gastos: gas, resultado: ing - gas, hasMovement };
+  const r = calculateBusinessResult(ingresos, gastos, desde, hasta);
+  return { ingresos: r.totalIngresos, gastos: r.totalGastos, resultado: r.resultado, hasMovement: r.hasMovement };
 }
 
 function pctDelta(current: number, previous: number): number | null {
@@ -427,8 +415,25 @@ function KpiChip({
 const Resumen: React.FC = () => {
   const navigate = useNavigate();
   const { formatGlobalAmount } = useAmountDisplay();
-  const { ingresos, gastos, vehicles, gastosFinancialSummary, isLoadingGastosSummary, gastosLoadScope } =
+  const { profile } = useAuth();
+  const { ingresos, gastos, vehicles, prestamos, gastosFinancialSummary, isLoadingGastosSummary, gastosLoadScope } =
     useRegistrosContext();
+
+  // ── Lazy complementary info ────────────────────────────────────────────────
+  const [aportesRows, setAportesRows] = useState<AporteAccionista[]>([]);
+  const [inversionesRows, setInversionesRows] = useState<InversionGeneralVehiculo[]>([]);
+  useEffect(() => {
+    const id = profile?.empresa_id?.trim() || null;
+    if (!id) return;
+    let cancelled = false;
+    void fetchAportesAccionistas(id).then(({ rows }) => {
+      if (!cancelled) setAportesRows(rows);
+    });
+    void fetchInversionesGeneralesVehiculo(id).then((rows) => {
+      if (!cancelled) setInversionesRows(rows);
+    });
+    return () => { cancelled = true; };
+  }, [profile?.empresa_id]);
   const [preset, setPreset] = useState<ResumenPreset>('mes_actual');
   const current = todayStr();
   const currentYear = Number(current.slice(0, 4));
@@ -609,24 +614,65 @@ const Resumen: React.FC = () => {
     ],
   );
 
-  const topOperativosVehiculo = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const g of gastosP) {
-      const k = normalizeTipoGasto(g.tipo_gasto, g.vehicleId != null);
-      if (k !== 'operativo_vehiculo') continue;
-      const key = vehicleIdKey(g.vehicleId);
-      if (!key) continue;
-      map.set(key, (map.get(key) ?? 0) + g.monto);
-    }
-    return [...map.entries()]
-      .map(([key, monto]) => {
-        const v = vehicles.find((x) => String(x.id) === key);
-        const name = v ? `${v.marca} ${v.modelo} · ${v.placa}` : `Unidad #${key}`;
-        return { vehicleId: key, name, monto };
-      })
-      .sort((a, b) => b.monto - a.monto)
-      .slice(0, 5);
-  }, [gastosP, vehicles]);
+  // ── Cascada financiera ─────────────────────────────────────────────────────
+  const cascada = useMemo(() => {
+    if (totalGastos <= 0 && totalIngresos <= 0) return null;
+    return buildCascadaFinanciera(totalIngresos, distribucion, totalGastos);
+  }, [totalIngresos, distribucion, totalGastos]);
+
+  // ── Rentabilidad por vehículo (top 3 mejor / peor) ────────────────────────
+  const vehiculosRentabilidad = useMemo(() => {
+    const all = buildTopVehiculosUtilidad(vehicles, ingresos, gastos, {
+      desde: range.desde,
+      hasta: range.hasta,
+      limit: 999,
+    });
+    const activos = all.filter((v) => v.ingresos > 0 || v.gastos > 0);
+    return {
+      top3: activos.slice(0, 3),
+      bottom3: activos.length > 3 ? activos.slice(-3).reverse() : [],
+    };
+  }, [vehicles, ingresos, gastos, range]);
+
+  // ── Deuda activa desde tabla prestamos (ya en contexto) ───────────────────
+  const deudaActivaResumen = useMemo(() => {
+    const activos = prestamos.filter((p) => p.estado === 'ACTIVO');
+    if (activos.length === 0) return null;
+    const pen = activos.filter((p) => p.moneda === 'PEN').reduce((s, p) => s + p.saldoPendiente, 0);
+    const usd = activos.filter((p) => p.moneda === 'USD').reduce((s, p) => s + p.saldoPendiente, 0);
+    return { pen, usd, count: activos.length };
+  }, [prestamos]);
+
+  // ── Totales aportes accionistas ────────────────────────────────────────────
+  const aportesResumen = useMemo(() => {
+    if (aportesRows.length === 0) return null;
+    const neto = aportesRows.reduce((s, a) => s + aporteMontoNeto(a), 0);
+    const netoPen = aportesRows
+      .filter((a) => a.moneda === 'PEN')
+      .reduce((s, a) => s + aporteMontoNeto(a), 0);
+    const tieneUsd = aportesRows.some((a) => a.moneda === 'USD');
+    return { neto, netoPen, tieneUsd, count: aportesRows.length };
+  }, [aportesRows]);
+
+  // ── Inversión histórica de flota ──────────────────────────────────────────
+  const inversionHistorica = useMemo(() => {
+    if (inversionesRows.length === 0) return null;
+    const penRows = inversionesRows.filter((r) => r.totalInversionPen != null && r.totalInversionPen > 0);
+    if (penRows.length === 0) return null;
+    const total = penRows.reduce((s, r) => s + (r.totalInversionPen ?? 0), 0);
+    return { total, count: inversionesRows.length };
+  }, [inversionesRows]);
+
+  // ── Margen del período ─────────────────────────────────────────────────────
+  const margenPct = useMemo(() => {
+    if (totalIngresos <= 0 || !hasResultado || resultadoNeto == null) return null;
+    return (resultadoNeto / totalIngresos) * 100;
+  }, [totalIngresos, hasResultado, resultadoNeto]);
+
+const ingresosSinTc = useMemo(
+    () => ingresosSinTipoCambio(ingresosP),
+    [ingresosP],
+  );
 
   const alertas = useMemo((): ResumenAlert[] => {
     const out: ResumenAlert[] = [];
@@ -669,6 +715,27 @@ const Resumen: React.FC = () => {
       });
     }
 
+    if (ingresosSinTc.length > 0) {
+      out.push({
+        id: 'usd-sin-tc',
+        tone: 'warning',
+        title: 'Ingresos USD sin tipo de cambio',
+        text: `${ingresosSinTc.length} ingreso${ingresosSinTc.length > 1 ? 's' : ''} en USD no tienen tipo de cambio ni monto PEN registrado. Se incluyeron como si fueran soles; el resultado puede no ser exacto.`,
+        href: '/finanzas/ingresos',
+      });
+    }
+
+    const pendienteMonto = byKey.pendiente_revision ?? 0;
+    if (pendienteMonto > 0) {
+      out.push({
+        id: 'pendiente-revision',
+        tone: 'warning',
+        title: 'Gastos pendientes de clasificación',
+        text: `${formatGlobalAmount(pendienteMonto)} en gastos no clasificados reducen el resultado. Clasificarlos mejora la precisión de los reportes por categoría.`,
+        href: '/finanzas/gastos',
+      });
+    }
+
     if (out.length === 0) {
       out.push({
         id: 'ok',
@@ -683,10 +750,12 @@ const Resumen: React.FC = () => {
     byKey,
     hasData,
     hasResultado,
+    ingresosSinTc.length,
     periodHuman,
     resultadoNeto,
     totalGastos,
     totalIngresos,
+    formatGlobalAmount,
   ]);
 
   const heroTone =
@@ -778,7 +847,9 @@ const Resumen: React.FC = () => {
               : 'border-slate-200 bg-gradient-to-b from-slate-50 to-white'
         }`}
       >
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Tu resultado neto</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          {preset === 'todo' ? 'Resultado acumulado' : 'Resultado del período'}
+        </p>
         <p
           className={`mt-2 text-3xl font-bold tabular-nums tracking-tight sm:text-4xl ${
             heroTone === 'positive' ? 'text-emerald-900' : heroTone === 'negative' ? 'text-rose-900' : 'text-slate-400'
@@ -842,7 +913,7 @@ const Resumen: React.FC = () => {
             : null}
         </p>
       ) : null}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <KpiChip
           label="Ingresos"
           value={fmt(totalIngresos)}
@@ -860,14 +931,133 @@ const Resumen: React.FC = () => {
           }
         />
         <KpiChip
-          label="Resultado neto"
+          label="Resultado del período"
           value={resultadoNetoDisplay}
           tone="slate"
-          tooltip="Ingresos del período menos gastos del período."
+          tooltip="Ingresos del período menos todos los gastos registrados. No equivale a saldo bancario disponible."
+        />
+        <KpiChip
+          label="Margen"
+          value={
+            margenPct == null
+              ? '—'
+              : `${margenPct >= 0 ? '' : ''}${margenPct.toFixed(1)}%`
+          }
+          tone={margenPct == null ? 'slate' : margenPct >= 10 ? 'emerald' : margenPct >= 0 ? 'amber' : 'rose'}
+          tooltip="Resultado del período ÷ ingresos × 100. Indica qué fracción de los ingresos queda después de todos los gastos."
         />
       </div>
 
-      {/* 3 — Gastos por categoría */}
+      {/* 3 — Cascada financiera */}
+      {cascada && (totalGastos > 0 || totalIngresos > 0) ? (
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-5 py-4">
+            <h2 className="text-sm font-bold text-slate-900">¿Cómo se formó el resultado?</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Paso a paso: de los ingresos, qué fue saliendo en cada capa hasta llegar al resultado final.
+            </p>
+          </div>
+          <div className="divide-y divide-slate-50 px-5 py-3 space-y-0">
+            {/* Ingresos */}
+            <CascadaRow
+              label="Ingresos del período"
+              value={fmt(cascada.totalIngresos)}
+              tone="emerald"
+              isBold
+            />
+            {/* Operativos */}
+            {cascada.layers[0].monto > 0 ? (
+              <CascadaRow
+                label={cascada.layers[0].label}
+                value={`−${fmt(cascada.layers[0].monto)}`}
+                tone="rose"
+                pct={cascada.layers[0].pct}
+              />
+            ) : null}
+            <CascadaRow
+              label="Resultado operativo"
+              value={fmt(cascada.resultadoOperativo)}
+              tone={cascada.resultadoOperativo >= 0 ? 'emerald' : 'rose'}
+              isSubtotal
+            />
+            {/* Admin, planilla y otros */}
+            {cascada.layers[1].monto > 0 ? (
+              <CascadaRow
+                label={cascada.layers[1].label}
+                value={`−${fmt(cascada.layers[1].monto)}`}
+                tone="rose"
+                pct={cascada.layers[1].pct}
+              />
+            ) : null}
+            <CascadaRow
+              label="Resultado del negocio"
+              value={fmt(cascada.resultadoNegocio)}
+              tone={cascada.resultadoNegocio >= 0 ? 'emerald' : 'rose'}
+              isSubtotal
+            />
+            {/* Financieros */}
+            {cascada.layers[2].monto > 0 ? (
+              <>
+                <CascadaRow
+                  label={cascada.layers[2].label}
+                  value={`−${fmt(cascada.layers[2].monto)}`}
+                  tone="rose"
+                  pct={cascada.layers[2].pct}
+                />
+                <CascadaRow
+                  label="Resultado después de financieros"
+                  value={fmt(cascada.resultadoPostFinanciero)}
+                  tone={cascada.resultadoPostFinanciero >= 0 ? 'emerald' : 'rose'}
+                  isSubtotal
+                />
+              </>
+            ) : null}
+            {/* Inversiones */}
+            {cascada.layers[3].monto > 0 ? (
+              <>
+                <CascadaRow
+                  label={cascada.layers[3].label}
+                  value={`−${fmt(cascada.layers[3].monto)}`}
+                  tone="rose"
+                  pct={cascada.layers[3].pct}
+                />
+                <CascadaRow
+                  label="Resultado después de inversiones"
+                  value={fmt(cascada.resultadoPostInversion)}
+                  tone={cascada.resultadoPostInversion >= 0 ? 'emerald' : 'rose'}
+                  isSubtotal
+                />
+              </>
+            ) : null}
+            {/* Pendientes */}
+            {cascada.layers[4].monto > 0 ? (
+              <CascadaRow
+                label={cascada.layers[4].label}
+                value={`−${fmt(cascada.layers[4].monto)}`}
+                tone="amber"
+                pct={cascada.layers[4].pct}
+              />
+            ) : null}
+            {/* Resultado final */}
+            <div className="pt-1">
+              <CascadaRow
+                label="Resultado general"
+                value={fmt(cascada.resultado)}
+                tone={cascada.resultado >= 0 ? 'emerald' : 'rose'}
+                isBold
+                isFinal
+              />
+            </div>
+          </div>
+          {!cascada.reconciles ? (
+            <p className="border-t border-slate-100 px-5 py-3 text-[11px] text-amber-700">
+              Nota: existen gastos con categoría no reconocida que están en el total de gastos pero no en las capas anteriores.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* 4 — Gastos por categoría */}
       <Card
         title="¿En qué se fue el dinero?"
         subtitle="Gastos del período por categoría financiera."
@@ -952,34 +1142,142 @@ const Resumen: React.FC = () => {
         </section>
       ) : null}
 
-      <Card
-        title="Vehículos que más gastaron"
-        subtitle="Solo operativos por vehículo (excluye operativo flota general)."
-        compact
-      >
-        {topOperativosVehiculo.length === 0 ? (
-          <p className="text-sm text-slate-500">Sin gastos operativos en este período.</p>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {topOperativosVehiculo.map((x, idx) => (
-              <div
-                key={x.vehicleId}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0"
-              >
-                <span className="min-w-0 text-slate-800">
-                  <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
-                    {idx + 1}
-                  </span>
-                  <span className="truncate">{x.name}</span>
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums text-rose-700">{formatGlobalAmount(x.monto)}</span>
+      {/* Rentabilidad por vehículo */}
+      {(vehiculosRentabilidad.top3.length > 0 || vehiculosRentabilidad.bottom3.length > 0) ? (
+        <Card
+          title="Rentabilidad por vehículo"
+          subtitle="Utilidad real = ingresos del vehículo − gastos operativos del vehículo (excl. CAPEX, globales, financieros)."
+          compact
+        >
+          {vehiculosRentabilidad.top3.length > 0 ? (
+            <>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-emerald-800/90">
+                Mejor desempeño
+              </p>
+              <div className="divide-y divide-slate-100">
+                {vehiculosRentabilidad.top3.map((v, idx) => (
+                  <div key={v.vehicleId} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0">
+                    <span className="min-w-0 flex items-center gap-2">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-xs font-bold text-emerald-700">
+                        {idx + 1}
+                      </span>
+                      <span className="truncate text-slate-800">{v.placa}</span>
+                    </span>
+                    <span className={`shrink-0 font-semibold tabular-nums ${v.utilidad >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {formatGlobalAmount(v.utilidad)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </>
+          ) : null}
+          {vehiculosRentabilidad.bottom3.length > 0 ? (
+            <div className={vehiculosRentabilidad.top3.length > 0 ? 'mt-4 pt-4 border-t border-slate-100' : ''}>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-rose-800/90">
+                Menor desempeño
+              </p>
+              <div className="divide-y divide-slate-100">
+                {vehiculosRentabilidad.bottom3.map((v, idx) => (
+                  <div key={v.vehicleId} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0">
+                    <span className="min-w-0 flex items-center gap-2">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-xs font-bold text-rose-700">
+                        {idx + 1}
+                      </span>
+                      <span className="truncate text-slate-800">{v.placa}</span>
+                    </span>
+                    <span className={`shrink-0 font-semibold tabular-nums ${v.utilidad >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {formatGlobalAmount(v.utilidad)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <Link
+              to="/finanzas/reportes"
+              className="text-xs font-semibold text-violet-700 hover:text-violet-900 underline decoration-violet-300"
+            >
+              Ver rentabilidad completa por vehículo →
+            </Link>
           </div>
-        )}
-      </Card>
+        </Card>
+      ) : null}
 
-      {/* 5 — Alertas */}
+      {/* Información complementaria: aportes, deuda, inversión histórica */}
+      {(aportesResumen || deudaActivaResumen || inversionHistorica) ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Información financiera adicional</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Datos de contexto que no forman parte del Resultado General del período.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {aportesResumen ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Aportes de accionistas
+                </p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+                  {formatGlobalAmount(aportesResumen.netoPen)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Neto PEN ({aportesResumen.count} movimientos)
+                  {aportesResumen.tieneUsd ? ' · hay aportes en USD' : ''}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  No suma a ingresos · es capital externo al negocio
+                </p>
+              </div>
+            ) : null}
+            {deudaActivaResumen ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Deuda registrada activa{' '}
+                  <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                    Estimado
+                  </span>
+                </p>
+                {deudaActivaResumen.pen > 0 ? (
+                  <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+                    {formatGlobalAmount(deudaActivaResumen.pen)}
+                  </p>
+                ) : null}
+                {deudaActivaResumen.usd > 0 ? (
+                  <p className={`tabular-nums font-bold text-slate-700 ${deudaActivaResumen.pen > 0 ? 'text-sm mt-0.5' : 'text-lg mt-1'}`}>
+                    USD {deudaActivaResumen.usd.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  </p>
+                ) : null}
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  {deudaActivaResumen.count} préstamo{deudaActivaResumen.count !== 1 ? 's' : ''} activo{deudaActivaResumen.count !== 1 ? 's' : ''}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Saldo pendiente registrado · no es deuda contable certificada
+                </p>
+              </div>
+            ) : null}
+            {inversionHistorica ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Inversión histórica en flota
+                </p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+                  {formatGlobalAmount(inversionHistorica.total)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  {inversionHistorica.count} vehículo{inversionHistorica.count !== 1 ? 's' : ''} registrado{inversionHistorica.count !== 1 ? 's' : ''}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Costo de compra histórico · sin depreciación ni valoración actual
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Alertas */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <h2 className="text-sm font-bold text-slate-900">Alertas rápidas</h2>
         <p className="mt-0.5 text-xs text-slate-500">Señales para revisar sin entrar a cada módulo.</p>
@@ -1018,5 +1316,55 @@ const Resumen: React.FC = () => {
     </div>
   );
 };
+
+function CascadaRow({
+  label,
+  value,
+  tone,
+  pct,
+  isBold,
+  isSubtotal,
+  isFinal,
+}: {
+  label: string;
+  value: string;
+  tone: 'emerald' | 'rose' | 'amber' | 'slate';
+  pct?: number;
+  isBold?: boolean;
+  isSubtotal?: boolean;
+  isFinal?: boolean;
+}) {
+  const valueCls =
+    tone === 'emerald'
+      ? 'text-emerald-800'
+      : tone === 'rose'
+        ? 'text-rose-800'
+        : tone === 'amber'
+          ? 'text-amber-800'
+          : 'text-slate-800';
+  const rowCls = isFinal
+    ? 'border-t-2 border-slate-200 bg-slate-50/60 mt-1 px-0 py-3'
+    : isSubtotal
+      ? 'py-2 border-t border-slate-100'
+      : 'py-1.5';
+  return (
+    <div className={`flex items-center justify-between gap-2 text-sm ${rowCls}`}>
+      <span
+        className={`min-w-0 truncate ${isBold || isFinal ? 'font-bold text-slate-900' : isSubtotal ? 'font-semibold text-slate-800' : 'text-slate-600'}`}
+      >
+        {isSubtotal || isFinal ? '= ' : isBold ? '' : '− '}
+        {label}
+        {pct != null && pct > 0 ? (
+          <span className="ml-1.5 text-[11px] font-normal text-slate-400">({pct.toFixed(0)}%)</span>
+        ) : null}
+      </span>
+      <span
+        className={`shrink-0 tabular-nums ${isBold || isFinal ? `font-bold text-lg ${valueCls}` : isSubtotal ? `font-semibold ${valueCls}` : valueCls}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
 
 export default Resumen;

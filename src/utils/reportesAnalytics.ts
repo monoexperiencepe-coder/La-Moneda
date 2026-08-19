@@ -13,7 +13,9 @@ export const TIPO_GASTO_LABELS: Record<string, string> = {
   planilla_laboral: 'Planilla',
   inversion_compra: 'Inversión con utilidad',
   representacion_interna: 'Representación interna',
+  otros_gastos_varios: 'Otros gastos / Gastos varios',
   gastos_globales: 'Globales',
+  pendiente_revision: 'Pendiente de clasificación',
 };
 
 export function normalizeTipoGasto(raw: string | null | undefined, hasVehicle: boolean): string {
