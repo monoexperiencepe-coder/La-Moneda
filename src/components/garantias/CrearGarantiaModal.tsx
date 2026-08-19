@@ -92,9 +92,9 @@ const CrearGarantiaModal: React.FC<Props> = ({
       setError('Monto requerido inválido.');
       return;
     }
-    const dep = initialDeposit.trim() === '' ? null : Number(initialDeposit);
-    if (dep != null && (!Number.isFinite(dep) || dep <= 0)) {
-      setError('Entrega inicial inválida.');
+    const dep = initialDeposit.trim() === '' ? 0 : Number(initialDeposit);
+    if (!Number.isFinite(dep) || dep < 0) {
+      setError('Monto entregado inicialmente inválido.');
       return;
     }
     setBusy(true);
@@ -197,13 +197,13 @@ const CrearGarantiaModal: React.FC<Props> = ({
           onChange={(e) => setRequiredAmount(e.target.value)}
         />
         <Input
-          label="Entrega inicial (opcional)"
+          label="Monto entregado inicialmente (S/)"
           type="number"
           min={0}
           step="0.01"
           value={initialDeposit}
           onChange={(e) => setInitialDeposit(e.target.value)}
-          helper="Si se completa, se registra como movimiento initial_deposit."
+          helper="Dinero recibido al crear la garantía. Puede ser S/ 0.00."
         />
         <label className="block">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Notas</span>

@@ -159,23 +159,26 @@ export async function createDriverGuarantee(
       ? input.requiredAmount
       : await resolveRequiredAmount(input.vehicleType, empresaId);
 
-  const { data, error } = await supabase
-    .from('driver_guarantees')
-    .insert({
-      empresa_id: empresaId,
-      driver_id: driverId,
-      current_vehicle_id: input.currentVehicleId,
-      vehicle_type: input.vehicleType,
-      required_amount: requiredAmount,
-      current_balance: 0,
-      total_contributed: 0,
-      total_deducted: 0,
-      status: 'sin_garantia',
-      notes: input.notes?.trim() || null,
-      created_by: input.createdBy ?? null,
-    })
-    .select('*')
-    .single();
+  const initialAmount = input.initialDeposit ?? 0;
+  if (!Number.isFinite(requiredAmount) || requiredAmount < 0) {
+    throw new Error('Monto requerido inválido.');
+  }
+  if (!Number.isFinite(initialAmount) || initialAmount < 0) {
+    throw new Error('Monto entregado inicialmente inválido.');
+  }
+
+  // La función de base de datos crea encabezado + depósito + recálculo dentro
+  // de una sola transacción. Nunca debe reemplazarse por escrituras separadas.
+  const { data, error } = await supabase.rpc('create_driver_guarantee_with_initial_deposit', {
+    p_empresa_id: empresaId,
+    p_driver_id: driverId,
+    p_current_vehicle_id: input.currentVehicleId,
+    p_vehicle_type: input.vehicleType,
+    p_required_amount: requiredAmount,
+    p_initial_amount: initialAmount,
+    p_notes: input.notes?.trim() || null,
+    p_movement_date: input.movementDate || null,
+  });
 
   if (error) {
     console.error('[garantias create]', error.message);
@@ -185,24 +188,9 @@ export async function createDriverGuarantee(
     throw new Error(error.message || 'No se pudo crear la garantía.');
   }
 
-  const guarantee = mapDriverGuaranteeRow(data as Record<string, unknown>);
-
-  if (input.initialDeposit != null && input.initialDeposit > 0) {
-    return addGuaranteeMovement(
-      {
-        guaranteeId: guarantee.id,
-        movementType: 'initial_deposit',
-        amount: input.initialDeposit,
-        vehicleId: input.currentVehicleId,
-        observation: 'Entrega inicial',
-        createdBy: input.createdBy,
-        movementDate: input.movementDate,
-      },
-      empresaId,
-    ).then((r) => r.guarantee);
-  }
-
-  return guarantee;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Respuesta incompleta al crear la garantía.');
+  return mapDriverGuaranteeRow(row as Record<string, unknown>);
 }
 
 export type AddMovementInput = {

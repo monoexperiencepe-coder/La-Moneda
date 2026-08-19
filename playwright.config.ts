@@ -49,6 +49,10 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'unit',
+      testMatch: /unit\/.*\.spec\.ts/,
+    },
+    {
       name: 'setup',
       testMatch: /auth\.setup\.ts/,
     },
