@@ -84,6 +84,7 @@ import { fetchGastosCaja } from '../services/gastosCajaService';
 import { fetchCajaNegocioVehiculo } from '../services/cajaNegocioService';
 import { enrichGastoOperativo, enrichIngresoOperativo } from '../utils/registroOperativo';
 import { sortRegistrosByLatestCreatedOrDate } from '../utils/sortRegistrosByLatestCreatedOrDate';
+import { mergeIngresoSorted, removeIngresoById } from '../utils/ingresoMutations';
 import { useAuth } from '../context/AuthContext';
 import { canUseIngresos, canUseInversiones, isFinancialOperadorRestricted, isOperadorVisibleTipoGasto, permissionUserFromAuth } from '../utils/permissions';
 import {
@@ -112,14 +113,6 @@ function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omi
         ? Number((ingreso.monto * tipoCambio).toFixed(2))
         : ingreso.monto;
   return { ...ingreso, moneda, tipoCambio, montoPENReferencia };
-}
-
-/** Tras alta/edición local: más reciente arriba (created_at → fecha_registro → fecha → id). */
-function mergeIngresoSorted(prev: Ingreso[], row: Ingreso): Ingreso[] {
-  const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
-  const next = [...without, row];
-  next.sort(sortRegistrosByLatestCreatedOrDate);
-  return next;
 }
 
 function mergeGastoSorted(prev: Gasto[], row: Gasto): Gasto[] {
@@ -1184,7 +1177,7 @@ export const useRegistros = () => {
     let prevSnapshot: Ingreso[] = [];
     setIngresos((prev) => {
       prevSnapshot = prev;
-      return prev.filter((i) => i.id !== id);
+      return removeIngresoById(prev, id);
     });
     const res = await removeIngreso(id, profile?.empresa_id);
     if (!res.ok) {
@@ -1299,7 +1292,7 @@ export const useRegistros = () => {
   }, []);
 
   const removeIngresoLocal = useCallback((id: string) => {
-    setIngresos((prev) => prev.filter((i) => i.id !== id));
+    setIngresos((prev) => removeIngresoById(prev, id));
   }, []);
 
   const removeConductorLocal = useCallback((id: string) => {

@@ -2,11 +2,12 @@ import type { Ingreso, Prestamo } from '../data/types';
 
 /** Monto del ingreso expresado en PEN para KPIs y sumas (legacy sin campos = monto en PEN). */
 export function ingresoMontoPEN(i: Ingreso): number {
-  if (i.montoPENReferencia != null && !Number.isNaN(i.montoPENReferencia) && i.montoPENReferencia > 0) {
-    return i.montoPENReferencia;
+  if (i.moneda !== 'USD') return i.monto;
+  if (i.tipoCambio != null && Number.isFinite(i.tipoCambio) && i.tipoCambio > 0) {
+    return Number((i.monto * i.tipoCambio).toFixed(2));
   }
-  if (i.moneda === 'USD' && i.tipoCambio != null && i.tipoCambio > 0) {
-    return i.monto * i.tipoCambio;
+  if (i.montoPENReferencia != null && Number.isFinite(i.montoPENReferencia) && i.montoPENReferencia > 0) {
+    return i.montoPENReferencia;
   }
   return i.monto;
 }

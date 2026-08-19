@@ -11,6 +11,7 @@ import Modal from '../Common/Modal';
 import { Ingreso, Gasto, Vehicle } from '../../data/types';
 import { formatDate, formatDateTimePe } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
+import { buildIngresoMoneyPatch } from '../../utils/ingresoMutations';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
 import { getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
@@ -301,6 +302,8 @@ type IngresoEditDraft = {
   fechaDesde: string;
   fechaHasta: string;
   montoStr: string;
+  moneda: 'PEN' | 'USD';
+  tipoCambioStr: string;
   comentarios: string;
 };
 
@@ -327,6 +330,8 @@ function ingresoToEditDraft(i: Ingreso): IngresoEditDraft {
     fechaDesde: fechaInicio,
     fechaHasta,
     montoStr: String(i.monto),
+    moneda: i.moneda === 'USD' ? 'USD' : 'PEN',
+    tipoCambioStr: i.tipoCambio != null ? String(i.tipoCambio) : '',
     comentarios: i.comentarios ?? '',
   };
 }
@@ -384,9 +389,25 @@ function buildIngresoDetallePatch(
     }
   }
 
-  const m = Number(String(draft.montoStr).replace(',', '.'));
-  if (!Number.isFinite(m) || m <= 0) return { patch: {}, error: 'Monto inválido.' };
-  if (m !== baseline.monto) patch.monto = m;
+  let money;
+  try {
+    money = buildIngresoMoneyPatch({
+      monto: Number(String(draft.montoStr).replace(',', '.')),
+      moneda: draft.moneda,
+      tipoCambio:
+        draft.tipoCambioStr.trim() === ''
+          ? null
+          : Number(String(draft.tipoCambioStr).replace(',', '.')),
+    });
+  } catch (e) {
+    return { patch: {}, error: e instanceof Error ? e.message : 'Datos monetarios inválidos.' };
+  }
+  const baselineMoneda = baseline.moneda === 'USD' ? 'USD' : 'PEN';
+  const moneyChanged =
+    money.monto !== baseline.monto ||
+    money.moneda !== baselineMoneda ||
+    money.tipoCambio !== (baseline.tipoCambio ?? null);
+  if (moneyChanged) Object.assign(patch, money);
 
   const com = sanitizeComentariosPatch(draft.comentarios);
   if (com !== sanitizeComentariosPatch(baseline.comentarios ?? '')) patch.comentarios = com;
@@ -1939,6 +1960,35 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               value={ingresoEditDraft.montoStr}
               onChange={(e) => setIngresoEditDraft((d) => (d ? { ...d, montoStr: e.target.value } : d))}
             />
+            <Select
+              label="Moneda"
+              options={[
+                { value: 'PEN', label: 'PEN · Soles' },
+                { value: 'USD', label: 'USD · Dólares' },
+              ]}
+              value={ingresoEditDraft.moneda}
+              onChange={(v) =>
+                setIngresoEditDraft((d) =>
+                  d
+                    ? {
+                        ...d,
+                        moneda: v === 'USD' ? 'USD' : 'PEN',
+                        tipoCambioStr: v === 'USD' ? d.tipoCambioStr : '',
+                      }
+                    : d,
+                )
+              }
+            />
+            {ingresoEditDraft.moneda === 'USD' ? (
+              <Input
+                label="Tipo de cambio (S/ por US$)"
+                inputMode="decimal"
+                value={ingresoEditDraft.tipoCambioStr}
+                onChange={(e) =>
+                  setIngresoEditDraft((d) => (d ? { ...d, tipoCambioStr: e.target.value } : d))
+                }
+              />
+            ) : null}
             <div className="w-full">
               <label htmlFor="ingreso-edit-comentarios" className="label">
                 Comentarios

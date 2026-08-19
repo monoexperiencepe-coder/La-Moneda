@@ -8,6 +8,7 @@ import { insertFinancialAuditLog, logPostgrestError } from './financialAuditServ
 import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { stampCreatedByExtra } from '../utils/amountPermissions';
 import { isValidIngresoPrimaryKey } from '../utils/ingresoRecordId';
+import { requireDeletedIngresoRow } from '../utils/ingresoMutations';
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -138,11 +139,12 @@ export async function removeIngreso(
 
   const before = await fetchIngresoAuditSnapshot(id, empresaId);
 
-  const { error } = await supabase
+  const { data: deletedRows, error } = await supabase
     .from('ingresos')
     .delete()
     .eq('id', id)
-    .eq('empresa_id', empresaId);
+    .eq('empresa_id', empresaId)
+    .select('id');
 
   if (error) {
     logPostgrestError('ingresos delete', error);
@@ -153,6 +155,12 @@ export async function removeIngreso(
       details: error.details,
       hint: error.hint,
     };
+  }
+
+  try {
+    requireDeletedIngresoRow(deletedRows as Pick<Ingreso, 'id'>[] | null, id);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'No se eliminó el ingreso.' };
   }
 
   if (before) {
