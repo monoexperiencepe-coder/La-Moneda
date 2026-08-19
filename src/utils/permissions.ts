@@ -25,6 +25,7 @@ export const FINANZA_MOVE_TARGET_TIPO_GASTO = [
   'financiero_prestamo',
   'planilla_laboral',
   'representacion_interna',
+  'otros_gastos_varios',
   'gastos_globales',
   'inversion_compra',
   'pendiente_revision',

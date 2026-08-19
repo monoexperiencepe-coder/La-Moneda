@@ -148,6 +148,95 @@ test('utilidadReal.ts no excluye otros_gastos_varios de la utilidad real', () =>
   expect(block).not.toContain(TIPO);
 });
 
+// ── Part E: Move modal / bidireccionalidad ──────────────────────────────────
+
+// E-1. otros_gastos_varios está en la lista canónica de destinos válidos en el source.
+test('move-modal: FINANZA_MOVE_TARGET_TIPO_GASTO incluye otros_gastos_varios', () => {
+  const src = resolveSource('../../src/utils/permissions.ts');
+  const match = src.match(/FINANZA_MOVE_TARGET_TIPO_GASTO\s*=\s*\[([\s\S]*?)\]\s*as const/);
+  expect(match).not.toBeNull();
+  expect(match![1]).toContain("'otros_gastos_varios'");
+});
+
+// E-2. canMoveGastoToTipo delega a FINANZA_MOVE_TARGET_TIPO_GASTO (no lista local).
+test('move-modal: canMoveGastoToTipo valida contra FINANZA_MOVE_TARGET_TIPO_GASTO', () => {
+  const src = resolveSource('../../src/utils/permissions.ts');
+  const fnMatch = src.match(/function canMoveGastoToTipo[\s\S]*?\n\}/);
+  expect(fnMatch).not.toBeNull();
+  expect(fnMatch![0]).toContain('FINANZA_MOVE_TARGET_TIPO_GASTO');
+});
+
+// E-3. Move representacion_interna → otros_gastos_varios: monto conservado.
+test('move-modal: representacion_interna → otros_gastos_varios preserva monto', () => {
+  const antes = makeGasto({ tipo_gasto: 'representacion_interna', monto: 250 });
+  const despues = makeGasto({ tipo_gasto: TIPO, monto: 250 });
+  let summary = patchSummaryAddGasto(EMPTY_GASTOS_FINANCIAL_SUMMARY, antes, () => true);
+  summary = patchSummaryForGastoMove(summary, antes, despues, () => true);
+  expect(summary.byTipoGasto[TIPO]).toEqual({ monto: 250, count: 1 });
+  expect(summary.byTipoGasto['representacion_interna']).toEqual({ monto: 0, count: 0 });
+});
+
+// E-4. Move otros_gastos_varios → representacion_interna (bidireccional): monto conservado.
+test('move-modal: otros_gastos_varios → representacion_interna preserva monto', () => {
+  const antes = makeGasto({ tipo_gasto: TIPO, monto: 180 });
+  const despues = makeGasto({ tipo_gasto: 'representacion_interna', monto: 180 });
+  let summary = patchSummaryAddGasto(EMPTY_GASTOS_FINANCIAL_SUMMARY, antes, () => true);
+  summary = patchSummaryForGastoMove(summary, antes, despues, () => true);
+  expect(summary.byTipoGasto[TIPO]).toEqual({ monto: 0, count: 0 });
+  expect(summary.byTipoGasto['representacion_interna']).toEqual({ monto: 180, count: 1 });
+});
+
+// E-5. totalGastos no cambia al mover (solo cambia distribución).
+test('move-modal: totalGastos permanece igual después de cualquier move', () => {
+  const antes = makeGasto({ tipo_gasto: 'administrativo_empresa', monto: 400 });
+  const despues = makeGasto({ tipo_gasto: TIPO, monto: 400 });
+  let summary = patchSummaryAddGasto(EMPTY_GASTOS_FINANCIAL_SUMMARY, antes, () => true);
+  const totalAntes = summary.totalGastos;
+  summary = patchSummaryForGastoMove(summary, antes, despues, () => true);
+  expect(summary.totalGastos).toBe(totalAntes);
+});
+
+// E-6. Resultado General = ingresos − totalGastos; un move no altera el resultado.
+test('move-modal: resultado general no cambia al mover a/desde otros_gastos_varios', () => {
+  const totalIngresos = 10_000;
+  const antes = makeGasto({ tipo_gasto: 'planilla_laboral', monto: 1_200 });
+  const despues = makeGasto({ tipo_gasto: TIPO, monto: 1_200 });
+  let summary = patchSummaryAddGasto(EMPTY_GASTOS_FINANCIAL_SUMMARY, antes, () => true);
+  const resultadoAntes = totalIngresos - summary.totalGastos;
+  summary = patchSummaryForGastoMove(summary, antes, despues, () => true);
+  const resultadoDespues = totalIngresos - summary.totalGastos;
+  expect(resultadoDespues).toBe(resultadoAntes);
+});
+
+// E-7. Los buckets de origen y destino se actualizan correctamente tras el move.
+test('move-modal: buckets de origen y destino correctos después del move', () => {
+  const g1 = makeGasto({ tipo_gasto: 'gastos_globales', monto: 300 });
+  const g2 = makeGasto({ tipo_gasto: TIPO, monto: 300 });
+  let summary = patchSummaryAddGasto(EMPTY_GASTOS_FINANCIAL_SUMMARY, g1, () => true);
+  summary = patchSummaryForGastoMove(summary, g1, g2, () => true);
+  expect(summary.byTipoGasto['gastos_globales']).toEqual({ monto: 0, count: 0 });
+  expect(summary.byTipoGasto[TIPO]).toEqual({ monto: 300, count: 1 });
+  expect(summary.totalCount).toBe(1);
+});
+
+// E-8. FINANZA_MOVE_TARGET_TIPO_GASTO no tiene duplicados en el source.
+test('move-modal: FINANZA_MOVE_TARGET_TIPO_GASTO no contiene duplicados', () => {
+  const src = resolveSource('../../src/utils/permissions.ts');
+  const match = src.match(/FINANZA_MOVE_TARGET_TIPO_GASTO\s*=\s*\[([\s\S]*?)\]\s*as const/);
+  expect(match).not.toBeNull();
+  const entries = [...match![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const unique = new Set(entries);
+  expect(unique.size).toBe(entries.length);
+});
+
+// E-9. iaClasificacionService y IAClasificacionPage consumen FINANZA_MOVE_TARGET_TIPO_GASTO
+//     desde permissions.ts (no listas locales) — garantiza que el fix llega a ambos.
+test('move-modal: iaClasificacionService importa FINANZA_MOVE_TARGET de permissions', () => {
+  const src = resolveSource('../../src/services/ai/iaClasificacionService.ts');
+  expect(src).toContain("import { FINANZA_MOVE_TARGET_TIPO_GASTO }");
+  expect(src).toContain("from '../../utils/permissions'");
+});
+
 // 10. 'otros_gastos_varios' NO aparece en la función tipoGastoRequiereVehiculo
 //     (vehículo opcional): permite registrar gastos globales sin vehicleId.
 test('gastoMoveCategoriaDefaults.ts no exige vehicleId para otros_gastos_varios', () => {
