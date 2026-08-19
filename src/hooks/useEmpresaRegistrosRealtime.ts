@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 import {
   realtimeLogCleanup,
   realtimeLogEmpresaMismatch,
-  realtimeLogSubscribe,
   realtimeRegistry,
 } from '../utils/realtimeDebug';
 import {
@@ -63,7 +62,6 @@ import {
   logRealtimeRawPayload,
   logRealtimeSubscribeDone,
   logRealtimeSubscribeStart,
-  logRealtimeSubscribeMode,
   logRealtimeUnmounted,
   rtMandatoryLog,
 } from '../utils/realtimeBootLog';
@@ -107,6 +105,7 @@ export type EmpresaRealtimeHandlers = {
   reloadGastosOnly: () => void | Promise<void>;
   reloadIngresosOnly: () => void | Promise<void>;
   reloadGastosFinancialSummary?: (opts?: { silent?: boolean }) => Promise<void>;
+  markGastosFullStale?: () => void;
 };
 
 type RealtimeBootMeta = {
@@ -166,19 +165,6 @@ function usesManualEmpresaFilter(
   return MANUAL_EMPRESA_FILTER_TABLES.has(
     table as (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
   );
-}
-
-function logTableSubscribeMode(
-  table: (typeof EMPRESA_TABLES)[number] | 'financial_audit_logs',
-  empresaId: string,
-): void {
-  const manual = usesManualEmpresaFilter(table);
-  logRealtimeSubscribeMode({
-    table,
-    mode: manual ? 'manual_empresa_filter' : 'supabase_channel_filter',
-    hasSupabaseFilter: !manual,
-    empresaId,
-  });
 }
 
 function rejectManualEmpresaMismatch(
@@ -255,15 +241,18 @@ export function useEmpresaRegistrosRealtime({
   const realtimeStartedRef = useRef(false);
   const socketReadyUserIdRef = useRef<string | null>(null);
   const bootMetaRef = useRef(bootMeta);
-  bootMetaRef.current = bootMeta;
   const permissionUserRef = useRef(permissionUser);
-  permissionUserRef.current = permissionUser;
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
   const batchRef = useRef({ count: 0 });
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRemoteMutationRef = useRef(onRemoteMutation);
-  onRemoteMutationRef.current = onRemoteMutation;
+
+  useEffect(() => {
+    bootMetaRef.current = bootMeta;
+    permissionUserRef.current = permissionUser;
+    handlersRef.current = handlers;
+    onRemoteMutationRef.current = onRemoteMutation;
+  }, [bootMeta, handlers, onRemoteMutation, permissionUser]);
 
   const scheduleBatch = useRef(() => {
     batchRef.current.count += 1;
@@ -365,6 +354,7 @@ export function useEmpresaRegistrosRealtime({
           hookMounted: true,
         });
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refleja que aún no existe canal activo
       setConnected(false);
       return () => {
         /* esperando auth — sin canal activo */
@@ -450,8 +440,12 @@ export function useEmpresaRegistrosRealtime({
         return;
       }
 
+      const wasSubscribed = subscribed;
       subscribed = status === 'SUBSCRIBED';
       setConnected(subscribed);
+      if (wasSubscribed && !subscribed) {
+        handlersRef.current.markGastosFullStale?.();
+      }
 
       const statusPayload = {
         status,
@@ -520,7 +514,6 @@ export function useEmpresaRegistrosRealtime({
             if (typeof id === 'string' && id) {
               h.removeGastoLocal(id, { source: 'realtime' });
             }
-            void Promise.resolve(h.reloadGastosOnly());
             return;
           }
           if (!parsed.new) return;

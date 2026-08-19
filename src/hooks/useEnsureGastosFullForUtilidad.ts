@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRegistrosContext } from '../context/RegistrosContext';
 
 /**
@@ -12,29 +12,27 @@ export function useEnsureGastosFullForUtilidad(): {
 } {
   const {
     gastosLoadScope,
-    reloadGastosFull,
+    ensureGastosFull,
+    gastosFullStatus,
     isLoadingGastosFull,
     hasLoadedGastosOnce,
   } = useRegistrosContext();
-  const inflightRef = useRef(false);
 
   useEffect(() => {
     if (!hasLoadedGastosOnce) return;
-    if (gastosLoadScope === 'full') return;
-    if (isLoadingGastosFull || inflightRef.current) return;
+    if (gastosFullStatus === 'ready' || gastosFullStatus === 'loading') return;
 
-    inflightRef.current = true;
     if (import.meta.env.DEV) {
-      console.info('[utilidad:gastos] bootstrap incompleto — cargando histórico completo (fetchGastosFull)');
+      console.info('[utilidad:gastos] esperando caché completa de sesión', { gastosFullStatus });
     }
-    void reloadGastosFull().finally(() => {
-      inflightRef.current = false;
+    void ensureGastosFull().catch(() => {
+      /* El módulo muestra el estado error y permite reintentar sin bloquear la app. */
     });
-  }, [gastosLoadScope, reloadGastosFull, hasLoadedGastosOnce, isLoadingGastosFull]);
+  }, [ensureGastosFull, gastosFullStatus, hasLoadedGastosOnce]);
 
   return {
     gastosLoadScope,
     isLoadingGastosFull,
-    gastosReadyForUtilidad: gastosLoadScope === 'full' && !isLoadingGastosFull,
+    gastosReadyForUtilidad: gastosFullStatus === 'ready' && gastosLoadScope === 'full',
   };
 }

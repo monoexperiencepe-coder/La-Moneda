@@ -60,6 +60,8 @@ export interface Ingreso {
   metodoPago: string;
   metodoPagoDetalle: string;
   celularMetodo: string | null;
+  /** Referencia estable opcional; los campos anteriores conservan el snapshot histórico. */
+  paymentAccountId?: string | null;
   signo: '+';
   /** Monto en la moneda indicada (por defecto PEN). */
   monto: number;
@@ -234,6 +236,8 @@ export interface Gasto {
   metodoPago: string;
   metodoPagoDetalle: string;
   celularMetodo: string | null;
+  /** Referencia estable opcional; los campos anteriores conservan el snapshot histórico. */
+  paymentAccountId?: string | null;
   /** Derivado del tipo para gráficos por categoría legacy */
   categoria: CategoriaGasto;
   /** Igual que subTipo en registros nuevos; se mantiene para tablas existentes */

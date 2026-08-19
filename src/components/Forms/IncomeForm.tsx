@@ -11,9 +11,8 @@ import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import {
   TIPOS_INGRESO_FACT,
   getSubtiposIngreso,
-  getDetalleMetodoByLabel,
-  getDetallesMetodoPago,
 } from '../../data/factCatalog';
+import { usePaymentSettings } from '../../context/PaymentSettingsContext';
 import {
   ALCANCE_INGRESO_OPTIONS,
   CATEGORIAS_INGRESO_EXTRAORDINARIO,
@@ -51,6 +50,7 @@ interface FormState {
   periodoDias: string;
   metodoPago: string;
   metodoPagoDetalle: string;
+  paymentAccountId: string | null;
   moneda: Moneda;
   tipoCambio: string;
   monto: string;
@@ -59,7 +59,6 @@ interface FormState {
 
 function emptyForm(): FormState {
   const t = TIPOS_INGRESO_FACT.includes('ALQUILER') ? 'ALQUILER' : (TIPOS_INGRESO_FACT[0] ?? '');
-  const y = getDetallesMetodoPago('Yape')[0];
   return {
     alcanceIngreso: 'vehicular',
     fecha: todayStr(),
@@ -71,7 +70,8 @@ function emptyForm(): FormState {
     fechaHasta: '',
     periodoDias: '',
     metodoPago: 'Yape',
-    metodoPagoDetalle: y?.detalle ?? '',
+    metodoPagoDetalle: '',
+    paymentAccountId: null,
     moneda: 'PEN',
     tipoCambio: '',
     monto: '',
@@ -90,6 +90,16 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
+  const { findAccount, getAccountsForMethod, status: paymentSettingsStatus } = usePaymentSettings();
+
+  useEffect(() => {
+    if (paymentSettingsStatus !== 'ready' && paymentSettingsStatus !== 'fallback') return;
+    setForm((current) => {
+      if (current.paymentAccountId) return current;
+      const first = getAccountsForMethod(current.metodoPago)[0];
+      return first ? { ...current, metodoPagoDetalle: first.detalle, paymentAccountId: first.paymentAccountId ?? null } : current;
+    });
+  }, [getAccountsForMethod, paymentSettingsStatus]);
 
   useEffect(() => {
     onLoadingChange?.(loading);
@@ -171,7 +181,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
     if (!validate()) return;
     setLoading(true);
     try {
-      const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
+      const row = findAccount(form.metodoPago, form.metodoPagoDetalle);
       const moneda = form.moneda;
       const rawM = Number(Number(form.monto).toFixed(2));
       const tipoCambio =
@@ -213,6 +223,7 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
           metodoPago: form.metodoPago,
           metodoPagoDetalle: form.metodoPagoDetalle.trim(),
           celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
+          paymentAccountId: row?.paymentAccountId ?? form.paymentAccountId,
           signo: '+',
           monto: rawM,
           moneda,
@@ -496,11 +507,12 @@ const IncomeForm: React.FC<IncomeFormProps> = ({
         metodoPago={form.metodoPago}
         metodoPagoDetalle={form.metodoPagoDetalle}
         ingresos={ingresos}
-        onChange={({ metodoPago, metodoPagoDetalle }) => {
+          onChange={({ metodoPago, metodoPagoDetalle, paymentAccountId }) => {
           setForm((p) => ({
             ...p,
             metodoPago,
-            metodoPagoDetalle,
+              metodoPagoDetalle,
+              paymentAccountId,
           }));
           setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
         }}

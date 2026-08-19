@@ -11,10 +11,9 @@ import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import {
   TIPOS_GASTO_FACT,
   getSubtiposGasto,
-  getDetalleMetodoByLabel,
-  getDetallesMetodoPago,
   METODOS_PAGO,
 } from '../../data/factCatalog';
+import { usePaymentSettings } from '../../context/PaymentSettingsContext';
 import {
   FINANZA_GASTO_REGISTRO_OPTIONS,
   firstFactTipoForFinanza,
@@ -149,6 +148,7 @@ interface FormState {
   fechaHasta: string;
   metodoPago: string;
   metodoPagoDetalle: string;
+  paymentAccountId: string | null;
   monto: string;
   pagadoA: string;
   comentarios: string;
@@ -162,7 +162,6 @@ function emptyForm(): FormState {
     (DEFAULT_TIPO_GASTO_FACT && TIPOS_GASTO_FACT.includes(DEFAULT_TIPO_GASTO_FACT)
       ? DEFAULT_TIPO_GASTO_FACT
       : TIPOS_GASTO_FACT[0]) ?? '';
-  const y = getDetallesMetodoPago('Yape')[0];
   return {
     categoriaFinanciera: '',
     fecha: todayStr(),
@@ -177,7 +176,8 @@ function emptyForm(): FormState {
     fechaDesde: '',
     fechaHasta: '',
     metodoPago: 'Yape',
-    metodoPagoDetalle: y?.detalle ?? '',
+    metodoPagoDetalle: '',
+    paymentAccountId: null,
     monto: '',
     pagadoA: '',
     comentarios: '',
@@ -189,7 +189,6 @@ function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState
     const cat: FinanzaGastoRegistroValue = 'inversion_compra';
     const defaultCanon: InversionSubtipoCanon = 'adquisicion_vehiculo';
     const { tipo: t0, subTipo: s0 } = getDefaultFactTipoSubtipoForInversionCanon(defaultCanon);
-    const y = getDetallesMetodoPago('Yape')[0];
     return {
       categoriaFinanciera: cat,
       fecha: todayStr(),
@@ -204,7 +203,8 @@ function initialExpenseForm(finanzaPreset: 'inversion_compra' | null): FormState
       fechaDesde: '',
       fechaHasta: '',
       metodoPago: 'Yape',
-      metodoPagoDetalle: y?.detalle ?? '',
+      metodoPagoDetalle: '',
+      paymentAccountId: null,
       monto: '',
       pagadoA: '',
       comentarios: '',
@@ -227,6 +227,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [periodoOpen, setPeriodoOpen] = useState(false);
+  const { findAccount, getAccountsForMethod, status: paymentSettingsStatus } = usePaymentSettings();
+
+  useEffect(() => {
+    if (paymentSettingsStatus !== 'ready' && paymentSettingsStatus !== 'fallback') return;
+    setForm((current) => {
+      if (current.paymentAccountId) return current;
+      const first = getAccountsForMethod(current.metodoPago)[0];
+      return first ? { ...current, metodoPagoDetalle: first.detalle, paymentAccountId: first.paymentAccountId ?? null } : current;
+    });
+  }, [getAccountsForMethod, paymentSettingsStatus]);
 
   const logSubmitClick = () => {
     const isSubmitting = loading;
@@ -404,7 +414,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   };
 
   const buildGastoPayload = (): Omit<Gasto, 'id' | 'createdAt'> => {
-    const row = getDetalleMetodoByLabel(form.metodoPago, form.metodoPagoDetalle);
+    const row = findAccount(form.metodoPago, form.metodoPagoDetalle);
     const catFin = form.categoriaFinanciera as FinanzaGastoRegistroValue;
     const esGlobal = catFin === 'gastos_globales' || catFin === 'operativo_flota_general';
     const esRep = catFin === 'representacion_interna';
@@ -473,6 +483,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       metodoPago: form.metodoPago,
       metodoPagoDetalle: form.metodoPagoDetalle.trim(),
       celularMetodo: row?.celular?.trim() ? row.celular.trim() : null,
+      paymentAccountId: row?.paymentAccountId ?? form.paymentAccountId,
       categoria: inferCategoriaFromTipoGasto(factTipo),
       motivo: motivoFin,
       signo: '-',
@@ -1014,8 +1025,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                 theme="rose"
                 conteoEtiqueta="gastos"
                 disabled={seleccionesBloqueadas}
-                onChange={({ metodoPago, metodoPagoDetalle }) => {
-                  setForm((p) => ({ ...p, metodoPago, metodoPagoDetalle }));
+                onChange={({ metodoPago, metodoPagoDetalle, paymentAccountId }) => {
+                  setForm((p) => ({ ...p, metodoPago, metodoPagoDetalle, paymentAccountId }));
                   setErrors((e) => ({ ...e, metodoPagoDetalle: '' }));
                 }}
               />

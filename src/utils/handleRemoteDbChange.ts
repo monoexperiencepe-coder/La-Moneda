@@ -1,4 +1,5 @@
 import { realtimeLogEmpresaMismatch, realtimeLogEvent, realtimeLogRefresh, realtimeLogRefreshDone } from './realtimeDebug';
+import { shouldRefetchAfterRealtime } from './realtimeRefetchPolicy';
 
 export type RemoteDbTable =
   | 'gastos'
@@ -36,8 +37,8 @@ export interface RemoteDbRefreshHandlers {
 const REFETCH_DEBOUNCE_MS = 400;
 
 const TABLE_REFETCH: Partial<Record<RemoteDbTable, keyof RemoteDbRefreshHandlers | 'audit'>> = {
-  gastos: 'reloadGastosOnly',
-  ingresos: 'reloadIngresosOnly',
+  // gastos/ingresos se aplican incrementalmente; no reconciliar miles de filas
+  // después de cada evento normal de Realtime.
   kilometrajes: 'reloadKilometrajesOnly',
   control_fechas: 'reloadControlFechasLatest',
   financial_audit_logs: 'audit',
@@ -132,7 +133,7 @@ export function createRemoteDbChangeHandler(
 
     handlers.bumpRemoteTick?.();
 
-    const refetchKey = TABLE_REFETCH[table];
+    const refetchKey = shouldRefetchAfterRealtime(table) ? TABLE_REFETCH[table] : undefined;
     if (refetchKey === 'audit') {
       handlers.onAuditLogsRemote();
       realtimeLogRefresh({ table, extra: { reason: 'remote_event_audit' } });

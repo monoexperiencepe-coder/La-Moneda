@@ -65,6 +65,9 @@ const UtilidadOperativa: React.FC = () => {
     isLoadingGastosFull,
     gastosEnMemoria,
     gastosLoadScope,
+    gastosFullStatus,
+    gastosFullError,
+    retryGastosFull,
   } = useUtilidadRealCalculos({
     pantalla: 'UtilidadOperativa.buildUtilidadRealPorVehiculo',
     auditSampleVehicleIds: [1],
@@ -176,6 +179,7 @@ const UtilidadOperativa: React.FC = () => {
   const pageSafe = Math.min(page, totalPages);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- normaliza una página persistida fuera de rango
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages, setPage]);
 
@@ -238,11 +242,24 @@ const UtilidadOperativa: React.FC = () => {
       </div>
 
       {loadingBanner ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
-          {isLoadingGastosFull
-            ? `Cargando histórico completo de gastos (${gastosEnMemoria} en memoria, scope=${gastosLoadScope})…`
-            : 'Preparando histórico completo de gastos…'}
-        </p>
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+          <p>
+            {gastosFullStatus === 'error'
+              ? `No se pudo sincronizar el histórico completo${gastosFullError ? `: ${gastosFullError}` : '.'}`
+              : isLoadingGastosFull
+                ? `Sincronizando histórico completo (${gastosEnMemoria} en memoria, scope=${gastosLoadScope})…`
+                : 'Preparando histórico completo de gastos…'}
+          </p>
+          {gastosFullStatus === 'error' ? (
+            <button
+              type="button"
+              className="mt-2 rounded-md bg-amber-900 px-2.5 py-1 font-semibold text-white"
+              onClick={() => void retryGastosFull().catch(() => undefined)}
+            >
+              Reintentar
+            </button>
+          ) : null}
+        </div>
       ) : (
         <p className="rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
           Gastos completos en memoria ({gastosEnMemoria} registros). Período: {range.label}.

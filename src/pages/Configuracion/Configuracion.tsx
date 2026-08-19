@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { roleDisplayLabel } from '../../config/userRolesUi';
+import PaymentAccountsSettings from '../../components/Configuracion/PaymentAccountsSettings';
 
 const Configuracion: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ const Configuracion: React.FC = () => {
           <p className="text-sm text-gray-500">Perfil y administración del sistema</p>
         </div>
       </div>
+
+      <PaymentAccountsSettings />
 
       <div className="bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl p-6 text-white shadow-soft-md">
         <div className="flex items-center gap-4">

@@ -35,6 +35,7 @@ import { useUndoManager } from './UndoManagerContext';
 import type { GastosFinancialSummary } from '../utils/gastosFinancialSummary';
 import type { ApplyGastoLocalOpts, GastoHistorialSyncEvent } from '../utils/gastoLocalMutations';
 import { createShowUndoToast, type ShowUndoToastParams } from '../hooks/useUndoToast';
+import type { FullDatasetStatus } from '../utils/fullDatasetSessionCache';
 import {
   undoCreateConductor,
   undoCreateGasto,
@@ -160,6 +161,15 @@ interface RegistrosContextValue {
   reloadGastosOnly: () => Promise<void>;
   /** Carga histórico completo bajo demanda. */
   reloadGastosFull: () => Promise<void>;
+  /** Asegura una única carga completa por sesión y comparte la Promise en curso. */
+  ensureGastosFull: (options?: { force?: boolean }) => Promise<Gasto[]>;
+  /** Reconciliación explícita contra Supabase. */
+  refreshGastosFull: () => Promise<void>;
+  /** Marca la caché para reconciliación posterior. */
+  markGastosFullStale: () => void;
+  gastosFullStatus: FullDatasetStatus;
+  gastosFullLoadedAt: number | null;
+  gastosFullError: string | null;
   /** `recent` = bootstrap; `full` = histórico completo cargado. */
   gastosLoadScope: 'recent' | 'full';
   /** True mientras corre fetchGastosFull. */
@@ -298,6 +308,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       reloadGastosOnly: registros.reloadGastosOnly,
       reloadIngresosOnly: registros.reloadIngresosOnly,
       reloadGastosFinancialSummary: registros.reloadGastosFinancialSummary,
+      markGastosFullStale: registros.markGastosFullStale,
     }),
     [
       registros.upsertGasto,
@@ -329,6 +340,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       registros.reloadGastosOnly,
       registros.reloadIngresosOnly,
       registros.reloadGastosFinancialSummary,
+      registros.markGastosFullStale,
     ],
   );
 
@@ -945,7 +957,13 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       refreshFromSupabase: registros.refreshFromSupabase,
       reloadGastosOnly: registros.reloadGastosOnly,
       reloadGastosFull: registros.reloadGastosFull,
+      ensureGastosFull: registros.ensureGastosFull,
+      refreshGastosFull: registros.refreshGastosFull,
+      markGastosFullStale: registros.markGastosFullStale,
       gastosLoadScope: registros.gastosLoadScope,
+      gastosFullStatus: registros.gastosFullStatus,
+      gastosFullLoadedAt: registros.gastosFullLoadedAt,
+      gastosFullError: registros.gastosFullError,
       isLoadingGastosFull: registros.isLoadingGastosFull,
       gastosFinancialSummary: registros.gastosFinancialSummary,
       isLoadingGastosSummary: registros.isLoadingGastosSummary,
@@ -969,6 +987,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook público del provider
 export const useRegistrosContext = () => {
   const ctx = useContext(RegistrosContext);
   if (!ctx) throw new Error('useRegistrosContext must be used within RegistrosProvider');

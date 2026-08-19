@@ -25,3 +25,7 @@ export function canMutateIngresos(role: AppRole): boolean {
 export function canCreateIngresos(role: AppRole): boolean {
   return role === 'admin' || role === 'contador' || role === 'socio';
 }
+
+export function canManagePaymentAccounts(role: AppRole): boolean {
+  return role === 'admin' || role === 'contador' || role === 'socio';
+}

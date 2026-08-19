@@ -248,6 +248,12 @@ export function canMutateVehiculos(user: PermissionUser | null | undefined): boo
   return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
 }
 
+/** Configuración tenant de destinos de pago; equivalente a mutaciones financieras. */
+export function canManagePaymentAccounts(user: PermissionUser | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
+}
+
 export function filterGastosForUser<T extends { tipo_gasto?: string | null }>(
   user: PermissionUser | null | undefined,
   gastos: T[],

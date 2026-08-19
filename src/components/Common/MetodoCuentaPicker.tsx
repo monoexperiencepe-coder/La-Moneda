@@ -1,9 +1,7 @@
-import React, { useMemo } from 'react';
-import {
-  getDetallesMetodoPago,
-  MetodoPagoDetalleRow,
-} from '../../data/factCatalog';
+import React from 'react';
+import { MetodoPagoDetalleRow } from '../../data/factCatalog';
 import { countRegistrosPorCuenta } from '../../utils/ingresoPagoStats';
+import { usePaymentSettings } from '../../context/PaymentSettingsContext';
 
 export interface MetodoCuentaPickerProps {
   /** Botones de método visibles (ej. METODOS_INGRESO_RAPIDO o METODOS_PAGO). */
@@ -14,6 +12,7 @@ export interface MetodoCuentaPickerProps {
     metodoPago: string;
     metodoPagoDetalle: string;
     celularMetodo: string | null;
+    paymentAccountId: string | null;
   }) => void;
   /** Ingresos o gastos para badges de conteo por cuenta */
   registrosForCount: Array<{ metodoPago: string; metodoPagoDetalle: string }>;
@@ -53,7 +52,8 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
   conteoEtiqueta = 'registros',
   disabled = false,
 }) => {
-  const cuentas = useMemo(() => getDetallesMetodoPago(metodoPago), [metodoPago]);
+  const { getAccountsForMethod, usingLegacyFallback } = usePaymentSettings();
+  const cuentas = getAccountsForMethod(metodoPago);
 
   const pick = (row: MetodoPagoDetalleRow) => {
     if (disabled) return;
@@ -61,6 +61,7 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
       metodoPago: row.metodo,
       metodoPagoDetalle: row.detalle.trim(),
       celularMetodo: row.celular?.trim() ? row.celular.trim() : null,
+      paymentAccountId: row.paymentAccountId ?? null,
     });
   };
 
@@ -76,7 +77,7 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
               disabled={disabled}
               onClick={() => {
                 if (disabled) return;
-                const rows = getDetallesMetodoPago(m);
+                const rows = getAccountsForMethod(m);
                 const first = rows[0];
                 if (first) pick(first);
                 else {
@@ -84,6 +85,7 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
                     metodoPago: m,
                     metodoPagoDetalle: m === 'Efectivo' ? 'Caja principal' : 'Otro medio / especificar',
                     celularMetodo: null,
+                    paymentAccountId: null,
                   });
                 }
               }}
@@ -139,6 +141,9 @@ const MetodoCuentaPicker: React.FC<MetodoCuentaPickerProps> = ({
           )}
         </div>
       )}
+      {usingLegacyFallback ? (
+        <p className="text-[11px] text-amber-700">Configuración temporalmente no disponible; se muestran las cuentas legacy de respaldo.</p>
+      ) : null}
     </div>
   );
 };

@@ -11,7 +11,6 @@ import { getAuthenticatedUserIdForAudit } from './authAuditUser';
 import { logRlsDebugContext, fetchDebugCanUpdateGastoRow } from './rlsDebugService';
 import type { VehicleIdLike } from '../utils/vehicleId';
 import { normalizeGastoVehicleFkForDb } from '../utils/vehicleId';
-import { getDetalleMetodoByLabel } from '../data/factCatalog';
 import {
   deepSanitizeUuidPoisonInJson,
   sanitizePostgrestRowZeroIdColumns,
@@ -203,6 +202,8 @@ export type GastoDetalleManualPatch = Partial<{
   motivo: string;
   metodoPago: string;
   metodoPagoDetalle: string;
+  paymentAccountId: string | null;
+  celularMetodo: string | null;
   monto: number;
   comentarios: string;
   /** Solo undo: restaurar actividad previa. Si se omite, el servicio escribe revisado_at = now(). */
@@ -234,10 +235,8 @@ function gastoDetalleManualPatchToRow(patch: GastoDetalleManualPatch): Record<st
   if (patch.motivo !== undefined) row.motivo = patch.motivo;
   if (patch.metodoPago !== undefined) row.metodo_pago = patch.metodoPago;
   if (patch.metodoPagoDetalle !== undefined) row.metodo_pago_detalle = patch.metodoPagoDetalle;
-  if (patch.metodoPago !== undefined && patch.metodoPagoDetalle !== undefined) {
-    const det = getDetalleMetodoByLabel(patch.metodoPago, patch.metodoPagoDetalle);
-    row.celular_metodo = det?.celular?.trim() ? det.celular.trim() : null;
-  }
+  if (patch.celularMetodo !== undefined) row.celular_metodo = patch.celularMetodo;
+  if (patch.paymentAccountId !== undefined) row.payment_account_id = patch.paymentAccountId;
   if (patch.monto !== undefined) row.monto = patch.monto;
   if (patch.comentarios !== undefined) row.comentarios = patch.comentarios;
   if (patch.revisado_at !== undefined) row.revisado_at = patch.revisado_at;
@@ -257,6 +256,8 @@ function gastoDetallePatchTouchesOnlyVehicle(patch: GastoDetalleManualPatch): bo
     'motivo',
     'metodoPago',
     'metodoPagoDetalle',
+    'paymentAccountId',
+    'celularMetodo',
     'monto',
     'comentarios',
   ];
@@ -1084,7 +1085,7 @@ export async function fetchGastosRecent(
       }
       return mapAndValidateGastosRows((data ?? []) as Record<string, unknown>[]);
     },
-    (rows) => ({ limit }),
+    () => ({ limit }),
   );
 }
 
@@ -1102,7 +1103,7 @@ export async function fetchGastosFull(tenantEmpresaId?: string | null): Promise<
         .order('id', { ascending: false })
         .range(from, to);
       return { data, error };
-    }, { label: 'fetchGastosFull' });
+    }, { label: 'fetchGastosFull', throwOnError: true });
     return mapAndValidateGastosRows(data as Record<string, unknown>[]);
   });
 }

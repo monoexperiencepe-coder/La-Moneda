@@ -9,6 +9,7 @@ import { UndoManagerProvider } from './context/UndoManagerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import SectionGuard from './components/Common/SectionGuard';
 import CopilotAuditBootstrap from './modules/copilot/CopilotAuditBootstrap';
+import { PaymentSettingsProvider } from './context/PaymentSettingsContext';
 
 // Auth
 const Login = lazy(() => import('./pages/Auth/Login'));
@@ -249,12 +250,14 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
-      <CopilotAuditBootstrap />
-      <UndoManagerProvider>
-        <RegistrosProvider>
-          <AppContent />
-        </RegistrosProvider>
-      </UndoManagerProvider>
+      <PaymentSettingsProvider>
+        <CopilotAuditBootstrap />
+        <UndoManagerProvider>
+          <RegistrosProvider>
+            <AppContent />
+          </RegistrosProvider>
+        </UndoManagerProvider>
+      </PaymentSettingsProvider>
     </AuthProvider>
   );
 };

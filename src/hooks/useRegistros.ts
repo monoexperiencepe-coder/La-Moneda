@@ -102,6 +102,11 @@ import {
   formatVehicleIdFallback,
   vehicleFleetSortKey,
 } from '../utils/vehicleDisplayNumber';
+import {
+  FullDatasetSessionCache,
+  type FullDatasetSnapshot,
+  type FullDatasetStatus,
+} from '../utils/fullDatasetSessionCache';
 
 function normalizeIngresoMoneda(ingreso: Omit<Ingreso, 'id' | 'createdAt'>): Omit<Ingreso, 'id' | 'createdAt'> {
   const moneda = ingreso.moneda ?? 'PEN';
@@ -262,7 +267,12 @@ export const useRegistros = () => {
   const [isLoadingGastos, setIsLoadingGastos] = useState(false);
   const [hasLoadedGastosOnce, setHasLoadedGastosOnce] = useState(false);
   const [gastosLoadScope, setGastosLoadScope] = useState<'recent' | 'full'>('recent');
-  const [isLoadingGastosFull, setIsLoadingGastosFull] = useState(false);
+  const [gastosFullState, setGastosFullState] = useState<FullDatasetSnapshot>({
+    status: 'not_loaded',
+    loadedAt: null,
+    error: null,
+  });
+  const isLoadingGastosFull = gastosFullState.status === 'loading';
   const gastosLoadScopeRef = useRef(gastosLoadScope);
   gastosLoadScopeRef.current = gastosLoadScope;
   const empresaIdAuditRef = useRef<string | null>(profile?.empresa_id ?? null);
@@ -276,6 +286,29 @@ export const useRegistros = () => {
   const summaryReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [registrosRemoteTick, setRegistrosRemoteTick] = useState(0);
 
+  const gastosFullCacheRef = useRef<FullDatasetSessionCache<Gasto> | null>(null);
+  if (!gastosFullCacheRef.current) {
+    gastosFullCacheRef.current = new FullDatasetSessionCache<Gasto>({
+      getId: (row) => String(row.id),
+      getCurrentRows: () => gastosAuditRef.current,
+      sortRows: (rows) => [...rows].sort(sortRegistrosByLatestCreatedOrDate),
+      onSnapshot: setGastosFullState,
+      onReady: (rows) => {
+        setGastos(rows);
+        setGastosLoadScope('full');
+        setHasLoadedGastosOnce(true);
+      },
+    });
+  }
+
+  const recordGastosFullUpsert = useCallback((row: Gasto) => {
+    gastosFullCacheRef.current?.record({ kind: 'upsert', row });
+  }, []);
+
+  const recordGastosFullDelete = useCallback((id: string) => {
+    gastosFullCacheRef.current?.record({ kind: 'delete', id: String(id) });
+  }, []);
+
   const bumpRegistrosRemoteSync = useCallback(() => {
     setRegistrosRemoteTick((n) => n + 1);
   }, []);
@@ -283,10 +316,10 @@ export const useRegistros = () => {
   /** Vacía datos tenant/financieros al cerrar sesión o cambiar de usuario (evita mezclar operador ↔ admin). */
   const clearFinancialRegistrosState = useCallback(() => {
     gastosLoadGenRef.current += 1;
+    gastosFullCacheRef.current?.clear();
     setIsLoadingGastos(false);
     setHasLoadedGastosOnce(false);
     setGastosLoadScope('recent');
-    setIsLoadingGastosFull(false);
     setGastosFinancialSummary(null);
     setIsLoadingGastosSummary(false);
     setIngresos([]);
@@ -399,9 +432,14 @@ export const useRegistros = () => {
       ]);
       const merged = mergeGastosUniqueById(recent, pendiente, globales);
       if (gen === gastosLoadGenRef.current) {
-        setGastos(merged);
+        // Una recarga liviana nunca debe degradar la caché completa de sesión.
+        if (gastosFullCacheRef.current?.getSnapshot().status !== 'ready') {
+          setGastos(merged);
+        }
         setHasLoadedGastosOnce(true);
-        setGastosLoadScope('recent');
+        if (gastosFullCacheRef.current?.getSnapshot().status !== 'ready') {
+          setGastosLoadScope('recent');
+        }
       }
       return merged;
     } finally {
@@ -411,38 +449,20 @@ export const useRegistros = () => {
     }
   }, [profile?.empresa_id]);
 
-  /** Histórico completo bajo demanda (reportes, conciliación total). */
-  const loadGastosFullFromSupabase = useCallback(async (): Promise<Gasto[]> => {
-    gastosLoadGenRef.current += 1;
-    const gen = gastosLoadGenRef.current;
-    setIsLoadingGastosFull(true);
-    setIsLoadingGastos(true);
-    try {
-      if (!profile?.empresa_id) {
-        if (gen === gastosLoadGenRef.current) {
-          setGastos([]);
-          setHasLoadedGastosOnce(true);
-          setGastosLoadScope('full');
-        }
-        return [];
-      }
-      const g = await fetchGastosFull(profile.empresa_id);
-      if (gen === gastosLoadGenRef.current) {
-        setGastos(g);
-        setHasLoadedGastosOnce(true);
-        setGastosLoadScope('full');
-      }
-      return g;
-    } finally {
-      if (gen === gastosLoadGenRef.current) {
-        setIsLoadingGastos(false);
-        setIsLoadingGastosFull(false);
-      }
-    }
-  }, [profile?.empresa_id]);
-
-  /** @deprecated Alias interno — bootstrap reciente. */
-  const loadGastosFromSupabase = loadGastosBootstrap;
+  /**
+   * Histórico completo en caché de sesión. La Promise compartida evita que
+   * navegación rápida o StrictMode disparen otra descarga de 15 páginas.
+   */
+  const ensureGastosFull = useCallback(
+    async (options?: { force?: boolean }): Promise<Gasto[]> => {
+      if (!profile?.empresa_id) return [];
+      return gastosFullCacheRef.current!.ensure(
+        () => fetchGastosFull(profile.empresa_id),
+        options,
+      );
+    },
+    [profile?.empresa_id],
+  );
 
   /** Agregados financieros globales (RPC; no trae filas). `silent` evita spinner de summary. */
   const reloadGastosFinancialSummary = useCallback(async (opts?: { silent?: boolean }) => {
@@ -523,6 +543,7 @@ export const useRegistros = () => {
   const applyGastoCreatedLocal = useCallback(
     (gasto: Gasto, opts?: ApplyGastoLocalOpts) => {
       const active = enrichGastoHistorialActivity(gasto);
+      recordGastosFullUpsert(active);
       setGastos((prev) => mergeGastoSorted(prev, active));
       patchFinancialSummary(
         (s) => patchSummaryAddGasto(s, active, (t) => includeTipoInSummaryPatch(t)),
@@ -538,12 +559,13 @@ export const useRegistros = () => {
       });
       if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
     },
-    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, recordGastosFullUpsert, scheduleSummaryReconcile],
   );
 
   const applyGastoRemovedLocal = useCallback(
     (id: string, before?: Gasto | null, opts?: ApplyGastoLocalOpts) => {
       const sid = String(id);
+      recordGastosFullDelete(sid);
       removedGastoIdsRef.current.add(sid);
       lastReloadDeletedGastoIdRef.current = sid;
       let snapshot = before ?? null;
@@ -570,7 +592,7 @@ export const useRegistros = () => {
       });
       if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
     },
-    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, recordGastosFullDelete, scheduleSummaryReconcile],
   );
 
   const filterGastosExcludingRemoved = useCallback((rows: Gasto[]): Gasto[] => {
@@ -588,6 +610,7 @@ export const useRegistros = () => {
 
   const applyGastoUpdatedLocal = useCallback(
     (before: Gasto, after: Gasto, opts?: ApplyGastoLocalOpts) => {
+      recordGastosFullUpsert(after);
       setGastos((prev) => mergeGastoSorted(prev, after));
       const tipoChanged = before.tipo_gasto !== after.tipo_gasto;
       const montoChanged = before.monto !== after.monto;
@@ -607,12 +630,14 @@ export const useRegistros = () => {
       });
       if (opts?.reloadSummary !== false) scheduleSummaryReconcile();
     },
-    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, recordGastosFullUpsert, scheduleSummaryReconcile],
   );
 
   const applyGastoMovedLocal = useCallback(
     (before: Gasto, after: Gasto, options?: GastoMovedLocalOptions) => {
       const movedOut = options?.movedOutOfView === true || options?.removeFromVisible === true;
+      if (movedOut) recordGastosFullDelete(String(before.id));
+      else recordGastosFullUpsert(after);
       if (movedOut) {
         setGastos((prev) => prev.filter((g) => String(g.id) !== String(before.id)));
       } else {
@@ -640,7 +665,7 @@ export const useRegistros = () => {
       });
       if (options?.reloadSummary !== false) scheduleSummaryReconcile();
     },
-    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, scheduleSummaryReconcile],
+    [includeTipoInSummaryPatch, notifyGastoHistorialSync, patchFinancialSummary, recordGastosFullDelete, recordGastosFullUpsert, scheduleSummaryReconcile],
   );
 
   /** Recarga bootstrap (recientes + tipos críticos) + summary BD. */
@@ -662,8 +687,16 @@ export const useRegistros = () => {
   }, [loadGastosBootstrap, purgeRemovedGastoTombstones, reloadGastosFinancialSummary]);
 
   const reloadGastosFull = useCallback(async () => {
-    await loadGastosFullFromSupabase();
-  }, [loadGastosFullFromSupabase]);
+    await ensureGastosFull();
+  }, [ensureGastosFull]);
+
+  const refreshGastosFull = useCallback(async () => {
+    await ensureGastosFull({ force: true });
+  }, [ensureGastosFull]);
+
+  const markGastosFullStale = useCallback(() => {
+    gastosFullCacheRef.current?.markStale();
+  }, []);
 
   /** Solo `ingresos` desde Supabase (operador / operador@: lista vacía, sin fetch). */
   const reloadIngresosOnly = useCallback(async () => {
@@ -853,6 +886,28 @@ export const useRegistros = () => {
       canceled = true;
     };
   }, [isAuthenticated, refreshFromSupabase]);
+
+  /** P1: precarga financiera completa después de liberar el bootstrap/overlay. */
+  useEffect(() => {
+    if (!isAuthenticated || !profile?.empresa_id || !registrosBootstrapComplete) return;
+    if (gastosFullState.status !== 'not_loaded') return;
+    const timer = window.setTimeout(() => {
+      void ensureGastosFull().catch((error: unknown) => {
+        if (import.meta.env.DEV) {
+          console.warn('[gastosFull:background] preload failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    ensureGastosFull,
+    gastosFullState.status,
+    isAuthenticated,
+    profile?.empresa_id,
+    registrosBootstrapComplete,
+  ]);
 
   /** Si el bootstrap no trajo summary (perfil tardío o RPC falló), reintentar al tener empresa_id. */
   useEffect(() => {
@@ -1207,6 +1262,7 @@ export const useRegistros = () => {
 
   const upsertGasto = useCallback(
     (row: Gasto, opts?: ApplyGastoLocalOpts) => {
+      recordGastosFullUpsert(row);
       const before = gastosAuditRef.current.find((g) => String(g.id) === String(row.id)) ?? null;
       setGastos((prev) => {
         if (import.meta.env.DEV) {
@@ -1272,6 +1328,7 @@ export const useRegistros = () => {
       includeTipoInSummaryPatch,
       notifyGastoHistorialSync,
       patchFinancialSummary,
+      recordGastosFullUpsert,
       scheduleSummaryReconcile,
     ],
   );
@@ -1608,7 +1665,13 @@ export const useRegistros = () => {
     refreshFromSupabase,
     reloadGastosOnly,
     reloadGastosFull,
+    ensureGastosFull,
+    refreshGastosFull,
+    markGastosFullStale,
     gastosLoadScope,
+    gastosFullStatus: gastosFullState.status as FullDatasetStatus,
+    gastosFullLoadedAt: gastosFullState.loadedAt,
+    gastosFullError: gastosFullState.error,
     isLoadingGastosFull,
     gastosFinancialSummary,
     isLoadingGastosSummary,

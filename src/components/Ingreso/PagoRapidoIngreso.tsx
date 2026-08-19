@@ -6,7 +6,7 @@ import MetodoCuentaPicker from '../Common/MetodoCuentaPicker';
 interface PagoRapidoIngresoProps {
   metodoPago: string;
   metodoPagoDetalle: string;
-  onChange: (payload: { metodoPago: string; metodoPagoDetalle: string; celularMetodo: string | null }) => void;
+  onChange: (payload: { metodoPago: string; metodoPagoDetalle: string; celularMetodo: string | null; paymentAccountId: string | null }) => void;
   ingresos: Ingreso[];
 }
 

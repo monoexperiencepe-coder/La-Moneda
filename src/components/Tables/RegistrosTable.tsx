@@ -13,7 +13,8 @@ import { formatDate, formatDateTimePe } from '../../utils/formatting';
 import { ingresoMontoPEN } from '../../utils/moneda';
 import { buildIngresoMoneyPatch } from '../../utils/ingresoMutations';
 import { CATEGORIAS_GASTO_LABELS } from '../../data/catalogs';
-import { getDetallesMetodoPago, METODOS_PAGO } from '../../data/factCatalog';
+import { METODOS_PAGO } from '../../data/factCatalog';
+import { usePaymentSettings } from '../../context/PaymentSettingsContext';
 import { inferCategoriaFromTipoGasto } from '../../utils/factMappers';
 import { mapSubtipoToFactTipo } from '../../constants/subtipos/mapSubtipoToFactTipo';
 import { subtipoBelongsToCategoria } from '../../constants/subtipos/subtipoBelongsToCategoria';
@@ -199,6 +200,8 @@ type GastoEditDraft = {
   subtipoCanon: string;
   metodoPago: string;
   metodoPagoDetalle: string;
+  paymentAccountId: string | null;
+  celularMetodo: string | null;
   montoStr: string;
   comentarios: string;
 };
@@ -212,6 +215,8 @@ function gastoToEditDraft(g: Gasto): GastoEditDraft {
     subtipoCanon: resolveSubtipoCanonForGastoEdit(tg, g.subtipo_gasto),
     metodoPago: g.metodoPago,
     metodoPagoDetalle: g.metodoPagoDetalle,
+    paymentAccountId: g.paymentAccountId ?? null,
+    celularMetodo: g.celularMetodo,
     montoStr: String(g.monto),
     comentarios: g.comentarios ?? '',
   };
@@ -260,6 +265,8 @@ function buildGastoDetallePatch(
   if (draft.metodoPago !== baseline.metodoPago || draft.metodoPagoDetalle.trim() !== baseline.metodoPagoDetalle.trim()) {
     patch.metodoPago = draft.metodoPago;
     patch.metodoPagoDetalle = draft.metodoPagoDetalle.trim();
+    patch.paymentAccountId = draft.paymentAccountId;
+    patch.celularMetodo = draft.celularMetodo;
   }
 
   const m = Number(String(draft.montoStr).replace(',', '.'));
@@ -432,6 +439,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   preserveServerOrder = false,
   fullHistoryView = false,
 }) => {
+  const { getAccountsForMethod } = usePaymentSettings();
   const { role, isFinancialOperador, profile } = useAuth();
   const {
     formatGlobalAmount,
@@ -681,7 +689,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
 
   const metodoDetalleOptions = useMemo(() => {
     if (!gastoEditDraft) return [];
-    const rows = getDetallesMetodoPago(gastoEditDraft.metodoPago).map((r) => ({
+    const rows = getAccountsForMethod(gastoEditDraft.metodoPago).map((r) => ({
       value: r.detalle,
       label: r.detalle,
     }));
@@ -690,7 +698,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
       return [{ value: cur, label: `${cur} (actual)` }, ...rows];
     }
     return rows;
-  }, [gastoEditDraft]);
+  }, [gastoEditDraft, getAccountsForMethod]);
 
   const gastoEditTipoGasto = useMemo(
     () =>
@@ -2075,8 +2083,8 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
               onChange={(v) =>
                 setGastoEditDraft((d) => {
                   if (!d) return d;
-                  const first = getDetallesMetodoPago(v)[0];
-                  return { ...d, metodoPago: v, metodoPagoDetalle: first?.detalle ?? '' };
+                  const first = getAccountsForMethod(v)[0];
+                  return { ...d, metodoPago: v, metodoPagoDetalle: first?.detalle ?? '', paymentAccountId: first?.paymentAccountId ?? null, celularMetodo: first?.celular || null };
                 })
               }
             />
@@ -2085,7 +2093,11 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
                 label="Cuenta / detalle de pago"
                 options={metodoDetalleOptions}
                 value={gastoEditDraft.metodoPagoDetalle}
-                onChange={(v) => setGastoEditDraft((d) => (d ? { ...d, metodoPagoDetalle: v } : d))}
+                onChange={(v) => setGastoEditDraft((d) => {
+                  if (!d) return d;
+                  const selected = getAccountsForMethod(d.metodoPago).find((row) => row.detalle === v);
+                  return { ...d, metodoPagoDetalle: v, paymentAccountId: selected?.paymentAccountId ?? null, celularMetodo: selected?.celular || null };
+                })}
               />
             ) : (
               <Input

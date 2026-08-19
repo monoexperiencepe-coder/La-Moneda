@@ -24,11 +24,12 @@ export const METODOS_INGRESO_RAPIDO = [
 export type MetodoPago = (typeof METODOS_PAGO)[number];
 
 export interface MetodoPagoDetalleRow {
-  id: number;
+  id: number | string;
   metodo: string;
   detalle: string;
   celular: string;
   banco: string;
+  paymentAccountId?: string;
 }
 
 const subtiposIngresos = factSubtiposIngresos as Record<string, string[]>;

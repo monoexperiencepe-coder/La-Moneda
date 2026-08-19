@@ -30,7 +30,15 @@ export type UseUtilidadRealCalculosOptions = {
  */
 export function useUtilidadRealCalculos(options: UseUtilidadRealCalculosOptions = {}) {
   const { pantalla = 'useUtilidadRealCalculos', auditSampleVehicleIds = [1] } = options;
-  const { ingresos, gastos, vehicles, gastosLoadScope } = useRegistrosContext();
+  const {
+    ingresos,
+    gastos,
+    vehicles,
+    gastosLoadScope,
+    gastosFullStatus,
+    gastosFullError,
+    ensureGastosFull,
+  } = useRegistrosContext();
   const { gastosReadyForUtilidad, isLoadingGastosFull } = useEnsureGastosFullForUtilidad();
 
   const gastosSource = gastosLoadScope === 'full' ? 'full_historico' : 'bootstrap_recent';
@@ -85,6 +93,7 @@ export function useUtilidadRealCalculos(options: UseUtilidadRealCalculosOptions 
     gastosSource,
     gastosLoadScope,
     gastos.length,
+    gastos,
     totalFlota,
     pantalla,
   ]);
@@ -96,6 +105,9 @@ export function useUtilidadRealCalculos(options: UseUtilidadRealCalculosOptions 
     gastosReadyForUtilidad,
     isLoadingGastosFull,
     gastosLoadScope,
+    gastosFullStatus,
+    gastosFullError,
+    retryGastosFull: ensureGastosFull,
     gastosEnMemoria: gastos.length,
     formula: FORMULA,
   };
@@ -139,7 +151,7 @@ export function useUtilidadRealVehiculo(
       formula: FORMULA,
       pantalla,
     });
-  }, [gastosReadyForUtilidad, result, vehicleId, vehicles, gastosLoadScope, gastos.length, pantalla]);
+  }, [gastosReadyForUtilidad, result, vehicleId, vehicles, gastosLoadScope, gastos.length, gastos, pantalla]);
 
   return {
     ...result,
