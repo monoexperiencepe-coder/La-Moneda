@@ -13,6 +13,7 @@ export const FINANZA_CATEGORIAS_CON_CATALOGO: readonly FinanzaGastoRegistroValue
   'financiero_prestamo',
   'planilla_laboral',
   'representacion_interna',
+  'otros_gastos_varios',
   'gastos_globales',
   'inversion_compra',
 ];

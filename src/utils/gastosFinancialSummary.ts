@@ -22,6 +22,7 @@ export const GASTOS_SUMMARY_TIPOS = [
   'planilla_laboral',
   'inversion_compra',
   'representacion_interna',
+  'otros_gastos_varios',
   'gastos_globales',
   'pendiente_revision',
 ] as const;
@@ -53,6 +54,7 @@ export function mapGastosFinancialSummaryRow(row: Record<string, unknown>): Gast
     ['planilla_laboral', 'total_planilla_laboral', 'count_planilla_laboral'],
     ['inversion_compra', 'total_inversion_compra', 'count_inversion_compra'],
     ['representacion_interna', 'total_representacion_interna', 'count_representacion_interna'],
+    ['otros_gastos_varios', 'total_otros_gastos_varios', 'count_otros_gastos_varios'],
     ['gastos_globales', 'total_gastos_globales', 'count_gastos_globales'],
     ['pendiente_revision', 'total_pendiente_revision', 'count_pendiente_revision'],
   ];

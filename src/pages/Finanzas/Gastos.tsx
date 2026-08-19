@@ -139,6 +139,7 @@ const GASTO_TABS: GastoTabDef[] = [
   { id: 'fin', label: 'Financieros', tipo_gasto: 'financiero_prestamo', emoji: '🏦', gradient: 'from-amber-500/10 to-orange-500/10', border: 'border-amber-200 hover:border-amber-400' },
   { id: 'pla', label: 'Planilla', tipo_gasto: 'planilla_laboral', emoji: '👥', gradient: 'from-indigo-500/10 to-blue-500/10', border: 'border-indigo-200 hover:border-indigo-400' },
   { id: 'per', label: 'Representación interna', tipo_gasto: 'representacion_interna', emoji: '🤝', gradient: 'from-pink-500/10 to-rose-500/10', border: 'border-pink-200 hover:border-pink-400' },
+  { id: 'ogv', label: 'Otros gastos / Gastos varios', tipo_gasto: 'otros_gastos_varios', emoji: '📋', gradient: 'from-purple-500/10 to-violet-500/10', border: 'border-purple-200 hover:border-purple-400' },
   { id: 'glob', label: 'Globales', tipo_gasto: 'gastos_globales', emoji: '🌐', gradient: 'from-teal-500/10 to-cyan-500/10', border: 'border-teal-200 hover:border-teal-400' },
 ];
 

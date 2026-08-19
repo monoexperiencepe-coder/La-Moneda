@@ -23,6 +23,7 @@ const FINANZA_TAB_TIPOS = new Set<string>([
   'financiero_prestamo',
   'planilla_laboral',
   'representacion_interna',
+  'otros_gastos_varios',
   'gastos_globales',
   'inversion_compra',
 ]);
@@ -130,6 +131,8 @@ export function getDefaultSubtipoForTipoGasto(tipoGasto: string): string {
       return 'administrativo_general';
     case 'inversion_compra':
       return 'adquisicion_vehiculo';
+    case 'otros_gastos_varios':
+      return 'OTROS /ESPECIFICAR';
     case 'gastos_globales':
       return 'global_no_asignado';
     case TIPO_GASTO_OPERATIVO_VEHICULO:

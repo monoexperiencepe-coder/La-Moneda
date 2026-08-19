@@ -11,6 +11,7 @@ const TIPO_GASTO_LABEL: Record<string, string> = {
   personal_socios_familiares: 'Representación interna',
   personal_socios: 'Representación interna',
   personales: 'Representación interna',
+  otros_gastos_varios: 'Otros gastos / Gastos varios',
   gastos_globales: 'Globales',
   inversion_compra: 'Inversión con utilidad',
   pendiente_revision: 'Pendiente de revisión',

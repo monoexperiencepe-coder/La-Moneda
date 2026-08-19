@@ -12,6 +12,7 @@ export type FinanzaGastoRegistroValue =
   | 'financiero_prestamo'
   | 'planilla_laboral'
   | 'representacion_interna'
+  | 'otros_gastos_varios'
   | 'gastos_globales'
   | 'inversion_compra';
 
@@ -56,6 +57,12 @@ export const FINANZA_GASTO_REGISTRO_OPTIONS: {
     label: 'Representación interna',
     emoji: '🤝',
     hint: 'Almuerzos/cenas socios, familia, reuniones y representación (sin elegir tipo Fact redundante).',
+  },
+  {
+    value: 'otros_gastos_varios',
+    label: 'Otros gastos / Gastos varios',
+    emoji: '📋',
+    hint: 'Egresos reales que no encajan en otras categorías: mano de obra externa, gastos extraordinarios, pagos no contemplados, etc.',
   },
   {
     value: 'gastos_globales',
@@ -108,6 +115,7 @@ export const FACT_TIPOS_POR_FINANZA_GASTO: Record<FinanzaGastoRegistroValue, rea
   planilla_laboral: ['GASTOS FIJOS'],
   /** Un solo tipo Fact fijo en UI; el detalle va en `subtipo_gasto`. */
   representacion_interna: [REPRESENTACION_INTERNA_FACT_TIPO],
+  otros_gastos_varios: ['OTROS GASTOS', 'GASTOS FIJOS', 'TRIBUTARIOS / NOTARIALES'],
   gastos_globales: ['OTROS GASTOS', 'MECÁNICOS', 'ACCESORIOS', 'GASTOS FIJOS', 'ABASTECIMIENTO DE COMBUSTIBLE'],
   inversion_compra: [
     'COMPRA ACTIVO',

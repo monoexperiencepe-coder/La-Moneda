@@ -29,6 +29,7 @@ const CATEGORIA_MAP = [
   { key: 'planilla_laboral', label: 'Planilla' },
   { key: 'inversion_compra', label: 'Inversión con utilidad' },
   { key: 'representacion_interna', label: 'Representación interna' },
+  { key: 'otros_gastos_varios', label: 'Otros gastos / Gastos varios' },
   { key: 'gastos_globales', label: 'Globales' },
 ] as const;
 
