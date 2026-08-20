@@ -78,10 +78,11 @@ begin
   end if;
 
   -- ── 7. El conductor nuevo pertenece a esta empresa ───────────────────────
+  -- conductores.id es uuid; v_new_driver es text → cast explícito requerido.
   if not exists (
     select 1
     from public.conductores
-    where id         = v_new_driver
+    where id         = v_new_driver::uuid
       and empresa_id = v_empresa
   ) then
     raise exception using errcode = '22023', message = 'conductor_no_pertenece_empresa';
