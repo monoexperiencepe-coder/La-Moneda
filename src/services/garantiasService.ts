@@ -52,14 +52,19 @@ export async function resolveRequiredAmount(
 
 export async function fetchDriverGuarantees(
   tenantEmpresaId?: string | null,
+  options?: { activeOnly?: boolean },
 ): Promise<DriverGuarantee[]> {
   const empresaId = resolveTenantId(tenantEmpresaId);
   if (!empresaId) return [];
-  const { data, error } = await supabase
+  // Filtrar en DB: más eficiente y evita que cerradas contaminen la vista actual.
+  let query = supabase
     .from('driver_guarantees')
     .select('*')
-    .eq('empresa_id', empresaId)
-    .order('updated_at', { ascending: false });
+    .eq('empresa_id', empresaId);
+  if (options?.activeOnly) {
+    query = query.is('closed_at', null);
+  }
+  const { data, error } = await query.order('updated_at', { ascending: false });
   if (error) {
     console.error('[garantias list]', error.message);
     return [];
@@ -476,4 +481,39 @@ export async function revertGuaranteeMovement(
     reversalMovementId: payload.reversal_movement_id ?? 0,
     originalMovementId: payload.original_movement_id ?? movementId,
   };
+}
+
+/**
+ * Cierra una garantía activa (status='cerrada', closed_at=now).
+ * No toca movimientos ni saldos derivados.
+ * Si hay saldo residual, queda en el historial y debe resolverse aparte.
+ */
+export async function closeDriverGuarantee(
+  guaranteeId: number,
+  reason?: string | null,
+  tenantEmpresaId?: string | null,
+): Promise<DriverGuarantee> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) throw new Error('Empresa no configurada.');
+
+  const { data, error } = await supabase.rpc('close_driver_guarantee', {
+    p_guarantee_id: guaranteeId,
+    p_empresa_id: empresaId,
+    p_reason: reason?.trim() || null,
+  });
+
+  if (error) {
+    console.error('[garantias close]', error.message);
+    if (error.message === 'garantia_ya_cerrada') {
+      throw new Error('La garantía ya está cerrada o devuelta.');
+    }
+    if (error.message === 'garantia_no_encontrada') {
+      throw new Error('Garantía no encontrada.');
+    }
+    throw new Error(error.message || 'No se pudo cerrar la garantía.');
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Respuesta incompleta al cerrar la garantía.');
+  return mapDriverGuaranteeRow(row as Record<string, unknown>);
 }

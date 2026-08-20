@@ -10,7 +10,13 @@ type LoadOptions = {
   background?: boolean;
 };
 
-export function useGarantiasListData(empresaId: string | null | undefined, enabled: boolean) {
+export type GarantiasListMode = 'active' | 'history';
+
+export function useGarantiasListData(
+  empresaId: string | null | undefined,
+  enabled: boolean,
+  mode: GarantiasListMode = 'active',
+) {
   const [rows, setRows] = useState<DriverGuarantee[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,6 +29,8 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
   const suppressRealtimeUntilRef = useRef(0);
   const empresaIdRef = useRef(empresaId);
   empresaIdRef.current = empresaId;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   rowsRef.current = rows;
 
@@ -40,7 +48,8 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
     }
 
     try {
-      const data = await fetchDriverGuarantees(tenantId);
+      const activeOnly = modeRef.current === 'active';
+      const data = await fetchDriverGuarantees(tenantId, { activeOnly });
       if (requestId !== requestIdRef.current) return;
 
       if (background && hasLoadedRef.current && data.length === 0 && rowsRef.current.length > 0) {
@@ -55,9 +64,10 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
       if (requestId !== requestIdRef.current) return;
       setError(e instanceof Error ? e.message : 'Error al cargar');
     } finally {
-      if (requestId !== requestIdRef.current) return;
-      setInitialLoading(false);
-      setRefreshing(false);
+      if (requestId === requestIdRef.current) {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -78,6 +88,7 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
     void loadRef.current({ background: hasLoadedRef.current });
   }, []);
 
+  // Recarga inicial o cuando cambian empresa, modo habilitado, o modo activo/historial.
   useEffect(() => {
     if (!enabled || !empresaId) {
       setInitialLoading(false);
@@ -86,13 +97,13 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
     hasLoadedRef.current = false;
     setRows([]);
     void loadRef.current({ background: false });
-  }, [enabled, empresaId]);
+  }, [enabled, empresaId, mode]);
 
   useEffect(() => {
     if (!enabled || !empresaId) return undefined;
 
     const channel = supabase
-      .channel(`garantias-list-${empresaId}`)
+      .channel(`garantias-list-${empresaId}-${mode}`)
       .on(
         'postgres_changes',
         {
@@ -122,7 +133,7 @@ export function useGarantiasListData(empresaId: string | null | undefined, enabl
       }
       void supabase.removeChannel(channel);
     };
-  }, [enabled, empresaId, scheduleRealtimeRefresh]);
+  }, [enabled, empresaId, mode, scheduleRealtimeRefresh]);
 
   return {
     rows,

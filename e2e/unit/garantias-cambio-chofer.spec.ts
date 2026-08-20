@@ -187,16 +187,19 @@ test('GarantiaDetalle importa EditarGarantiaModal', () => {
   expect(src).toContain('<EditarGarantiaModal');
 });
 
-// ── 18. Modal: campos financieros ausentes en el form ─────────────────────
+// ── 18. Modal: solo saldos derivados ausentes, requiredAmount es editable ────
 test('EditarGarantiaModal no renderiza campos financieros protegidos', () => {
   const src = resolveSource('../../src/components/garantias/EditarGarantiaModal.tsx');
-  // required_amount, current_balance, total_contributed, total_deducted no deben
-  // aparecer como inputs modificables (solo driver, vehicle, type, notes)
-  expect(src).not.toContain('requiredAmount');
-  expect(src).not.toContain('currentBalance');
-  expect(src).not.toContain('totalContributed');
-  expect(src).not.toContain('totalDeducted');
-  // Campos editables deben estar presentes
+  // requiredAmount SÍ debe editarse (con movimiento de auditoría — LOTE 4)
+  expect(src).toContain('requiredAmount');
+  // Los campos derivados del ledger NO deben tener setters ni inputs
+  expect(src).not.toContain('setCurrentBalance');
+  expect(src).not.toContain('setTotalContributed');
+  expect(src).not.toContain('setTotalDeducted');
+  expect(src).not.toContain('current_balance');
+  expect(src).not.toContain('total_contributed');
+  expect(src).not.toContain('total_deducted');
+  // Campos editables presentes
   expect(src).toContain('driverId');
   expect(src).toContain('vehicleType');
   expect(src).toContain('notes');

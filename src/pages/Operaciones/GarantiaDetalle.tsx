@@ -28,6 +28,8 @@ import RegistrarMovimientoModal from '../../components/garantias/RegistrarMovimi
 import CambioTipoVehiculoModal from '../../components/garantias/CambioTipoVehiculoModal';
 import RevertirMovimientoModal from '../../components/garantias/RevertirMovimientoModal';
 import EditarGarantiaModal from '../../components/garantias/EditarGarantiaModal';
+import CerrarGarantiaModal from '../../components/garantias/CerrarGarantiaModal';
+import CambiarConductorModal from '../../components/garantias/CambiarConductorModal';
 import { useGarantiaDetalleData } from '../../hooks/garantias/useGarantiaDetalleData';
 
 const GarantiaDetalle: React.FC = () => {
@@ -54,6 +56,8 @@ const GarantiaDetalle: React.FC = () => {
   const [movMode, setMovMode] = useState<'deposit' | 'deduction' | 'adjustment' | 'refund' | null>(null);
   const [showTipo, setShowTipo] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showCerrar, setShowCerrar] = useState(false);
+  const [showCambiarConductor, setShowCambiarConductor] = useState(false);
   const [revertTarget, setRevertTarget] = useState<(typeof movements)[number] | null>(null);
 
   const computed = useMemo(() => {
@@ -192,17 +196,10 @@ const GarantiaDetalle: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setMovMode('adjustment')}
-                className="px-3 py-2 rounded-xl text-sm font-semibold border border-amber-200 bg-amber-50 text-amber-950"
-              >
-                Ajuste
-              </button>
-              <button
-                type="button"
                 onClick={() => setMovMode('refund')}
                 className="px-3 py-2 rounded-xl text-sm font-semibold border border-violet-200 bg-violet-50 text-violet-950"
               >
-                Devolución final
+                Devolver y cerrar garantía
               </button>
             </>
           ) : null}
@@ -222,6 +219,24 @@ const GarantiaDetalle: React.FC = () => {
               className="px-3 py-2 rounded-xl text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-900"
             >
               Editar información
+            </button>
+          ) : null}
+          {canRegisterSensitiveMovement(permissionUser) ? (
+            <button
+              type="button"
+              onClick={() => setShowCambiarConductor(true)}
+              className="px-3 py-2 rounded-xl text-sm font-semibold border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+            >
+              Cambiar conductor
+            </button>
+          ) : null}
+          {canRegisterSensitiveMovement(permissionUser) ? (
+            <button
+              type="button"
+              onClick={() => setShowCerrar(true)}
+              className="px-3 py-2 rounded-xl text-sm font-semibold border border-red-300 bg-white text-red-700 hover:bg-red-50"
+            >
+              Cerrar garantía
             </button>
           ) : null}
         </div>
@@ -353,6 +368,7 @@ const GarantiaDetalle: React.FC = () => {
           onClose={() => setMovMode(null)}
           mode={movMode}
           guarantee={guarantee}
+          refundableAmount={computed.refundableAmount}
           vehicles={vehicles}
           user={permissionUser}
           empresaId={profile?.empresa_id}
@@ -393,7 +409,33 @@ const GarantiaDetalle: React.FC = () => {
           conductores={conductores}
           vehicles={vehicles}
           empresaId={profile?.empresa_id}
+          userId={user?.id}
           onSaved={refreshAfterMutation}
+        />
+      ) : null}
+
+      {showCerrar ? (
+        <CerrarGarantiaModal
+          isOpen
+          onClose={() => setShowCerrar(false)}
+          guarantee={guarantee}
+          currentBalance={computed.currentBalance}
+          empresaId={profile?.empresa_id}
+          onClosed={refreshAfterMutation}
+        />
+      ) : null}
+
+      {showCambiarConductor ? (
+        <CambiarConductorModal
+          isOpen
+          onClose={() => setShowCambiarConductor(false)}
+          guarantee={guarantee}
+          currentBalance={computed.currentBalance}
+          empresaId={profile?.empresa_id}
+          userId={user?.id}
+          conductores={conductores}
+          vehicles={vehicles}
+          onChanged={() => void navigate('/operaciones/garantias')}
         />
       ) : null}
     </div>

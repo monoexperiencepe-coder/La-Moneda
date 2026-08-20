@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Modal from '../Common/Modal';
 import Select from '../Common/Select';
+import Input from '../Common/Input';
 import type { Conductor, Vehicle } from '../../data/types';
 import type { DriverGuarantee } from '../../data/garantiasTypes';
 import type { GuaranteeVehicleType } from '../../config/guaranteeAmounts';
 import { GUARANTEE_VEHICLE_TYPE_LABELS } from '../../config/guaranteeAmounts';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
-import { updateGuaranteeInfo } from '../../services/garantiasService';
+import { updateGuaranteeInfo, updateGuaranteeVehicleType } from '../../services/garantiasService';
 
 type Props = {
   isOpen: boolean;
@@ -16,6 +17,8 @@ type Props = {
   conductores: Conductor[];
   vehicles: Vehicle[];
   empresaId?: string | null;
+  /** userId para el movimiento de auditoría de required_amount_change. */
+  userId?: string | null;
   onSaved: () => void;
 };
 
@@ -26,6 +29,7 @@ const EditarGarantiaModal: React.FC<Props> = ({
   conductores,
   vehicles,
   empresaId,
+  userId,
   onSaved,
 }) => {
   const [driverId, setDriverId] = useState(guarantee.driverId);
@@ -33,6 +37,7 @@ const EditarGarantiaModal: React.FC<Props> = ({
     guarantee.currentVehicleId != null ? String(guarantee.currentVehicleId) : '',
   );
   const [vehicleType, setVehicleType] = useState<GuaranteeVehicleType>(guarantee.vehicleType);
+  const [requiredAmount, setRequiredAmount] = useState(String(guarantee.requiredAmount));
   const [notes, setNotes] = useState(guarantee.notes ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -43,6 +48,7 @@ const EditarGarantiaModal: React.FC<Props> = ({
       setDriverId(guarantee.driverId);
       setVehicleId(guarantee.currentVehicleId != null ? String(guarantee.currentVehicleId) : '');
       setVehicleType(guarantee.vehicleType);
+      setRequiredAmount(String(guarantee.requiredAmount));
       setNotes(guarantee.notes ?? '');
       setError('');
     }
@@ -51,26 +57,70 @@ const EditarGarantiaModal: React.FC<Props> = ({
   const activeConductores = conductores.filter((c) => c.estado === 'VIGENTE');
   const activeVehicles = vehicles.filter((v) => v.activo);
 
-  const hasChanges =
+  const parsedRequiredAmount = Number(requiredAmount);
+  const requiredAmountValid =
+    Number.isFinite(parsedRequiredAmount) && parsedRequiredAmount > 0;
+
+  const currentVehicleIdParsed = vehicleId ? Number(vehicleId) : null;
+
+  const reqOrTypeChanged =
+    (requiredAmountValid && parsedRequiredAmount !== guarantee.requiredAmount) ||
+    vehicleType !== guarantee.vehicleType;
+
+  const nonFinancialChanged =
     driverId !== guarantee.driverId ||
-    (vehicleId ? Number(vehicleId) : null) !== guarantee.currentVehicleId ||
+    currentVehicleIdParsed !== guarantee.currentVehicleId ||
     vehicleType !== guarantee.vehicleType ||
     notes.trim() !== (guarantee.notes ?? '');
 
+  const hasChanges = reqOrTypeChanged || nonFinancialChanged;
+
   const handleSubmit = async () => {
     setError('');
+    if (!driverId.trim()) {
+      setError('El conductor es obligatorio.');
+      return;
+    }
+    if (!requiredAmountValid) {
+      setError('El monto requerido debe ser un número positivo.');
+      return;
+    }
     setBusy(true);
     try {
-      await updateGuaranteeInfo(
-        guarantee.id,
-        {
-          driverId,
-          currentVehicleId: vehicleId ? Number(vehicleId) : null,
-          vehicleType,
-          notes: notes.trim() || null,
-        },
-        empresaId,
-      );
+      // ── Paso 1: actualizar required_amount / vehicle_type (con auditoría) ──
+      // Solo si cambió el monto requerido o el tipo de vehículo.
+      if (reqOrTypeChanged) {
+        await updateGuaranteeVehicleType(
+          guarantee.id,
+          {
+            vehicleType,
+            vehicleId: currentVehicleIdParsed,
+            requiredAmount: parsedRequiredAmount,
+            createdBy: userId ?? null,
+            observation:
+              parsedRequiredAmount !== guarantee.requiredAmount
+                ? `Corrección manual de monto requerido: S/ ${guarantee.requiredAmount} → S/ ${parsedRequiredAmount}`
+                : undefined,
+          },
+          empresaId,
+        );
+      }
+
+      // ── Paso 2: actualizar campos no financieros (conductor, notas, etc.) ──
+      // Solo si alguno cambió. Puede correr tras paso 1 sin conflicto.
+      if (nonFinancialChanged) {
+        await updateGuaranteeInfo(
+          guarantee.id,
+          {
+            driverId,
+            currentVehicleId: currentVehicleIdParsed,
+            vehicleType,
+            notes: notes.trim() || null,
+          },
+          empresaId,
+        );
+      }
+
       onSaved();
       onClose();
     } catch (e) {
@@ -146,6 +196,22 @@ const EditarGarantiaModal: React.FC<Props> = ({
         />
 
         <div>
+          <Input
+            label="Monto de garantía requerido (S/)"
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={requiredAmount}
+            onChange={(e) => setRequiredAmount(e.target.value)}
+          />
+          {parsedRequiredAmount !== guarantee.requiredAmount && requiredAmountValid ? (
+            <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+              Se creará un movimiento de auditoría "Cambio de monto requerido". No modifica saldos ya entregados.
+            </p>
+          ) : null}
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
           <textarea
             rows={3}
@@ -158,7 +224,8 @@ const EditarGarantiaModal: React.FC<Props> = ({
         </div>
 
         <p className="text-[11px] text-gray-400">
-          No se modifican montos, saldos ni historial de movimientos.
+          El saldo disponible, el total entregado y el total descontado se calculan automáticamente desde el
+          historial de movimientos. Si un movimiento fue incorrecto, usa "Revertir" en la ficha de detalle.
         </p>
       </div>
     </Modal>

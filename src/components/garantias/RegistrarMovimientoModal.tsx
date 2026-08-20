@@ -28,6 +28,8 @@ type Props = {
   onClose: () => void;
   mode: Mode;
   guarantee: DriverGuarantee;
+  /** Saldo disponible para devolución — requerido cuando mode='refund'. */
+  refundableAmount?: number;
   vehicles: Vehicle[];
   user: PermissionUser | null;
   empresaId?: string | null;
@@ -45,7 +47,7 @@ function titleForMode(mode: Mode): string {
   if (mode === 'deposit') return 'Registrar abono / entrega';
   if (mode === 'deduction') return 'Registrar descuento';
   if (mode === 'adjustment') return 'Registrar ajuste';
-  return 'Registrar devolución final';
+  return 'Devolver y cerrar garantía';
 }
 
 const RegistrarMovimientoModal: React.FC<Props> = ({
@@ -53,6 +55,7 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
   onClose,
   mode,
   guarantee,
+  refundableAmount,
   vehicles,
   user,
   empresaId,
@@ -77,14 +80,15 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
   React.useEffect(() => {
     if (!isOpen) return;
     setMovementType(allowedTypes[0] ?? 'deposit');
-    setAmount('');
+    // Para devolución final: pre-cargar el saldo completo disponible.
+    setAmount(mode === 'refund' && refundableAmount != null ? String(refundableAmount) : '');
     setObservation('');
     setReason('');
     setExternalReference('');
     setError('');
     setMovementDate(todayStr());
     setVehicleId(guarantee.currentVehicleId != null ? String(guarantee.currentVehicleId) : '');
-  }, [isOpen, allowedTypes, guarantee.currentVehicleId]);
+  }, [isOpen, allowedTypes, guarantee.currentVehicleId, mode, refundableAmount]);
 
   const vehicleOpts = useMemo(
     () =>
@@ -104,6 +108,17 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
     if (!Number.isFinite(amt) || amt <= 0) {
       setError('Ingresa un monto positivo.');
       return;
+    }
+    // La devolución final cierra la garantía: el monto debe ser exactamente el saldo disponible.
+    if (movementType === 'final_refund' && refundableAmount != null) {
+      const diff = Math.abs(amt - refundableAmount);
+      if (diff > 0.001) {
+        setError(
+          `La devolución final debe ser por el saldo disponible completo (S/ ${refundableAmount.toFixed(2)}). ` +
+            'Si hay saldo que no corresponde devolver, registra primero un descuento o reversión.',
+        );
+        return;
+      }
     }
     setBusy(true);
     try {
@@ -173,10 +188,19 @@ const RegistrarMovimientoModal: React.FC<Props> = ({
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
         ) : null}
         {mode === 'refund' ? (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            La devolución final cierra la garantía. No se puede duplicar. Correcciones posteriores solo con ajuste
-            (si la garantía aún lo permite) o proceso.
-          </p>
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 space-y-1">
+            <p className="font-semibold">Esta acción es irreversible (requiere admin para revertir).</p>
+            <p>
+              Devuelve el saldo disponible completo al conductor, <strong>cierra la garantía</strong> y la retira
+              de la vista actual. El historial de movimientos se conserva.
+            </p>
+            {refundableAmount != null ? (
+              <p>
+                Saldo a devolver:{' '}
+                <strong className="tabular-nums">S/ {refundableAmount.toFixed(2)}</strong>
+              </p>
+            ) : null}
+          </div>
         ) : null}
         <Select
           label="Tipo de movimiento"

@@ -12,8 +12,11 @@ import { canCreateGarantia, canViewGarantias } from '../../utils/garantiasPermis
 import { permissionUserFromAuth } from '../../utils/permissions';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { formatVehicleSelectLabel, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import { formatDate } from '../../utils/formatting';
 import CrearGarantiaModal from '../../components/garantias/CrearGarantiaModal';
-import { useGarantiasListData } from '../../hooks/garantias/useGarantiasListData';
+import { useGarantiasListData, type GarantiasListMode } from '../../hooks/garantias/useGarantiasListData';
+
+const HISTORY_STATUSES: readonly GuaranteeStatus[] = ['cerrada', 'devuelta'];
 
 const Garantias: React.FC = () => {
   const navigate = useNavigate();
@@ -23,14 +26,24 @@ const Garantias: React.FC = () => {
   const { conductores, vehicles } = useRegistrosContext();
   const canView = canViewGarantias(permissionUser);
   const moduleEnabled = isGuaranteesModuleEnabled();
+
+  const [tab, setTab] = useState<GarantiasListMode>('active');
   const { rows, initialLoading, refreshing, error, load, refreshAfterMutation } = useGarantiasListData(
     profile?.empresa_id,
     moduleEnabled && canView,
+    tab,
   );
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<GuaranteeStatus | ''>('');
   const [vehicleFilter, setVehicleFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+
+  const handleTabChange = (next: GarantiasListMode) => {
+    setTab(next);
+    setQ('');
+    setStatusFilter('');
+    setVehicleFilter('');
+  };
 
   const conductorById = useMemo(() => {
     const m = new Map<string, string>();
@@ -44,7 +57,45 @@ const Garantias: React.FC = () => {
     return m;
   }, [vehicles]);
 
+  // ── Vista Actuales = padrón por vehículo ───────────────────────────────────
+  // Parte de vehículos activos ordenados por numeroUnidad ASC.
+  // Join con garantías activas (closed_at IS NULL) ya filtradas en DB.
+  const padronRows = useMemo(() => {
+    if (tab !== 'active') return null;
+    const guaranteeByVehicle = new Map<number, (typeof rows)[number]>();
+    for (const r of rows) {
+      if (r.currentVehicleId != null) guaranteeByVehicle.set(r.currentVehicleId, r);
+    }
+    const activeVehicles = vehicles
+      .filter((v) => v.activo)
+      .slice()
+      .sort((a, b) => {
+        const na = a.numeroUnidad ?? Infinity;
+        const nb = b.numeroUnidad ?? Infinity;
+        return na !== nb ? na - nb : a.id - b.id;
+      });
+    return activeVehicles.map((v) => ({
+      vehicle: v,
+      guarantee: guaranteeByVehicle.get(v.id) ?? null,
+    }));
+  }, [tab, vehicles, rows]);
+
+  // Búsqueda dentro del padrón: placa, unidad o conductor.
+  const filteredPadron = useMemo(() => {
+    if (!padronRows) return null;
+    const needle = q.trim().toLowerCase();
+    if (!needle) return padronRows;
+    return padronRows.filter(({ vehicle, guarantee }) => {
+      const placa = vehicle.placa.toLowerCase();
+      const unidad = vehicle.numeroUnidad != null ? String(vehicle.numeroUnidad) : '';
+      const conductor = guarantee != null ? (conductorById.get(guarantee.driverId) ?? '').toLowerCase() : '';
+      return placa.includes(needle) || unidad.includes(needle) || conductor.includes(needle);
+    });
+  }, [padronRows, q, conductorById]);
+
+  // ── Vista Historial = garantías cerradas/devueltas ─────────────────────────
   const filtered = useMemo(() => {
+    if (tab !== 'history') return [];
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
       if (statusFilter && r.status !== statusFilter) return false;
@@ -54,20 +105,24 @@ const Garantias: React.FC = () => {
       const placa = r.currentVehicleId != null ? (vehicleById.get(r.currentVehicleId) ?? '').toLowerCase() : '';
       return name.includes(needle) || placa.includes(needle) || String(r.id).includes(needle);
     });
-  }, [rows, q, statusFilter, vehicleFilter, conductorById, vehicleById]);
+  }, [rows, tab, q, statusFilter, vehicleFilter, conductorById, vehicleById]);
 
+  // KPIs desde padrón (solo en tab Actuales).
   const summary = useMemo(() => {
-    const active = rows.filter((r) => !r.closedAt && r.status !== 'cerrada' && r.status !== 'devuelta');
-    const completa = active.filter((r) => r.status === 'completa').length;
-    const incompleta = active.filter((r) =>
-      ['pendiente', 'incompleta', 'con_descuentos_pendientes', 'sin_garantia'].includes(r.status),
+    if (tab !== 'active' || !padronRows) return null;
+    const total = padronRows.length;
+    const conGarantia = padronRows.filter((r) => r.guarantee != null).length;
+    const sinOIncompleta = padronRows.filter(
+      (r) =>
+        !r.guarantee ||
+        ['pendiente', 'incompleta', 'con_descuentos_pendientes', 'sin_garantia'].includes(r.guarantee.status),
     ).length;
-    const saldo = active.reduce((s, r) => s + r.currentBalance, 0);
-    return { total: active.length, completa, incompleta, saldo };
-  }, [rows]);
+    const saldo = padronRows.reduce((s, r) => s + (r.guarantee?.currentBalance ?? 0), 0);
+    return { total, conGarantia, sinOIncompleta, saldo };
+  }, [tab, padronRows]);
 
   const showTableLoading = initialLoading && rows.length === 0;
-  const showEmptyState = !initialLoading && !refreshing && filtered.length === 0;
+  const showHistoryEmpty = tab === 'history' && !initialLoading && !refreshing && filtered.length === 0;
 
   if (!moduleEnabled) {
     return (
@@ -107,7 +162,7 @@ const Garantias: React.FC = () => {
           >
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} /> Actualizar
           </button>
-          {canCreateGarantia(permissionUser) ? (
+          {canCreateGarantia(permissionUser) && tab === 'active' ? (
             <button
               type="button"
               onClick={() => setShowCreate(true)}
@@ -119,131 +174,264 @@ const Garantias: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'Activas', value: String(summary.total) },
-          { label: 'Completas', value: String(summary.completa) },
-          { label: 'Pendientes / incompletas', value: String(summary.incompleta) },
-          { label: 'Saldo total retenido', value: formatGlobalAmount(summary.saldo) },
-        ].map((c) => (
-          <div key={c.label} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{c.label}</p>
-            <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">{c.value}</p>
-          </div>
-        ))}
+      {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => handleTabChange('active')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            tab === 'active'
+              ? 'border-primary-600 text-primary-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Actuales
+          {summary != null ? (
+            <span className="ml-1.5 text-[11px] font-bold bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full tabular-nums">
+              {summary.total}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange('history')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            tab === 'history'
+              ? 'border-primary-600 text-primary-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Historial
+        </button>
       </div>
 
+      {/* ── KPIs (solo en Actuales) ───────────────────────────────────────── */}
+      {summary != null ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: 'Unidades activas', value: String(summary.total) },
+            { label: 'Con garantía', value: String(summary.conGarantia) },
+            { label: 'Sin garantía / incompleta', value: String(summary.sinOIncompleta) },
+            { label: 'Saldo total retenido', value: formatGlobalAmount(summary.saldo) },
+          ].map((c) => (
+            <div key={c.label} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{c.label}</p>
+              <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">{c.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* ── Filtros ───────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 items-end">
         <label className="block flex-1 min-w-[12rem]">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase">Buscar conductor</span>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase">
+            {tab === 'active' ? 'Buscar unidad / conductor' : 'Buscar conductor'}
+          </span>
           <div className="relative mt-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-sm"
-              placeholder="Nombre, placa, ID…"
+              placeholder={tab === 'active' ? '#unidad, placa, conductor…' : 'Nombre, placa, ID…'}
             />
           </div>
         </label>
-        <label className="block">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase">Estado</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as GuaranteeStatus | '')}
-            className="mt-1 block px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-          >
-            <option value="">Todos</option>
-            {Object.entries(GUARANTEE_STATUS_LABELS).map(([k, lab]) => (
-              <option key={k} value={k}>
-                {lab}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block min-w-[10rem]">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase">Vehículo</span>
-          <select
-            value={vehicleFilter}
-            onChange={(e) => setVehicleFilter(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-          >
-            <option value="">Todos</option>
-            {vehicles
-              .filter((v) => v.activo)
-              .map((v) => (
-                <option key={v.id} value={String(v.id)}>
-                  #{getVehicleDisplayNumber(v)} · {v.placa}
-                </option>
-              ))}
-          </select>
-        </label>
+        {tab === 'history' ? (
+          <>
+            <label className="block">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase">Estado</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as GuaranteeStatus | '')}
+                className="mt-1 block px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+              >
+                <option value="">Todos</option>
+                {HISTORY_STATUSES.map((k) => (
+                  <option key={k} value={k}>
+                    {GUARANTEE_STATUS_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block min-w-[10rem]">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase">Vehículo</span>
+              <select
+                value={vehicleFilter}
+                onChange={(e) => setVehicleFilter(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+              >
+                <option value="">Todos</option>
+                {vehicles
+                  .filter((v) => v.activo)
+                  .map((v) => (
+                    <option key={v.id} value={String(v.id)}>
+                      #{getVehicleDisplayNumber(v)} · {v.placa}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </>
+        ) : null}
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-[10px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b">
-              <tr>
-                <th className="px-3 py-2">Conductor</th>
-                <th className="px-3 py-2">Vehículo</th>
-                <th className="px-3 py-2">Tipo</th>
-                <th className="px-3 py-2">Requerida</th>
-                <th className="px-3 py-2">Saldo</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {showTableLoading ? (
+      {tab === 'history' ? (
+        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          El historial muestra garantías cerradas o devueltas. Los movimientos se conservan y pueden consultarse
+          entrando en cada ficha.
+        </p>
+      ) : null}
+
+      {/* ── Tabla Actuales = padrón por vehículo ──────────────────────────── */}
+      {tab === 'active' && filteredPadron != null ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-[10px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-gray-400">
-                    Cargando…
-                  </td>
+                  <th className="px-3 py-2">Unidad</th>
+                  <th className="px-3 py-2">Placa</th>
+                  <th className="px-3 py-2">Conductor</th>
+                  <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">Requerida</th>
+                  <th className="px-3 py-2">Saldo</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2" />
                 </tr>
-              ) : showEmptyState ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-gray-400">
-                    No hay garantías
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50/80">
-                    <td className="px-3 py-2.5 font-medium text-gray-900">
-                      {conductorById.get(r.driverId) ?? r.driverId}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      {r.currentVehicleId != null
-                        ? vehicleById.get(r.currentVehicleId) ?? `#${r.currentVehicleId}`
-                        : '—'}
-                    </td>
-                    <td className="px-3 py-2.5">{GUARANTEE_VEHICLE_TYPE_LABELS[r.vehicleType]}</td>
-                    <td className="px-3 py-2.5 tabular-nums">{formatGlobalAmount(r.requiredAmount)}</td>
-                    <td className="px-3 py-2.5 tabular-nums font-semibold">{formatGlobalAmount(r.currentBalance)}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                        {GUARANTEE_STATUS_LABELS[r.status]}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/operaciones/garantias/${r.id}`)}
-                        className="text-xs font-semibold text-primary-600 hover:underline"
-                      >
-                        Ver
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {showTableLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-gray-400">Cargando…</td>
+                  </tr>
+                ) : filteredPadron.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
+                      {q ? 'Sin resultados para esa búsqueda' : 'Sin vehículos activos'}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filteredPadron.map(({ vehicle, guarantee }) => (
+                    <tr key={vehicle.id} className="hover:bg-gray-50/80">
+                      <td className="px-3 py-2.5 font-bold text-gray-900 tabular-nums">
+                        {vehicle.numeroUnidad != null ? `#${vehicle.numeroUnidad}` : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-700 font-medium">{vehicle.placa}</td>
+                      <td className="px-3 py-2.5 text-gray-800">
+                        {guarantee != null
+                          ? (conductorById.get(guarantee.driverId) ?? guarantee.driverId)
+                          : <span className="text-gray-400 text-xs">Sin conductor</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">
+                        {guarantee != null ? GUARANTEE_VEHICLE_TYPE_LABELS[guarantee.vehicleType] : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums">
+                        {guarantee != null ? formatGlobalAmount(guarantee.requiredAmount) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums font-semibold">
+                        {guarantee != null ? formatGlobalAmount(guarantee.currentBalance) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {guarantee != null ? (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                            {GUARANTEE_STATUS_LABELS[guarantee.status]}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            Sin garantía
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {guarantee != null ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/operaciones/garantias/${guarantee.id}`)}
+                            className="text-xs font-semibold text-primary-600 hover:underline"
+                          >
+                            Ver
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {/* ── Tabla Historial = garantías cerradas / devueltas ──────────────── */}
+      {tab === 'history' ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-[10px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b">
+                <tr>
+                  <th className="px-3 py-2">Conductor</th>
+                  <th className="px-3 py-2">Vehículo</th>
+                  <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">Requerida</th>
+                  <th className="px-3 py-2">Saldo final</th>
+                  <th className="px-3 py-2">Fecha cierre</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {showTableLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-gray-400">Cargando…</td>
+                  </tr>
+                ) : showHistoryEmpty ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
+                      Sin historial de garantías cerradas
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r) => (
+                    <tr key={r.id} className="hover:bg-gray-50/80">
+                      <td className="px-3 py-2.5 font-medium text-gray-900">
+                        {conductorById.get(r.driverId) ?? r.driverId}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-600">
+                        {r.currentVehicleId != null
+                          ? vehicleById.get(r.currentVehicleId) ?? `#${r.currentVehicleId}`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2.5">{GUARANTEE_VEHICLE_TYPE_LABELS[r.vehicleType]}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatGlobalAmount(r.requiredAmount)}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatGlobalAmount(r.currentBalance)}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500">
+                        {r.closedAt ? formatDate(r.closedAt.slice(0, 10)) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                          {GUARANTEE_STATUS_LABELS[r.status]}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/operaciones/garantias/${r.id}`)}
+                          className="text-xs font-semibold text-primary-600 hover:underline"
+                        >
+                          Ver
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       <CrearGarantiaModal
         isOpen={showCreate}
