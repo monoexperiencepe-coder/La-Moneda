@@ -407,6 +407,9 @@ export async function updateGuaranteeInfo(
   if (error) {
     console.error('[garantias update info]', error.message);
     if (error.code === '23505' || error.message === 'conductor_ya_tiene_garantia_activa') {
+      if (error.message === 'vehiculo_ya_tiene_garantia_activa') {
+        throw new Error('El vehículo ya tiene otra garantía activa.');
+      }
       throw new Error('El conductor seleccionado ya tiene una garantía activa.');
     }
     if (error.message === 'garantia_cerrada') {
@@ -423,6 +426,37 @@ export async function updateGuaranteeInfo(
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error('Respuesta incompleta al actualizar la garantía.');
+  return mapDriverGuaranteeRow(row as Record<string, unknown>);
+}
+
+/** Vincula una garantía activa huérfana sin alterar saldos ni movimientos. */
+export async function assignExistingGuaranteeToVehicle(
+  guarantee: DriverGuarantee,
+  vehicleId: number,
+  tenantEmpresaId?: string | null,
+): Promise<DriverGuarantee> {
+  if (guarantee.currentVehicleId != null) {
+    throw new Error('Esta garantía ya tiene un vehículo asignado.');
+  }
+  if (!Number.isFinite(vehicleId)) throw new Error('Vehículo inválido.');
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) throw new Error('Empresa no configurada.');
+  const { data, error } = await supabase.rpc('assign_existing_driver_guarantee_vehicle', {
+    p_guarantee_id: guarantee.id,
+    p_empresa_id: empresaId,
+    p_vehicle_id: vehicleId,
+  });
+  if (error) {
+    if (error.message === 'vehiculo_ya_tiene_garantia_activa' || error.code === '23505') {
+      throw new Error('El vehículo ya tiene otra garantía activa.');
+    }
+    if (error.message === 'vehiculo_no_pertenece_empresa') {
+      throw new Error('El vehículo no pertenece a esta empresa.');
+    }
+    throw new Error(error.message || 'No se pudo asignar la garantía existente.');
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Respuesta incompleta al asignar la garantía.');
   return mapDriverGuaranteeRow(row as Record<string, unknown>);
 }
 

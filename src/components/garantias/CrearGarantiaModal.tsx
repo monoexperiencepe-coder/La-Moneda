@@ -4,17 +4,19 @@ import Select from '../Common/Select';
 import Input from '../Common/Input';
 import type { Conductor, Vehicle } from '../../data/types';
 import type { GuaranteeVehicleType } from '../../config/guaranteeAmounts';
+import type { DriverGuarantee } from '../../data/garantiasTypes';
 import { GUARANTEE_VEHICLE_TYPE_LABELS, getDefaultRequiredAmount } from '../../config/guaranteeAmounts';
 import { formatConductorDisplayLabel } from '../../utils/fleetPanel';
 import { formatVehicleSelectLabel } from '../../utils/vehicleDisplayNumber';
 import { inferGuaranteeVehicleType } from '../../utils/vehicleTipoGarantia';
-import { createDriverGuarantee } from '../../services/garantiasService';
+import { assignExistingGuaranteeToVehicle, createDriverGuarantee } from '../../services/garantiasService';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   conductores: Conductor[];
   vehicles: Vehicle[];
+  activeGuarantees: DriverGuarantee[];
   empresaId?: string | null;
   userId?: string | null;
   onCreated: () => void;
@@ -25,6 +27,7 @@ const CrearGarantiaModal: React.FC<Props> = ({
   onClose,
   conductores,
   vehicles,
+  activeGuarantees,
   empresaId,
   userId,
   onCreated,
@@ -37,6 +40,11 @@ const CrearGarantiaModal: React.FC<Props> = ({
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const existingUnassignedGuarantee = useMemo(
+    () => activeGuarantees.find((g) => g.driverId === driverId && g.currentVehicleId == null) ?? null,
+    [activeGuarantees, driverId],
+  );
 
   const conductorOpts = useMemo(
     () =>
@@ -121,6 +129,25 @@ const CrearGarantiaModal: React.FC<Props> = ({
     }
   };
 
+  const handleAssignExisting = async () => {
+    setError('');
+    if (!existingUnassignedGuarantee || !vehicleId) {
+      setError('Selecciona un vehículo para asignar la garantía existente.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await assignExistingGuaranteeToVehicle(existingUnassignedGuarantee, Number(vehicleId), empresaId);
+      reset();
+      onCreated();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo asignar la garantía existente.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -148,7 +175,7 @@ const CrearGarantiaModal: React.FC<Props> = ({
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || existingUnassignedGuarantee != null}
             onClick={() => void handleSubmit()}
             className="px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
           >
@@ -172,6 +199,23 @@ const CrearGarantiaModal: React.FC<Props> = ({
           onChange={setDriverId}
           placeholder="Seleccionar…"
         />
+        {existingUnassignedGuarantee ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+            <p className="text-sm text-amber-900">
+              Este conductor ya tiene una garantía activa de{' '}
+              <strong>S/{existingUnassignedGuarantee.currentBalance.toLocaleString('es-PE')}</strong> sin vehículo
+              asignado. Puedes asignar esa garantía existente a este vehículo en lugar de crear una nueva.
+            </p>
+            <button
+              type="button"
+              disabled={busy || !vehicleId}
+              onClick={() => void handleAssignExisting()}
+              className="px-3 py-2 rounded-lg text-sm font-semibold bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50"
+            >
+              {busy ? 'Asignando…' : 'Asignar garantía existente al vehículo'}
+            </button>
+          </div>
+        ) : null}
         <Select
           label="Vehículo (opcional)"
           options={vehicleOpts}

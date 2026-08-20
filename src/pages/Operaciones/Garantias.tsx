@@ -123,6 +123,10 @@ const Garantias: React.FC = () => {
 
   const showTableLoading = initialLoading && rows.length === 0;
   const showHistoryEmpty = tab === 'history' && !initialLoading && !refreshing && filtered.length === 0;
+  const activeWithoutVehicle = useMemo(
+    () => (tab === 'active' ? rows.filter((r) => r.currentVehicleId == null) : []),
+    [rows, tab],
+  );
 
   if (!moduleEnabled) {
     return (
@@ -277,6 +281,32 @@ const Garantias: React.FC = () => {
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      {tab === 'active' && activeWithoutVehicle.length > 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="font-bold text-amber-950">Garantías activas sin vehículo</h2>
+          <p className="text-xs text-amber-800 mt-1">
+            Estas garantías existen y conservan su saldo. Asígnalas, devuélvelas y ciérralas, o ciérralas desde su ficha según corresponda.
+          </p>
+          <div className="mt-3 divide-y divide-amber-200">
+            {activeWithoutVehicle.map((guarantee) => (
+              <div key={guarantee.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="text-amber-950">
+                  <strong>{conductorById.get(guarantee.driverId) ?? guarantee.driverId}</strong>
+                  {' · '}S/{guarantee.currentBalance.toLocaleString('es-PE')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/operaciones/garantias/${guarantee.id}`)}
+                  className="text-xs font-semibold text-amber-800 hover:underline"
+                >
+                  Ver y decidir
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {tab === 'history' ? (
         <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
@@ -438,6 +468,7 @@ const Garantias: React.FC = () => {
         onClose={() => setShowCreate(false)}
         conductores={conductores}
         vehicles={vehicles}
+        activeGuarantees={tab === 'active' ? rows : []}
         empresaId={profile?.empresa_id}
         userId={user?.id}
         onCreated={refreshAfterMutation}
