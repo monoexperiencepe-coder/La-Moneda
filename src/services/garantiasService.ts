@@ -375,6 +375,52 @@ export async function updateGuaranteeVehicleType(
   return mapDriverGuaranteeRow(data as Record<string, unknown>);
 }
 
+export type UpdateGuaranteeInfoInput = {
+  driverId: string;
+  currentVehicleId: number | null;
+  vehicleType: GuaranteeVehicleType;
+  notes?: string | null;
+};
+
+export async function updateGuaranteeInfo(
+  guaranteeId: number,
+  input: UpdateGuaranteeInfoInput,
+  tenantEmpresaId?: string | null,
+): Promise<DriverGuarantee> {
+  const empresaId = resolveTenantId(tenantEmpresaId);
+  if (!empresaId) throw new Error('Empresa no configurada.');
+
+  const { data, error } = await supabase.rpc('update_driver_guarantee_info', {
+    p_guarantee_id: guaranteeId,
+    p_empresa_id: empresaId,
+    p_driver_id: input.driverId.trim(),
+    p_current_vehicle_id: input.currentVehicleId,
+    p_vehicle_type: input.vehicleType,
+    p_notes: input.notes?.trim() || null,
+  });
+
+  if (error) {
+    console.error('[garantias update info]', error.message);
+    if (error.code === '23505' || error.message === 'conductor_ya_tiene_garantia_activa') {
+      throw new Error('El conductor seleccionado ya tiene una garantía activa.');
+    }
+    if (error.message === 'garantia_cerrada') {
+      throw new Error('No se puede editar una garantía cerrada o devuelta.');
+    }
+    if (error.message === 'conductor_no_pertenece_empresa') {
+      throw new Error('El conductor no pertenece a esta empresa.');
+    }
+    if (error.message === 'vehiculo_no_pertenece_empresa') {
+      throw new Error('El vehículo no pertenece a esta empresa.');
+    }
+    throw new Error(error.message || 'No se pudo actualizar la garantía.');
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Respuesta incompleta al actualizar la garantía.');
+  return mapDriverGuaranteeRow(row as Record<string, unknown>);
+}
+
 export type RevertMovementResult = {
   guarantee: DriverGuarantee;
   reversalMovementId: number;

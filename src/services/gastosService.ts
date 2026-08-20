@@ -602,8 +602,7 @@ function categoriaManualPatchToRow(patch: GastoCategoriaManualPatch): Record<str
   if (patch.revisado_at !== undefined) row.revisado_at = patch.revisado_at;
   if (patch.origen_clasificacion !== undefined) row.origen_clasificacion = patch.origen_clasificacion;
   if (patch.excel_extra !== undefined) {
-    const sanitized = sanitizeForJsonbColumn(patch.excel_extra);
-    if (sanitized !== null) row.excel_extra = sanitized;
+    row.excel_extra = sanitizeForJsonbColumn(patch.excel_extra);
   }
   return row;
 }

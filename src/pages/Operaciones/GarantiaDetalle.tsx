@@ -27,6 +27,7 @@ import { formatDate } from '../../utils/formatting';
 import RegistrarMovimientoModal from '../../components/garantias/RegistrarMovimientoModal';
 import CambioTipoVehiculoModal from '../../components/garantias/CambioTipoVehiculoModal';
 import RevertirMovimientoModal from '../../components/garantias/RevertirMovimientoModal';
+import EditarGarantiaModal from '../../components/garantias/EditarGarantiaModal';
 import { useGarantiaDetalleData } from '../../hooks/garantias/useGarantiaDetalleData';
 
 const GarantiaDetalle: React.FC = () => {
@@ -52,6 +53,7 @@ const GarantiaDetalle: React.FC = () => {
 
   const [movMode, setMovMode] = useState<'deposit' | 'deduction' | 'adjustment' | 'refund' | null>(null);
   const [showTipo, setShowTipo] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [revertTarget, setRevertTarget] = useState<(typeof movements)[number] | null>(null);
 
   const computed = useMemo(() => {
@@ -213,6 +215,15 @@ const GarantiaDetalle: React.FC = () => {
               Simular cambio auto ↔ camioneta
             </button>
           ) : null}
+          {canRegisterSensitiveMovement(permissionUser) ? (
+            <button
+              type="button"
+              onClick={() => setShowEdit(true)}
+              className="px-3 py-2 rounded-xl text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-900"
+            >
+              Editar información
+            </button>
+          ) : null}
         </div>
       ) : (
         <p className="text-sm text-gray-500 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -369,6 +380,18 @@ const GarantiaDetalle: React.FC = () => {
           movements={movements}
           user={permissionUser}
           userId={user?.id}
+          empresaId={profile?.empresa_id}
+          onSaved={refreshAfterMutation}
+        />
+      ) : null}
+
+      {showEdit ? (
+        <EditarGarantiaModal
+          isOpen
+          onClose={() => setShowEdit(false)}
+          guarantee={guarantee}
+          conductores={conductores}
+          vehicles={vehicles}
           empresaId={profile?.empresa_id}
           onSaved={refreshAfterMutation}
         />
