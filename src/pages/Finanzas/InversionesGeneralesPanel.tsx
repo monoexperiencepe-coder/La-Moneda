@@ -2,13 +2,17 @@ import { useAmountDisplay } from '../../hooks/useAmountDisplay';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCopilotNarrativeNavigation } from '../../hooks/useCopilotNarrativeNavigation';
-import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
-import { fetchInversionesGeneralesVehiculo } from '../../services/inversionesGeneralesVehiculoService';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  fetchInversionesGeneralesVehiculo,
+  deleteInversionGeneralVehiculo,
+} from '../../services/inversionesGeneralesVehiculoService';
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
-import { canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
+import { canMutateInversiones, canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
 import { sumInversionGeneralesByMoneda } from '../../utils/vehicleInversionDisplay';
+import InversionGeneralVehiculoModal from '../../components/Finanzas/InversionGeneralVehiculoModal';
 
 function montoFmt(
   amount: number,
@@ -94,16 +98,24 @@ const InversionesGeneralesPanel: React.FC = () => {
   const filterPlaca = (searchParams.get('placa') ?? '').trim().toUpperCase();
   const filterVehicleId = (searchParams.get('vehicleId') ?? '').trim();
   const { profile, user } = useAuth();
-  const canLoadInversiones = useMemo(
-    () => canUseInversiones(permissionUserFromAuth(user, profile?.email ?? null)),
-    [user, profile?.email],
-  );
+  const permUser = useMemo(() => permissionUserFromAuth(user, profile?.email ?? null), [user, profile?.email]);
+  const canLoadInversiones = useMemo(() => canUseInversiones(permUser), [permUser]);
+  const canMutate = useMemo(() => canMutateInversiones(permUser), [permUser]);
   const tenantEmpresaId = profile?.empresa_id;
 
   const [rows, setRows] = useState<InversionGeneralVehiculo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: 'numero', dir: 'asc' });
+
+  // Estado modal de alta/edición
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<InversionGeneralVehiculo | null>(null);
+
+  // Estado de confirmación de eliminación
+  const [deletingRow, setDeletingRow] = useState<InversionGeneralVehiculo | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!canLoadInversiones) {
@@ -164,6 +176,40 @@ const InversionesGeneralesPanel: React.FC = () => {
   const totalesPorMoneda = useMemo(() => sumInversionGeneralesByMoneda(displayRows), [displayRows]);
   const totalesGlobales = useMemo(() => sumInversionGeneralesByMoneda(rows), [rows]);
 
+  const handleOpenCreate = useCallback(() => {
+    setEditingRow(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((row: InversionGeneralVehiculo) => {
+    setEditingRow(row);
+    setModalOpen(true);
+  }, []);
+
+  const handleModalSaved = useCallback(() => {
+    void reload();
+  }, [reload]);
+
+  const handleRequestDelete = useCallback((row: InversionGeneralVehiculo) => {
+    setDeleteError('');
+    setDeletingRow(row);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deletingRow || deleteBusy) return;
+    setDeleteError('');
+    setDeleteBusy(true);
+    try {
+      await deleteInversionGeneralVehiculo(deletingRow.id, tenantEmpresaId);
+      setDeletingRow(null);
+      void reload();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Error al eliminar.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteBusy, deletingRow, reload, tenantEmpresaId]);
+
   useCopilotNarrativeNavigation({
     resolveTarget: (step) => {
       const hv = (searchParams.get('highlightVehicle') ?? filterPlaca ?? filterVehicleId ?? '').trim();
@@ -193,6 +239,12 @@ const InversionesGeneralesPanel: React.FC = () => {
 
   return (
     <div className="space-y-3 animate-fade-in">
+      <InversionGeneralVehiculoModal
+        isOpen={modalOpen}
+        onClose={() => { setModalOpen(false); setEditingRow(null); }}
+        existing={editingRow}
+        onSaved={handleModalSaved}
+      />
       {loading ? (
         <p className="text-sm text-slate-500 py-6">Cargando…</p>
       ) : error ? (
@@ -228,6 +280,58 @@ const InversionesGeneralesPanel: React.FC = () => {
               ) : null}
             </div>
           </div>
+
+          {canMutate ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleOpenCreate}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+              >
+                <Plus size={16} />
+                Agregar inversión
+              </button>
+            </div>
+          ) : null}
+
+          {/* Diálogo de confirmación de eliminación */}
+          {deletingRow ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-red-900">
+                ¿Eliminar el registro de inversión de esta unidad?
+              </p>
+              <p className="text-sm text-red-800">
+                <span className="font-medium">{deletingRow.vehiculoReferencia}</span>
+                {deletingRow.placa ? ` — Placa: ${deletingRow.placa}` : ''}
+              </p>
+              <p className="text-xs text-red-700">
+                Se eliminará el registro de inversión. <strong>El vehículo no será eliminado.</strong> Esta acción
+                no se puede deshacer.
+              </p>
+              {deleteError ? (
+                <p className="text-xs text-red-600 bg-red-100 rounded px-2 py-1">{deleteError}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={deleteBusy}
+                  onClick={() => void handleConfirmDelete()}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleteBusy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  Sí, eliminar
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteBusy}
+                  onClick={() => { setDeletingRow(null); setDeleteError(''); }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div id="copilot-inversiones-table" className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-[1020px] w-full border-collapse text-left">
@@ -273,6 +377,9 @@ const InversionesGeneralesPanel: React.FC = () => {
                       Mon. <SortGlyph active={sort.key === 'moneda'} dir={sort.dir} />
                     </button>
                   </th>
+                  {canMutate ? (
+                    <th className={`${thBase} text-center w-20`}>Acciones</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -298,6 +405,28 @@ const InversionesGeneralesPanel: React.FC = () => {
                     <td className={`${tdUsd} font-semibold text-slate-900`}>{montoFmt(r.montoTotal, r.moneda, formatGlobalAmount)}</td>
                     <td className={tdUsd}>{fmtPenRef(r.totalInversionPen, formatGlobalAmount)}</td>
                     <td className={`${tdText} text-slate-500`}>{r.moneda}</td>
+                    {canMutate ? (
+                      <td className={`${tdBase} text-center`}>
+                        <div className="inline-flex gap-1">
+                          <button
+                            type="button"
+                            title="Editar"
+                            onClick={() => handleOpenEdit(r)}
+                            className="p-1 rounded hover:bg-violet-50 text-violet-600 hover:text-violet-800"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            title="Eliminar"
+                            onClick={() => handleRequestDelete(r)}
+                            className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-700"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -322,6 +451,7 @@ const InversionesGeneralesPanel: React.FC = () => {
                       )}
                     </td>
                     <td className={`${tdText} py-2 text-slate-500`}>—</td>
+                    {canMutate ? <td /> : null}
                   </tr>
                 </tfoot>
               ) : null}

@@ -189,6 +189,11 @@ export function canUseInversiones(user: PermissionUser | null | undefined): bool
   return user.role === 'admin' || user.role === 'socio' || user.role === 'contador';
 }
 
+/** Puede insertar/actualizar/eliminar en inversiones_generales_vehiculo (espeja can_mutate_inversiones_generales_vehiculo en BD). */
+export function canMutateInversiones(user: PermissionUser | null | undefined): boolean {
+  return canUseInversiones(user);
+}
+
 export function canViewSection(user: PermissionUser | null | undefined, section: AppSection): boolean {
   if (!user) return false;
   if (isFinancialOperadorRestricted(user)) {

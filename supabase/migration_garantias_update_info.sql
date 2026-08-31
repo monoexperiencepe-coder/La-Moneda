@@ -113,6 +113,7 @@ begin
     ) then
       raise exception using errcode = '22023', message = 'vehiculo_no_pertenece_empresa';
     end if;
+
   end if;
 
   -- ── 10. Actualizar solo campos de cabecera no financieros ─────────────────
