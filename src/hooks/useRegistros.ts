@@ -34,6 +34,7 @@ import {
   patchVehiculo,
   type InsertVehiculoInput,
 } from '../services/vehiculosService';
+import { mergeVehicleRecord } from '../utils/vehiculoMerge';
 import { fetchUnidades, insertUnidad, removeUnidad } from '../services/unidadesService';
 import {
   fetchConductores,
@@ -192,8 +193,10 @@ function mergeRegistroTiempoSorted(prev: RegistroTiempo[], row: RegistroTiempo):
 }
 
 function mergeVehicleSorted(prev: Vehicle[], row: Vehicle): Vehicle[] {
+  const existing = prev.find((x) => x.id === row.id);
+  const merged = mergeVehicleRecord(existing, row);
   const without = prev.some((x) => x.id === row.id) ? prev.filter((x) => x.id !== row.id) : prev;
-  return [...without, row].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b));
+  return [...without, merged].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b));
 }
 
 function mergeInversionVehiculoSorted(prev: InversionVehiculo[], row: InversionVehiculo): InversionVehiculo[] {

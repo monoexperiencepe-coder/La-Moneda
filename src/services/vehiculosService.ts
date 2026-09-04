@@ -1,9 +1,61 @@
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
-import { mapVehiculoRow, vehiculoPatchToSnake, vehiculoToInsert } from './supabaseMappers';
+import {
+  mapVehiculoRow,
+  parseNumeroUnidadFromRow,
+  vehiculoPatchToSnake,
+  vehiculoToInsert,
+} from './supabaseMappers';
 import type { Vehicle } from '../data/types';
 import { devPerfAsync } from '../utils/devPerf';
 import { normalizePlaca, placasMatch } from '../utils/normalizePlaca';
+import { mergeVehicleRecord, vehicleMissingNumeroUnidad } from '../utils/vehiculoMerge';
+
+/** SELECT explícito: garantiza `numero_unidad` en la respuesta REST (no depender de `*`). */
+export const VEHICULOS_LIST_SELECT =
+  'id,numero_unidad,marca,modelo,placa,anio,color,activo,propietario_nombre,combustible,tipo_carroceria,numero_motor,cantidad_llaves,gps_1,gps_2,impuesto,km_inicial,tarjeta_propiedad,created_at';
+
+async function hydrateMissingNumeroUnidad(empresaId: string, vehicles: Vehicle[]): Promise<Vehicle[]> {
+  const missingIds = vehicles.filter((v) => vehicleMissingNumeroUnidad(v)).map((v) => v.id);
+  if (missingIds.length === 0) return vehicles;
+
+  const { data, error } = await supabase
+    .from('vehiculos')
+    .select('id,numero_unidad')
+    .eq('empresa_id', empresaId)
+    .in('id', missingIds);
+
+  if (error) {
+    console.error('[vehiculos hydrate numero_unidad]', error.message);
+    return vehicles;
+  }
+  if (!data?.length) return vehicles;
+
+  const byId = new Map<number, number>();
+  for (const row of data) {
+    const rec = row as Record<string, unknown>;
+    const idRaw = rec.id;
+    const id = typeof idRaw === 'number' ? idRaw : Number(idRaw);
+    const nu = parseNumeroUnidadFromRow(rec);
+    if (Number.isFinite(id) && nu != null) byId.set(id, nu);
+  }
+  if (byId.size === 0) return vehicles;
+
+  if (import.meta.env.DEV) {
+    console.warn('[vehiculos hydrate numero_unidad]', {
+      repaired: byId.size,
+      sample: [...byId.entries()].slice(0, 5),
+    });
+  }
+
+  return vehicles.map((v) => {
+    const nu = byId.get(v.id);
+    if (nu != null && vehicleMissingNumeroUnidad(v)) {
+      return { ...v, numeroUnidad: nu };
+    }
+    return v;
+  });
+}
 
 function resolveTenantId(tenantEmpresaId?: string | null): string | null {
   const id = (tenantEmpresaId ?? EMPRESA_ID)?.trim();
@@ -69,7 +121,7 @@ export async function fetchVehiculos(tenantEmpresaId?: string | null): Promise<V
     if (!empresaId) return [];
     const { data, error } = await supabase
       .from('vehiculos')
-      .select('*')
+      .select(VEHICULOS_LIST_SELECT)
       .eq('empresa_id', empresaId)
       .order('numero_unidad', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true });
@@ -77,7 +129,8 @@ export async function fetchVehiculos(tenantEmpresaId?: string | null): Promise<V
       console.error('[vehiculos]', error.message);
       return [];
     }
-    return (data ?? []).map((r) => mapVehiculoRow(r as Record<string, unknown>));
+    const mapped = (data ?? []).map((r) => mapVehiculoRow(r as Record<string, unknown>));
+    return hydrateMissingNumeroUnidad(empresaId, mapped);
   });
 }
 
@@ -116,7 +169,7 @@ export async function insertVehiculo(
   const { data, error } = await supabase
     .from('vehiculos')
     .insert(payload)
-    .select('*')
+    .select(VEHICULOS_LIST_SELECT)
     .single();
 
   if (error) {
@@ -157,7 +210,7 @@ export async function patchVehiculo(
   if (Object.keys(snake).length === 0) {
     const { data: cur, error: readErr } = await supabase
       .from('vehiculos')
-      .select('*')
+      .select(VEHICULOS_LIST_SELECT)
       .eq('id', id)
       .eq('empresa_id', empresaId)
       .maybeSingle();
@@ -182,7 +235,7 @@ export async function patchVehiculo(
     .update(snake)
     .eq('id', id)
     .eq('empresa_id', empresaId)
-    .select('*');
+    .select(VEHICULOS_LIST_SELECT);
 
   if (error) {
     console.error('[vehiculos update]', error.message, error);

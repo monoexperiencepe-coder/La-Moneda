@@ -25,6 +25,7 @@ export function auditVehiculos(vehicles: readonly Vehicle[]): void {
     inactivos: vehicles.length - activos.length,
     muestra: vehicles.slice(0, 5).map((v) => ({
       id: v.id,
+      numeroUnidad: v.numeroUnidad ?? null,
       placa: v.placa,
       marca: v.marca,
       modelo: v.modelo,

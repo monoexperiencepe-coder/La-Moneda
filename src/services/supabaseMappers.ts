@@ -96,12 +96,18 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Número operativo visible (#83); acepta snake/camel y bigint desde PostgREST. */
+export function parseNumeroUnidadField(v: unknown): number | null {
+  const n = numOrNull(v);
+  return n != null && n > 0 ? Math.round(n) : null;
+}
+
+export function parseNumeroUnidadFromRow(r: Record<string, unknown>): number | null {
+  return parseNumeroUnidadField(r.numero_unidad) ?? parseNumeroUnidadField(r.numeroUnidad);
+}
+
 export function mapVehiculoRow(r: Record<string, unknown>): Vehicle {
-  const numeroRaw = r.numero_unidad;
-  const numeroUnidad =
-    numeroRaw != null && numeroRaw !== '' && Number.isFinite(Number(numeroRaw))
-      ? Math.round(Number(numeroRaw))
-      : null;
+  const numeroUnidad = parseNumeroUnidadFromRow(r);
   return {
     id: num(r.id),
     numeroUnidad,
