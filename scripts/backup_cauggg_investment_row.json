@@ -1,0 +1,25 @@
+{
+  "deletedAt": "2026-09-09T02:30:55.148Z",
+  "row": {
+    "id": "b545614d-235d-4529-ac43-a3281e9dadc3",
+    "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+    "vehiculo_referencia": "#84 kia solutoo (CAUGGG)",
+    "vehiculo_numero": 180,
+    "placa": "CAUGGG",
+    "modelo": "kia solutoo",
+    "monto_total": 12000,
+    "moneda": "USD",
+    "fuente": "REGISTRO_UI",
+    "observaciones": null,
+    "created_at": "2026-06-25T20:20:56.040699+00:00",
+    "fecha_compra": null,
+    "valor_compra_usd": 12000,
+    "gasto_gnv_usd": null,
+    "gasto_notarial_usd": null,
+    "leg_firmas_usd": null,
+    "seguro_usd": null,
+    "gps_usd": null,
+    "fundas_accesorios_usd": null,
+    "total_equivalente_pen": null
+  }
+}
