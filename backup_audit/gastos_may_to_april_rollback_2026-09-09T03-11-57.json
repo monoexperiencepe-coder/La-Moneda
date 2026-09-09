@@ -1,0 +1,2171 @@
+{
+  "captured_at": "2026-09-09T03:11:57.635Z",
+  "target_fecha": "2026-05-06",
+  "new_fecha": "2026-04-30",
+  "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+  "tipo_gasto": "operativo_vehiculo",
+  "row_count": 108,
+  "total_monto": 12121,
+  "rows": [
+    {
+      "id": "00142f0a-9d5f-45ca-a0d2-2624fdba0708",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 22,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "COMBUSTIBLE",
+      "motivo": "COMBUSTIBLE",
+      "comentarios": "GLORY 82 GNV ",
+      "revisado_at": "2026-07-01T17:29:33.952+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:29:33.836702+00:00"
+    },
+    {
+      "id": "04bcc05f-b6ff-4b83-b0e0-2da1d9710c74",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 24,
+      "vehicle_id": 9,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "COMBUSTIBLE",
+      "motivo": "COMBUSTIBLE",
+      "comentarios": "YARIS 09 GNV ",
+      "revisado_at": "2026-07-01T17:30:22.272+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:30:22.072419+00:00"
+    },
+    {
+      "id": "05228da1-f042-48a8-949f-ed7b6dcfe077",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 200,
+      "vehicle_id": 22,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 22 1/5 KIT DE EMBRAGUE+LIQ DE FRENO+ LIQUIDO DE CAJA+ SOPORTE DE CAJA+BUJIAS",
+      "revisado_at": "2026-07-01T16:43:03.27+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:43:03.272381+00:00"
+    },
+    {
+      "id": "060a9d05-655d-43ae-a6eb-459c32afcc6b",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 52,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 52 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:50:19.095+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:50:19.088522+00:00"
+    },
+    {
+      "id": "09995f63-aae5-4bfc-9e88-315aa372176e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 900,
+      "vehicle_id": 5,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "DEVOLUCIÓN GARANTÍA",
+      "motivo": "DEVOLUCIÓN GARANTÍA",
+      "comentarios": "YARIS 05 GARANTIA OLCHESE JORGE",
+      "revisado_at": "2026-07-01T17:34:06.631+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:34:06.707783+00:00"
+    },
+    {
+      "id": "0a1f792a-165d-4fcb-b13d-a16d1176a2c9",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 25,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 25 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:01:23.602+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:01:23.487509+00:00"
+    },
+    {
+      "id": "0ca4ae7d-8484-46b4-84a6-339cd3197bf7",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 25,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ACCESORIOS",
+      "motivo": "ACCESORIOS",
+      "comentarios": "VERNA 81 PLUMILLAS",
+      "revisado_at": "2026-07-01T17:10:08.345+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:10:08.134605+00:00"
+    },
+    {
+      "id": "0e39dddb-6ea6-4e54-8e2d-ce08e0665a92",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 45,
+      "vehicle_id": 65,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 65 FILTRO DE AIRE MAS FILTRO A/C",
+      "revisado_at": "2026-07-01T17:07:05.021+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:07:04.814681+00:00"
+    },
+    {
+      "id": "1012b096-6acc-43fb-88d7-59917f41746b",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 250,
+      "vehicle_id": 60,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 60 1/6 RECTI DE CULATA+ EMPAQUE+ VALVULAS+GUIAS+BUJIAS IRIDIUM",
+      "revisado_at": "2026-07-01T16:44:28.227+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:44:28.043065+00:00"
+    },
+    {
+      "id": "103e1866-0f87-4389-b8fb-04b3ca29da78",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 50,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "FRENOS",
+      "motivo": "FRENOS",
+      "comentarios": "VERSA 50 ZAPATAS Y REGULACION FRENO ",
+      "revisado_at": "2026-07-01T17:35:19.764+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:35:19.578203+00:00"
+    },
+    {
+      "id": "11c16326-0ab4-4641-ad64-a75056ae1045",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 15,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 15 BUJIAS Y ORINES ",
+      "revisado_at": "2026-07-01T17:04:17.733+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:04:17.737553+00:00"
+    },
+    {
+      "id": "1397f54e-afc4-4e18-b0cd-63a1781f0f1b",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 60,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "GPS EQUIPOS",
+      "motivo": "GPS EQUIPOS",
+      "comentarios": "VERSA 81 2 GPS INSTALACION ",
+      "revisado_at": "2026-07-01T17:41:49.114+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:41:48.948902+00:00"
+    },
+    {
+      "id": "19cfbda9-6a9a-4970-8f71-57b93b5fbc9d",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 3,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 03 FILTRO DE AIRE",
+      "revisado_at": "2026-07-01T16:52:22.086+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:52:22.129357+00:00"
+    },
+    {
+      "id": "19e01dbe-f9fa-4163-a239-f033468c784f",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 44,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "SUSPENSIÓN",
+      "motivo": "SUSPENSIÓN",
+      "comentarios": "VERSA 44 1/2 CAMBIO DE BOCINAS DE TRAPECIO PERNO DEL CALIPER Y MOD ",
+      "revisado_at": "2026-07-01T16:48:48.768+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:48:49.004034+00:00"
+    },
+    {
+      "id": "1ab13643-8bbb-4b6b-a814-7d70aa4b7d52",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 340,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "OTROS / ESPECIFICAR",
+      "motivo": "OTROS / ESPECIFICAR",
+      "comentarios": "GLORY 82 GASTOS NOTARIALES ",
+      "revisado_at": "2026-07-01T17:10:33.551+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:10:33.362916+00:00"
+    },
+    {
+      "id": "1c98dba4-1bfa-46e5-944c-8b05510fb280",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 370,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ACCESORIOS",
+      "motivo": "ACCESORIOS",
+      "comentarios": "VERNA 81 DUPLICADO DE LLAVE MAS CHAPA PILOTO ARREGLO ",
+      "revisado_at": "2026-07-01T17:09:23.333+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:09:23.242591+00:00"
+    },
+    {
+      "id": "1db6a4c3-5d13-4ae9-bbbf-d0cd393fe15e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 78,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "SOLUTO 78 BUJIAS ",
+      "revisado_at": "2026-07-01T16:56:21.449+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:56:21.249439+00:00"
+    },
+    {
+      "id": "23a2914a-a1e3-46d6-8a41-336913accc24",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 220,
+      "vehicle_id": 11,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 11 6/6 REC CULATA Y MAS ",
+      "revisado_at": "2026-07-01T16:34:54.195+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:34:54.582098+00:00"
+    },
+    {
+      "id": "247815f8-9c6d-484c-ae8d-b1fae4182fc6",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 32,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 32 FILTRO AIRE",
+      "revisado_at": "2026-07-01T16:55:13.915+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:55:13.696534+00:00"
+    },
+    {
+      "id": "2bcbc454-17e0-4b2a-84b4-68690d517ed2",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 280,
+      "vehicle_id": 1,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "BATERÍA",
+      "motivo": "BATERÍA",
+      "comentarios": "YARIS 01 BATERIA NUEVA ",
+      "revisado_at": "2026-07-01T17:36:45.743+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:36:45.716452+00:00"
+    },
+    {
+      "id": "2f48883a-f2c1-4066-8102-e15d75a426d9",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 64,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERSA 64 AFOCAT",
+      "revisado_at": "2026-07-01T17:22:25.051+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:22:24.876883+00:00"
+    },
+    {
+      "id": "3397fb7f-2b4a-49b9-9fa2-b433df28d711",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERNA 81 AFOCAT",
+      "revisado_at": "2026-07-01T17:21:23.837+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:21:23.897862+00:00"
+    },
+    {
+      "id": "34024ba7-53ef-4dc3-bcf5-1b18ab771e88",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 75,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 75 2/2 BOMBA DE AGUA  REFRIGERANTE .",
+      "revisado_at": "2026-07-01T16:42:28.584+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:42:28.417289+00:00"
+    },
+    {
+      "id": "344e96ea-e362-448b-8c42-b32c7fe29e97",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 36,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 36 1/2 BOBINA+ SERV",
+      "revisado_at": "2026-07-01T16:47:24.644+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:47:24.516968+00:00"
+    },
+    {
+      "id": "34e59c4e-acbd-4c4c-a5d3-760366c39f3d",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 60,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 60 2/2 CAÑA DE BOBINA MAS ESCANEO MAS MOD",
+      "revisado_at": "2026-07-01T16:41:13.73+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:41:13.509274+00:00"
+    },
+    {
+      "id": "37d5b648-04f6-48c3-8712-ff288c04a545",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 110,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "OTROS / ESPECIFICAR",
+      "motivo": "OTROS / ESPECIFICAR",
+      "comentarios": "VERNA 81 NOTARIA COMPRA AUTO ",
+      "revisado_at": "2026-07-01T17:08:40.066+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:08:39.959074+00:00"
+    },
+    {
+      "id": "38338f94-52af-479a-b54b-e1d4d51c601b",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 290,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "FUNDAS O FORROS AUTO",
+      "motivo": "FUNDAS O FORROS AUTO",
+      "comentarios": "VERNA 81 FORRO PISO Y ASIENTOS ",
+      "revisado_at": "2026-07-01T17:32:29.317+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:32:29.132619+00:00"
+    },
+    {
+      "id": "38f34176-a5e4-4b33-a204-c43673b46e47",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 19,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 19 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:59:54.554+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:59:54.363343+00:00"
+    },
+    {
+      "id": "39a750c2-5d00-4442-8a06-69fe00129b09",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 45,
+      "vehicle_id": 59,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "FILTRO DE AIRE + FILTRO A/C",
+      "revisado_at": "2026-07-01T16:57:43.748+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:57:43.868032+00:00"
+    },
+    {
+      "id": "3ac931d4-d45f-474c-9c2c-a808a2d98563",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 65,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "REVISIÓN TÉCNICA TAXI",
+      "motivo": "REVISIÓN TÉCNICA TAXI",
+      "comentarios": "VERSA 65 RT TAXI ",
+      "revisado_at": "2026-07-01T17:35:43.939+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:35:43.748544+00:00"
+    },
+    {
+      "id": "3b5b06ce-d458-4072-b91e-aa7fe7243749",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 420,
+      "vehicle_id": 19,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 19 6/7 MOTOR ARREGLO",
+      "revisado_at": "2026-07-01T16:34:24.511+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:34:24.640404+00:00"
+    },
+    {
+      "id": "3db3aa3e-5066-42d4-b357-273d386fd051",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 3,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ELECTRICISTA",
+      "motivo": "ELECTRICISTA",
+      "comentarios": "VERSA 03 2/2 ELECTRONICO ",
+      "revisado_at": "2026-07-01T16:41:40.469+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:41:40.296411+00:00"
+    },
+    {
+      "id": "3ee4194e-6006-49b3-b495-eeb359969f48",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 64,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ATU",
+      "motivo": "ATU",
+      "comentarios": "VERSA 64 PERMISO ATU 2 AÑOS",
+      "revisado_at": "2026-07-01T17:23:01.75+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:23:01.688001+00:00"
+    },
+    {
+      "id": "3f5a4dc2-4245-43bc-87cd-64e5efd3bdfe",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 73,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERNA 73 3/5 KIT EMBRAGUE  MAS ACEITE CAJA TORNO ORQUILLA ",
+      "revisado_at": "2026-07-01T16:36:00.721+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:36:00.491485+00:00"
+    },
+    {
+      "id": "466996a9-1790-46a5-bfe1-e80cb15050ec",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 4,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 04 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:04:56.969+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:04:56.839455+00:00"
+    },
+    {
+      "id": "4a78ddb8-9b01-4cb4-80fa-d34e085d81e3",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 24,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 24 FILTRO AIRE",
+      "revisado_at": "2026-07-01T16:53:13.05+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:53:12.824726+00:00"
+    },
+    {
+      "id": "4a8ca435-b89a-4476-a2c1-d2a903dc24c2",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 10,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 10 FILTRO AIRE",
+      "revisado_at": "2026-07-01T16:53:36.804+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:53:36.8063+00:00"
+    },
+    {
+      "id": "4cc64565-89a6-4023-9dfb-3abe6738b9ac",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 68,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 68 ACEITE DELGADO MAS ORINES DE INYECTORES",
+      "revisado_at": "2026-07-01T17:01:48.315+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:01:48.107878+00:00"
+    },
+    {
+      "id": "5040c499-5a73-48a1-b4f0-41bc4ebb2782",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 70,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 70 3/3 ARRANCADOR COMPLETO, MOD ",
+      "revisado_at": "2026-07-01T16:36:28.387+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:36:28.227105+00:00"
+    },
+    {
+      "id": "510cb762-7721-40bd-a0c2-a80880d47657",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 110,
+      "vehicle_id": 27,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 27 2/2 FLOTADOR MAS MEDIDOR DE GAS MOD ",
+      "revisado_at": "2026-07-01T16:39:03.363+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:39:03.326528+00:00"
+    },
+    {
+      "id": "524b1cef-5321-40e9-bb15-8bbf4e9039aa",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 71,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 71 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:49:14.782+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:49:14.56145+00:00"
+    },
+    {
+      "id": "5493bd17-6a84-49d0-919a-17da627550b8",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 80,
+      "vehicle_id": 3,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 03 GALON DE ACEITE ",
+      "revisado_at": "2026-07-01T16:52:50.121+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:52:49.895351+00:00"
+    },
+    {
+      "id": "5546b446-3921-49f2-85cc-947d431c4661",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 60,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "GPS EQUIPOS",
+      "motivo": "GPS EQUIPOS",
+      "comentarios": "GLORY 82 INSTALACION 2 GPS",
+      "revisado_at": "2026-07-01T17:42:15.659+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:42:15.48871+00:00"
+    },
+    {
+      "id": "55b49f6f-0148-4642-9000-ec07d9934c0c",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 67,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 67  FILTRO AIRE",
+      "revisado_at": "2026-07-01T16:54:03.294+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:54:03.139438+00:00"
+    },
+    {
+      "id": "57e59691-8d81-4304-8a3e-5ff74170d2fe",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 75,
+      "vehicle_id": 40,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "REVISIÓN TÉCNICA TAXI",
+      "motivo": "REVISIÓN TÉCNICA TAXI",
+      "comentarios": "VERSA 40 RT TAXI Y PLUMILLAS",
+      "revisado_at": "2026-07-01T17:34:27.771+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:34:27.597378+00:00"
+    },
+    {
+      "id": "5be33b6c-70de-42e2-a3da-f6f3a7030c9c",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 130,
+      "vehicle_id": 64,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 64 BUJIAS DE IRIDIUM",
+      "revisado_at": "2026-07-01T16:50:39.768+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:50:39.550866+00:00"
+    },
+    {
+      "id": "5c19e856-0c05-4814-abc7-0ba74cd50556",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 200,
+      "vehicle_id": 178,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "GPS EQUIPOS",
+      "motivo": "GPS EQUIPOS",
+      "comentarios": "GLORY 83 INSTALACION 2 GPS MAS ALARMA ",
+      "revisado_at": "2026-07-01T17:42:36.54+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:42:36.370378+00:00"
+    },
+    {
+      "id": "671407a3-8712-4108-b239-107b4f410883",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 30,
+      "vehicle_id": 47,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "GNV TALLER",
+      "motivo": "GNV TALLER",
+      "comentarios": "VERSA 47 REGULAICON DE GAS ",
+      "revisado_at": "2026-07-01T17:31:40.228+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:31:40.027473+00:00"
+    },
+    {
+      "id": "68092bfe-70b5-4846-9d5a-654b334abdd5",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 46,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERSA 46 AFOCAT",
+      "revisado_at": "2026-07-01T17:20:18.27+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:20:18.112339+00:00"
+    },
+    {
+      "id": "69a5926a-ba97-47d3-a71e-cfab8cb2ae77",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 12,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 12 BUJIAS MAS ORINES ",
+      "revisado_at": "2026-07-01T16:54:28.513+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:54:28.310765+00:00"
+    },
+    {
+      "id": "70b93b2d-5385-43b8-84e2-24232a15a9a3",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 120,
+      "vehicle_id": 7,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 07 1/2 ARTICULACIÓN+TORNO",
+      "revisado_at": "2026-07-01T16:47:00.35+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:47:00.135818+00:00"
+    },
+    {
+      "id": "736927c5-fb73-4905-91b6-1b9bbdd21e34",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 200,
+      "vehicle_id": 53,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 53 2/4 KIT EMBRAGUE ",
+      "revisado_at": "2026-07-01T16:42:04.705+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:42:04.483334+00:00"
+    },
+    {
+      "id": "7448b62e-2930-4179-a131-e8837b530537",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 420,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "FUNDAS O FORROS AUTO",
+      "motivo": "FUNDAS O FORROS AUTO",
+      "comentarios": "GLORY 82 FORRO TECHO Y PISO CAMIONETA",
+      "revisado_at": "2026-07-01T17:32:07.43+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:32:07.233839+00:00"
+    },
+    {
+      "id": "76b6c122-0a23-43e8-aac1-5ab1d7f1f0e1",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 180,
+      "vehicle_id": 16,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 16 3/3  SOPORTE DE CAJA+JUEGO DE CABLES DE PALANCA+ PALANCA +SERV",
+      "revisado_at": "2026-07-01T16:37:56.232+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:37:56.031084+00:00"
+    },
+    {
+      "id": "784cd56f-4ce2-4b02-917f-4b4128e834c9",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 64,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 64 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:05:55.346+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:05:55.310179+00:00"
+    },
+    {
+      "id": "78b42663-3c87-45f8-a1e1-55decfd3c1a3",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 60,
+      "vehicle_id": 34,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ELECTRICISTA",
+      "motivo": "ELECTRICISTA",
+      "comentarios": "VERSA 34 MANT ALTERNADOR ",
+      "revisado_at": "2026-07-01T17:29:05.42+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:29:05.219863+00:00"
+    },
+    {
+      "id": "79361406-ceea-4859-b3b0-3a1d5e12c7e2",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 200,
+      "vehicle_id": 59,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 59 1/6 KIT DE EMBRAG+ACEITE+LIQ DE FRENO+SERV+ VENTILADOR COMPLETO",
+      "revisado_at": "2026-07-01T16:43:33.024+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:43:32.8988+00:00"
+    },
+    {
+      "id": "7b70c931-4f03-4a34-9405-ab4dec738c44",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 80,
+      "vehicle_id": 8,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 08 BUJIAS MAS ORINES ",
+      "revisado_at": "2026-07-01T16:59:31.69+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:59:31.555559+00:00"
+    },
+    {
+      "id": "7be83f35-33cb-464d-b2ed-7c440326969e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ATU",
+      "motivo": "ATU",
+      "comentarios": "GLORY 82 PERMISO ATU 2 AÑOS ",
+      "revisado_at": "2026-07-01T17:23:26.508+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:23:26.40121+00:00"
+    },
+    {
+      "id": "7d0b7135-0346-4bd9-8ae1-facb2b3fe9da",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 66,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 66 FILTRO AIRE ",
+      "revisado_at": "2026-07-01T16:55:37.222+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:55:37.052881+00:00"
+    },
+    {
+      "id": "7fc7a7c0-c4e7-4696-8bcc-2d7322fd972e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 150,
+      "vehicle_id": 3,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 03 4/4 ACEITE DE CAJA, MANGUERAS , EMPAQUE , ELECTRONICO MOD",
+      "revisado_at": "2026-07-01T16:35:31.629+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:35:31.735917+00:00"
+    },
+    {
+      "id": "83ca7963-147b-4186-946b-9e5406474d73",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 250,
+      "vehicle_id": 23,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 23 1/6 RECT CULATA+VALVULAS+GUIAS+BOMBA DE AGUA",
+      "revisado_at": "2026-07-01T16:46:14.224+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:46:13.9973+00:00"
+    },
+    {
+      "id": "847ab62a-bd16-4a06-8ea2-3e9fd1dbe9ec",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "COMBUSTIBLE",
+      "motivo": "COMBUSTIBLE",
+      "comentarios": "GLORY 82 GASOLINA",
+      "revisado_at": "2026-07-01T17:29:56.265+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:29:56.069293+00:00"
+    },
+    {
+      "id": "87d4aa22-a297-45db-abb3-355053402194",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 76,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERDSA 76 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:56:44.191+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:56:43.974118+00:00"
+    },
+    {
+      "id": "8a3921a9-35f6-4c21-9839-4391ea816f10",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 77,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "SOLUTO 77 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:54:52.281+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:54:52.060727+00:00"
+    },
+    {
+      "id": "8f492516-0b69-43db-93ee-2b9ff5990352",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 37,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 37 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:59:07.413+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:59:07.191407+00:00"
+    },
+    {
+      "id": "900308ed-3d9c-4256-b336-181c00ef54d5",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 48,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERSA  48 AFOCAT",
+      "revisado_at": "2026-07-01T17:17:23.76+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:17:23.637271+00:00"
+    },
+    {
+      "id": "90cdd5df-8c31-4a43-9b87-378a5103c287",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 120,
+      "vehicle_id": 13,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 13 2/2 ARRANCADOR MAS REPUESTOS MAS MOD",
+      "revisado_at": "2026-07-01T16:40:48.499+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:40:48.291459+00:00"
+    },
+    {
+      "id": "937a95d7-47fc-446d-bde8-bd5675de5957",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 120,
+      "vehicle_id": 34,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 34 1/3 BOMBA DE AGUA+FAJA+REFRIGERANTE+SERV",
+      "revisado_at": "2026-07-01T16:44:54.527+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:44:54.495756+00:00"
+    },
+    {
+      "id": "96a6fee7-1b0d-4f53-b3b2-7650e4feed4d",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 30,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 30 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:57:04.627+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:57:04.404589+00:00"
+    },
+    {
+      "id": "98298003-66a4-472c-8cd6-88ae9fbbc19b",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 72,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 72 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:58:27.961+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:58:27.786469+00:00"
+    },
+    {
+      "id": "9b07b404-9016-4103-be8a-a3c8352ff390",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 63,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 63 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:00:41.028+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:00:40.95522+00:00"
+    },
+    {
+      "id": "a4ec2e36-9ef2-46df-86b7-55fbd7c5dda9",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 160,
+      "vehicle_id": 5,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 05 2/2 BOMBA DE GASOLINA MAS FILTRO DE BOMBA ",
+      "revisado_at": "2026-07-01T16:39:56.265+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:39:56.322083+00:00"
+    },
+    {
+      "id": "a64e2c64-d7b7-460e-b543-50dad5ef2e87",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 160,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "GLORY 82 CAMBIO DE LINEA DE ESCAPE POR TEMA GNV ",
+      "revisado_at": "2026-07-01T17:10:59.052+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:10:58.850236+00:00"
+    },
+    {
+      "id": "a826a88a-ab58-4342-a05b-aa557c2c0c9f",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 140,
+      "vehicle_id": 55,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 55 1/2 BOMBA DE EMBRAGUE+LIQ DE FRENO+SERV",
+      "revisado_at": "2026-07-01T16:46:37.246+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:46:37.046399+00:00"
+    },
+    {
+      "id": "a9d6c417-2f8e-48bd-b8db-00b99cbcd322",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 22,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 22  FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:05:19.886+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:05:19.78437+00:00"
+    },
+    {
+      "id": "ad9a6231-2f19-49c0-bdee-29b4d8fbdf1a",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 40,
+      "vehicle_id": 45,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 45 CAMBIO DE REFRIGERANTE ",
+      "revisado_at": "2026-07-01T17:06:26.222+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:06:26.162238+00:00"
+    },
+    {
+      "id": "b166d1ed-bfc4-426c-9f4a-4f58e748b2cc",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 250,
+      "vehicle_id": 32,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 32 1/5 KIT DE EMBRAGUE+SOPORTE TEMPLADO+ACEITE+LIQ DE FRENO+SERV PEDAL DEL FRENO+ELEC",
+      "revisado_at": "2026-07-01T16:45:45.967+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:45:45.746173+00:00"
+    },
+    {
+      "id": "b2bbc053-6287-4eb8-bbd5-b35693081719",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 110,
+      "vehicle_id": 5,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 05 1/2    3 CONECTORES DE INYEC+SERV",
+      "revisado_at": "2026-07-01T16:44:03.326+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:44:03.123101+00:00"
+    },
+    {
+      "id": "b55835b5-6687-472d-b257-bb6a9146d16a",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "COMBUSTIBLE",
+      "motivo": "COMBUSTIBLE",
+      "comentarios": "VERNA 81 GASOLINA ",
+      "revisado_at": "2026-07-01T17:09:00.684+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:09:00.487546+00:00"
+    },
+    {
+      "id": "ba76336f-c4c4-4232-829f-917ceb41499f",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 500,
+      "vehicle_id": 8,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 08 OBTURADOR NUEVO PECHY ",
+      "revisado_at": "2026-07-01T17:31:18.271+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:31:18.100541+00:00"
+    },
+    {
+      "id": "bc128243-49d0-4a37-aa39-cd9dcf85d4f1",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 140,
+      "vehicle_id": 24,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 24 3/3 SENSOR DE OXIGENO MAS SCANEO MAS MOD ",
+      "revisado_at": "2026-07-01T16:38:24.246+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:38:24.044974+00:00"
+    },
+    {
+      "id": "bf47508f-1269-4afe-83f3-528ce0567ed8",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 7,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 07 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:58:47.492+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:58:47.277816+00:00"
+    },
+    {
+      "id": "bfa942f0-ee3f-4880-a862-61781d767480",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 21,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 21 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:56:00.271+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:56:00.051226+00:00"
+    },
+    {
+      "id": "c002dca0-83a0-4f52-8bde-fc57ff309914",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 64,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 64 SERVICIO DE TEMPLADOR ",
+      "revisado_at": "2026-07-01T17:03:18.632+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:03:18.534266+00:00"
+    },
+    {
+      "id": "c140f027-b223-4754-9808-634be8e22eff",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 38,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERSA 38 AFOCAT",
+      "revisado_at": "2026-07-01T17:22:04.485+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:22:04.295678+00:00"
+    },
+    {
+      "id": "c1c60332-8496-43d1-a6ce-5708c2a7b9a6",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 45,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "FUNDAS O FORROS AUTO",
+      "motivo": "FUNDAS O FORROS AUTO",
+      "comentarios": "GLORY 82 FORRO TIMON ",
+      "revisado_at": "2026-07-01T17:12:26.32+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:12:26.125645+00:00"
+    },
+    {
+      "id": "c274e644-ecd4-4f61-89f6-bfb273c599c1",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 43,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 43 FILTRO DE AIRE MAS SEGURO MAS BOCINAS DE ARTICULACION ",
+      "revisado_at": "2026-07-01T17:00:20.906+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:00:20.727828+00:00"
+    },
+    {
+      "id": "c313d8af-4223-49e0-9af4-ab40b4778471",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 250,
+      "vehicle_id": 12,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 12 1/5 KIT DE EMBRAGUE+CAJA+6 RODAJES+3 RETENES+ACEITE DE CAJA+SILICONA",
+      "revisado_at": "2026-07-01T16:45:22.213+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:45:22.070226+00:00"
+    },
+    {
+      "id": "c3f55226-2801-4c9f-ab8e-4adcd42c0aac",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 190,
+      "vehicle_id": 42,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ELECTRICISTA",
+      "motivo": "ELECTRICISTA",
+      "comentarios": "VERSA 42 PANTALLA DE SONIDO EQUIPO ",
+      "revisado_at": "2026-07-01T17:34:58.114+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:34:58.009004+00:00"
+    },
+    {
+      "id": "c50e587f-779d-45c4-9ca9-7c1c7043a81d",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 50,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "REVISIÓN TÉCNICA TAXI",
+      "motivo": "REVISIÓN TÉCNICA TAXI",
+      "comentarios": "GLORY 82 RT TAXI",
+      "revisado_at": "2026-07-01T17:11:26.261+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:11:26.134375+00:00"
+    },
+    {
+      "id": "ca24950c-04ac-4338-954d-eb7ba4aa14c6",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 55,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 55 FILTRO DE AIRE",
+      "revisado_at": "2026-07-01T16:58:05.128+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:58:04.910494+00:00"
+    },
+    {
+      "id": "ceee90ec-192e-4af9-ac68-134ca2489f22",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 70,
+      "vehicle_id": 49,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "AFOCAT",
+      "motivo": "AFOCAT",
+      "comentarios": "VERSA 49 AFOCAT",
+      "revisado_at": "2026-07-01T17:19:47.167+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:19:47.242293+00:00"
+    },
+    {
+      "id": "d11826ce-c514-4107-8cf0-8797277a7e39",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 130,
+      "vehicle_id": 5,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 05 2/4 INYECTORES MAS ORINES MAS SENSOR O2",
+      "revisado_at": "2026-07-01T16:39:27.639+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:39:27.532215+00:00"
+    },
+    {
+      "id": "d27af72a-b1ea-4a99-a877-7e1bf0c44319",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 60,
+      "vehicle_id": 18,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ELECTRICISTA",
+      "motivo": "ELECTRICISTA",
+      "comentarios": "VERSA 18 CLAXON Y PESTILLO",
+      "revisado_at": "2026-07-01T17:40:13.757+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:40:13.569964+00:00"
+    },
+    {
+      "id": "d399741f-6fce-4212-b878-f0ed14c69082",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 120,
+      "vehicle_id": 11,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 11 3/3 RIEL DE CONECTORES MAS 1 INYECTOR ",
+      "revisado_at": "2026-07-01T16:36:56.039+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:36:55.848347+00:00"
+    },
+    {
+      "id": "d8a583bc-22d0-431d-8ae1-3b534ee2ccef",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 35,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 35 FILTRO DE AIRE",
+      "revisado_at": "2026-07-01T17:06:45.215+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:06:45.000374+00:00"
+    },
+    {
+      "id": "daa729cb-145f-4c44-b8a1-65e3fd5a4613",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 70,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 70 1/2 RODAJE+SERV + ESCANEO",
+      "revisado_at": "2026-07-01T16:47:46.964+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:47:46.77534+00:00"
+    },
+    {
+      "id": "e103ca48-d387-4fd1-aa77-698f5a08180e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 75,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 75  ORINES DE INY",
+      "revisado_at": "2026-07-01T17:03:43.585+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:03:43.372776+00:00"
+    },
+    {
+      "id": "e1046b7b-ec5d-4cbf-82ed-b023d358ad29",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 46,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 46 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:02:56.2+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:02:56.293405+00:00"
+    },
+    {
+      "id": "e19845c3-fca6-4783-9e5f-2480cc33e79e",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 73,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 73 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T17:01:02.527+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:01:02.311343+00:00"
+    },
+    {
+      "id": "e3cf4556-9009-4e84-91f5-b71bdca300d1",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 82,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "ACCESORIOS",
+      "motivo": "ACCESORIOS",
+      "comentarios": "GLORY 82 POLARIZADO ",
+      "revisado_at": "2026-07-01T17:11:57.909+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:11:57.954854+00:00"
+    },
+    {
+      "id": "e6832b14-127a-461d-946f-d61f5d354f83",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 130,
+      "vehicle_id": 73,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERNA 73 2/2 BUJIAS Y PASTILLAS",
+      "revisado_at": "2026-07-01T16:40:26.389+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:40:26.22352+00:00"
+    },
+    {
+      "id": "e8376ebd-4099-428b-8ca8-0c00b362a8c4",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 100,
+      "vehicle_id": 12,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "RIO 12 1/2 ALTERNADOR+ CARBONES",
+      "revisado_at": "2026-07-01T16:48:09.325+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:48:09.099208+00:00"
+    },
+    {
+      "id": "ee28f493-5e4d-4636-9c9c-8e08266fc559",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 20,
+      "vehicle_id": 29,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 29 FILTRO DE AIRE ",
+      "revisado_at": "2026-07-01T16:49:37.382+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:49:37.214101+00:00"
+    },
+    {
+      "id": "f082231f-868e-40e5-b7fc-0d349cdf2349",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 55,
+      "vehicle_id": 81,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "FUNDAS O FORROS AUTO",
+      "motivo": "FUNDAS O FORROS AUTO",
+      "comentarios": "VERNA 81 FORRO TIMON MAS REMACHES ",
+      "revisado_at": "2026-07-01T17:09:47.527+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:09:47.335577+00:00"
+    },
+    {
+      "id": "f83edc73-d6ec-467e-9b83-707b48908278",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 35,
+      "vehicle_id": 48,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "VERSA 48 REFRIGERANTE ",
+      "revisado_at": "2026-07-01T17:30:49.282+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T17:30:49.073482+00:00"
+    },
+    {
+      "id": "fae3f5ea-4ab9-4d20-a3d2-883f164ad944",
+      "fecha": "2026-05-06",
+      "tipo_gasto": "operativo_vehiculo",
+      "monto": 200,
+      "vehicle_id": 8,
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "subtipo_gasto": "MOTOR TALLER",
+      "motivo": "MOTOR TALLER",
+      "comentarios": "YARIS 08 3/5 KIT DE EMBRAGUE+ SOPORTE+ TORNO+ SERV + RETEN DEL CIGUEÑAL+ SOPORTE DE MOTOR+ MANT DE TUBO DE ESCAPE POR SONIDO",
+      "revisado_at": "2026-07-01T16:37:30.008+00:00",
+      "revisado_por": null,
+      "es_global_flota": false,
+      "requiere_revision": false,
+      "origen_clasificacion": "registro_ui",
+      "excel_extra": {
+        "_lm_created_by": "fbbbd594-80bd-434e-9b6e-09757dff95d1"
+      },
+      "created_at": "2026-07-01T16:37:30.048825+00:00"
+    }
+  ]
+}

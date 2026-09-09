@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-09-09T03:04:01.181Z",
+  "description": "Pre-mutation backup: vehiculo_referencia label fix for vehiculo_numero 178 and 179",
+  "rows": [
+    {
+      "id": "0528e6fa-2a4f-4a59-a067-7a0ae9015c8f",
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "vehiculo_referencia": "#178 DFSK GLORY 560",
+      "vehiculo_numero": 178,
+      "placa": "CAU-677",
+      "modelo": "DFSK GLORY 560",
+      "monto_total": 12206,
+      "moneda": "USD",
+      "fuente": "REGISTRO_UI",
+      "observaciones": null,
+      "created_at": "2026-06-22T16:02:15.057061+00:00",
+      "fecha_compra": null,
+      "valor_compra_usd": 12206,
+      "gasto_gnv_usd": null,
+      "gasto_notarial_usd": null,
+      "leg_firmas_usd": null,
+      "seguro_usd": null,
+      "gps_usd": null,
+      "fundas_accesorios_usd": null,
+      "total_equivalente_pen": null
+    },
+    {
+      "id": "b0e3123f-2cbd-4b4a-a54b-fa481abca3ba",
+      "empresa_id": "07593982-08e6-450c-8abe-4bf590609dd7",
+      "vehiculo_referencia": "#179 DFSK GLORY  580 (CCQ586)",
+      "vehiculo_numero": 179,
+      "placa": "CCQ586",
+      "modelo": "DFSK GLORY  580",
+      "monto_total": 12790,
+      "moneda": "USD",
+      "fuente": "REGISTRO_UI",
+      "observaciones": null,
+      "created_at": "2026-06-25T20:22:55.928379+00:00",
+      "fecha_compra": null,
+      "valor_compra_usd": 12790,
+      "gasto_gnv_usd": null,
+      "gasto_notarial_usd": null,
+      "leg_firmas_usd": null,
+      "seguro_usd": null,
+      "gps_usd": null,
+      "fundas_accesorios_usd": null,
+      "total_equivalente_pen": null
+    }
+  ]
+}
