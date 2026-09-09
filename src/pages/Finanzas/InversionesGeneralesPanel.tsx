@@ -10,8 +10,10 @@ import {
 import type { InversionGeneralVehiculo, Moneda } from '../../data/types';
 import { EMPRESA_ID } from '../../config/app';
 import { useAuth } from '../../context/AuthContext';
+import { useRegistrosContext } from '../../context/RegistrosContext';
 import { canMutateInversiones, canUseInversiones, permissionUserFromAuth } from '../../utils/permissions';
 import { sumInversionGeneralesByMoneda } from '../../utils/vehicleInversionDisplay';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 import InversionGeneralVehiculoModal from '../../components/Finanzas/InversionGeneralVehiculoModal';
 
 function montoFmt(
@@ -44,11 +46,17 @@ function cmpStrEmptyLast(a: string, b: string, mul: 1 | -1): number {
 }
 
 /** Orden numérico de monto entre monedas distintas es solo orientativo. */
-function compareInversionesRow(a: InversionGeneralVehiculo, b: InversionGeneralVehiculo, key: SortKey, mul: 1 | -1): number {
+function compareInversionesRow(
+  a: InversionGeneralVehiculo,
+  b: InversionGeneralVehiculo,
+  key: SortKey,
+  mul: 1 | -1,
+  resolveNum?: (row: InversionGeneralVehiculo) => number,
+): number {
   switch (key) {
     case 'numero': {
-      const na = a.vehiculoNumero ?? 10_000;
-      const nb = b.vehiculoNumero ?? 10_000;
+      const na = resolveNum ? resolveNum(a) : (a.vehiculoNumero ?? 10_000);
+      const nb = resolveNum ? resolveNum(b) : (b.vehiculoNumero ?? 10_000);
       if (na !== nb) return mul * (na - nb);
       return mul * a.vehiculoReferencia.localeCompare(b.vehiculoReferencia, 'es', { sensitivity: 'base' });
     }
@@ -93,7 +101,7 @@ const tdText = `${tdBase} text-left`;
 const tdUsd = `${tdBase} text-right max-w-[4.75rem]`;
 
 const InversionesGeneralesPanel: React.FC = () => {
-  const { formatGlobalAmount, formatRecordAmount } = useAmountDisplay();
+  const { formatGlobalAmount } = useAmountDisplay();
   const [searchParams] = useSearchParams();
   const filterPlaca = (searchParams.get('placa') ?? '').trim().toUpperCase();
   const filterVehicleId = (searchParams.get('vehicleId') ?? '').trim();
@@ -102,6 +110,24 @@ const InversionesGeneralesPanel: React.FC = () => {
   const canLoadInversiones = useMemo(() => canUseInversiones(permUser), [permUser]);
   const canMutate = useMemo(() => canMutateInversiones(permUser), [permUser]);
   const tenantEmpresaId = profile?.empresa_id;
+
+  const { vehicles } = useRegistrosContext();
+  const vehicleById = useMemo(
+    () => new Map(vehicles.map((v) => [v.id, v])),
+    [vehicles],
+  );
+  const resolveDisplayNumber = useCallback(
+    (row: InversionGeneralVehiculo): number | null => {
+      if (row.vehiculoNumero == null) return null;
+      const v = vehicleById.get(row.vehiculoNumero);
+      return v ? getVehicleDisplayNumber(v) : row.vehiculoNumero;
+    },
+    [vehicleById],
+  );
+  const resolveForSort = useCallback(
+    (row: InversionGeneralVehiculo): number => resolveDisplayNumber(row) ?? 10_000,
+    [resolveDisplayNumber],
+  );
 
   const [rows, setRows] = useState<InversionGeneralVehiculo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,9 +195,9 @@ const InversionesGeneralesPanel: React.FC = () => {
     if (!sort.key) return base;
     const arr = [...base];
     const mul: 1 | -1 = sort.dir === 'asc' ? 1 : -1;
-    arr.sort((a, b) => compareInversionesRow(a, b, sort.key!, mul));
+    arr.sort((a, b) => compareInversionesRow(a, b, sort.key!, mul, resolveForSort));
     return arr;
-  }, [rows, sort, filterPlaca, filterVehicleId]);
+  }, [rows, sort, filterPlaca, filterVehicleId, resolveForSort]);
 
   const totalesPorMoneda = useMemo(() => sumInversionGeneralesByMoneda(displayRows), [displayRows]);
   const totalesGlobales = useMemo(() => sumInversionGeneralesByMoneda(rows), [rows]);
@@ -390,7 +416,7 @@ const InversionesGeneralesPanel: React.FC = () => {
                     data-copilot-vehicle={r.placa?.toUpperCase() ?? undefined}
                     data-copilot-vehicle-id={r.vehiculoNumero != null ? String(r.vehiculoNumero) : undefined}
                   >
-                    <td className={`${tdText} tabular-nums text-slate-600`}>{r.vehiculoNumero ?? '—'}</td>
+                    <td className={`${tdText} tabular-nums text-slate-600`}>{resolveDisplayNumber(r) ?? '—'}</td>
                     <td className={`${tdText} font-medium text-slate-900`}>{r.vehiculoReferencia}</td>
                     <td className={`${tdText} text-slate-600 whitespace-nowrap`}>{r.placa ?? '—'}</td>
                     <td className={`${tdText} tabular-nums text-slate-600 whitespace-nowrap`}>

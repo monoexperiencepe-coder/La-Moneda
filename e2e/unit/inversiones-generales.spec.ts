@@ -160,7 +160,7 @@ test('Totales se actualizan correctamente tras eliminación de fila', () => {
     { id: 'a', montoTotal: 10000, moneda: 'USD' },
     { id: 'b', montoTotal: 5000, moneda: 'USD' },
   ];
-  const despues = rows.filter((r) => r.id !== 'b').map(({ id: _id, ...rest }) => rest);
+  const despues = rows.filter((r) => r.id !== 'b').map((r) => ({ montoTotal: r.montoTotal, moneda: r.moneda }));
   expect(sumByMoneda(despues).usdSum).toBe(10000);
 });
 
@@ -317,4 +317,121 @@ test('REGRESIÓN: registro con solo valor_compra (sin otros conceptos) → monto
   };
   const result = simulateUpsertDesdeVehiculo(12000, existingDesglose);
   expect(result.montoTotal).toBe(12000);
+});
+
+// ---------------------------------------------------------------------------
+// DISPLAY NUMBER FIX — InversionesGeneralesPanel resolución vía RegistrosContext
+// ---------------------------------------------------------------------------
+//
+// El panel resuelve el número visible así:
+//   vehicleById = new Map(vehicles.map(v => [v.id, v]))
+//   resolveDisplayNumber(row):
+//     if row.vehiculoNumero == null → null
+//     v = vehicleById.get(row.vehiculoNumero)
+//     return v ? getVehicleDisplayNumber(v) : row.vehiculoNumero
+//
+// getVehicleDisplayNumber(v): v.numeroUnidad ?? v.id  (sin import.meta.env en este test)
+// ---------------------------------------------------------------------------
+
+type VehicleStub = { id: number; numeroUnidad: number | null };
+type InvRowStub = { vehiculoNumero: number | null };
+
+function stubDisplayNumber(v: VehicleStub): number {
+  const n = v.numeroUnidad;
+  if (n != null && Number.isFinite(n) && n > 0) return Math.round(n);
+  return v.id;
+}
+
+function makeResolver(vehicles: VehicleStub[]) {
+  const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+  return (row: InvRowStub): number | null => {
+    if (row.vehiculoNumero == null) return null;
+    const v = vehicleById.get(row.vehiculoNumero);
+    return v ? stubDisplayNumber(v) : row.vehiculoNumero;
+  };
+}
+
+// Vehicles as precheck confirmed: id→numero_unidad  178→83, 179→84, 181→85
+const fleetVehicles: VehicleStub[] = [
+  { id: 1, numeroUnidad: 1 },
+  { id: 2, numeroUnidad: 2 },
+  { id: 82, numeroUnidad: 82 },
+  { id: 178, numeroUnidad: 83 },
+  { id: 179, numeroUnidad: 84 },
+  { id: 181, numeroUnidad: 85 },
+];
+
+const resolve = makeResolver(fleetVehicles);
+
+test('DISPLAY: vehiculoNumero=178 con numeroUnidad=83 muestra 83', () => {
+  expect(resolve({ vehiculoNumero: 178 })).toBe(83);
+});
+
+test('DISPLAY: vehiculoNumero=179 con numeroUnidad=84 muestra 84', () => {
+  expect(resolve({ vehiculoNumero: 179 })).toBe(84);
+});
+
+test('DISPLAY: vehiculoNumero=181 con numeroUnidad=85 muestra 85', () => {
+  expect(resolve({ vehiculoNumero: 181 })).toBe(85);
+});
+
+test('DISPLAY: legacy 1-82 sin brecha — vehiculoNumero=1 muestra 1', () => {
+  expect(resolve({ vehiculoNumero: 1 })).toBe(1);
+});
+
+test('DISPLAY: legacy 1-82 sin brecha — vehiculoNumero=82 muestra 82', () => {
+  expect(resolve({ vehiculoNumero: 82 })).toBe(82);
+});
+
+test('DISPLAY: fallback a vehiculoNumero crudo cuando el vehículo no existe en el mapa', () => {
+  // vehiculo_numero no tiene vehículo correspondiente → se muestra el número tal cual
+  expect(resolve({ vehiculoNumero: 999 })).toBe(999);
+});
+
+test('DISPLAY: vehiculoNumero=null retorna null (celda muestra —)', () => {
+  expect(resolve({ vehiculoNumero: null })).toBeNull();
+});
+
+test('DISPLAY: vehículo sin numeroUnidad cae al id técnico como fallback', () => {
+  const withNullUnidad = makeResolver([{ id: 500, numeroUnidad: null }]);
+  expect(withNullUnidad({ vehiculoNumero: 500 })).toBe(500);
+});
+
+test('NO MUTATION: vehiculoNumero no es modificado por el resolver', () => {
+  const row = { vehiculoNumero: 178 };
+  resolve(row);
+  expect(row.vehiculoNumero).toBe(178); // DB value unchanged
+});
+
+test('SORTING: resolveForSort ordena por número de flota real, no por id técnico', () => {
+  const resolveForSort = (row: InvRowStub): number => resolve(row) ?? 10_000;
+
+  const rows: InvRowStub[] = [
+    { vehiculoNumero: 181 },  // fleet 85
+    { vehiculoNumero: 1 },    // fleet 1
+    { vehiculoNumero: 178 },  // fleet 83
+    { vehiculoNumero: 2 },    // fleet 2
+  ];
+
+  const sorted = [...rows].sort((a, b) => resolveForSort(a) - resolveForSort(b));
+  const displayOrder = sorted.map((r) => resolve(r));
+  expect(displayOrder).toEqual([1, 2, 83, 85]);
+});
+
+test('SORTING: sin resolver (raw vehiculoNumero) el orden sería incorrecto para vehículos con brecha', () => {
+  const rows = [
+    { vehiculoNumero: 181 },  // raw 181 — mucho más grande que 1, 2
+    { vehiculoNumero: 1 },
+    { vehiculoNumero: 178 },  // raw 178
+    { vehiculoNumero: 2 },
+  ];
+  const rawSorted = [...rows].sort((a, b) => (a.vehiculoNumero ?? 0) - (b.vehiculoNumero ?? 0));
+  // Con raw, 181 y 178 van al final aunque son unidades 83 y 85
+  const rawOrder = rawSorted.map((r) => r.vehiculoNumero);
+  expect(rawOrder).toEqual([1, 2, 178, 181]); // incorrecto — queremos [1, 2, 83→178→, 85→181→]
+  // Confirma que el fix es necesario
+  const resolveForSort = (row: InvRowStub): number => resolve(row) ?? 10_000;
+  const fixedSorted = [...rows].sort((a, b) => resolveForSort(a) - resolveForSort(b));
+  const fixedOrder = fixedSorted.map((r) => resolve(r));
+  expect(fixedOrder).toEqual([1, 2, 83, 85]);
 });
