@@ -30,3 +30,7 @@ e2e/.qa-artifacts/
 playwright-report/
 test-results/
 playwright/.cache/
+
+backup_audit/
+scripts/__audit_*.mjs
+scripts/__phase*.mjs
