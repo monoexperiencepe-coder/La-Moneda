@@ -3,10 +3,11 @@ import Card from '../Common/Card';
 import Input from '../Common/Input';
 import Select from '../Common/Select';
 import { formatDate, registroFechaInputBounds, todayStr } from '../../utils/formatting';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
 import {
   formatVehicleIdPlaca,
   formatVehiclePlacaMarcaLabel,
+  vehicleFleetSortKey,
 } from '../../utils/vehicleDisplayNumber';
 import type { KilometrajeRegistro, Vehicle } from '../../data/types';
 import {
@@ -73,7 +74,10 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
   restrictVehicleId,
 }) => {
   const active = useMemo(
-    () => [...vehicles.filter((v) => v.activo)].sort((a, b) => a.id - b.id),
+    () =>
+      [...vehicles.filter((v) => v.activo)].sort(
+        (a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b),
+      ),
     [vehicles],
   );
   const [km, setKm] = useState({
@@ -114,8 +118,8 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
   }, [km.vehicleId, kilometrajes]);
 
   const controlKm = useMemo(
-    () => buildKmControlRows(kilometrajes, restrictVehicleId ?? null),
-    [kilometrajes, restrictVehicleId],
+    () => buildKmControlRows(kilometrajes, restrictVehicleId ?? null, vehicles),
+    [kilometrajes, restrictVehicleId, vehicles],
   );
 
   const kmResumenUnidad = useMemo(() => {
@@ -132,7 +136,9 @@ const KilometrajeMantenimientoPanel: React.FC<Props> = ({
           : kilometrajes;
     return [...base]
       .sort((a, b) => {
-        const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+        const vr =
+          vehicleFleetSortRankFromId(vehicles, a.vehicleId) -
+          vehicleFleetSortRankFromId(vehicles, b.vehicleId);
         if (vr !== 0) return vr;
         const fd = b.fecha.localeCompare(a.fecha);
         if (fd !== 0) return fd;

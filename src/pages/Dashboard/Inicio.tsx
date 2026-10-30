@@ -20,6 +20,7 @@ import PendientesEquipoDashboard from '../../components/pendientes/PendientesEqu
 import PendientesEquipoHoyBlock from '../../components/pendientes/PendientesEquipoHoyBlock';
 import { countPendientesEquipoActivos } from '../../utils/pendienteModel';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
+import { formatVehicleUnitHash } from '../../utils/vehicleDisplayNumber';
 
 /* ─── Módulos (buscador + accesos) ──────────────────────────────────────── */
 const MODULE_ITEMS = [
@@ -236,7 +237,12 @@ const Inicio: React.FC = () => {
   const pendientesAltaLines = useMemo(
     () => queRevisar.muestraPendientesAlta.slice(0, 3).map((p) => {
       const v = p.vehicleId != null ? vehicles.find((x) => x.id === p.vehicleId) : null;
-      const unit = v ? v.placa : p.vehicleId != null ? `#${p.vehicleId}` : 'General';
+      const unit =
+        v != null
+          ? `${formatVehicleUnitHash(v)} · ${v.placa}`
+          : p.vehicleId != null
+            ? `#${p.vehicleId}`
+            : 'General';
       const short = p.descripcion.length > 72 ? `${p.descripcion.slice(0, 72)}…` : p.descripcion;
       return `${unit} · ${short}`;
     }),

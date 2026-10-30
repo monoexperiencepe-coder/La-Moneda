@@ -159,7 +159,7 @@ export function getVehiculosDisponibles(
 ): VehiculoFlotaCompacto[] {
   return vehicles
     .filter((v) => isVehiculoDisponible(v, conductores))
-    .sort((a, b) => a.id - b.id)
+    .sort((a, b) => getVehicleDisplayNumber(a) - getVehicleDisplayNumber(b))
     .map((v) => compactVehiculoFlota(v, conductores));
 }
 
@@ -169,7 +169,7 @@ export function getVehiculosSinConductor(
 ): VehiculoFlotaCompacto[] {
   return vehicles
     .filter((v) => isVehiculoActivo(v) && !vehiculoTieneConductorVigente(conductores, v.id))
-    .sort((a, b) => a.id - b.id)
+    .sort((a, b) => getVehicleDisplayNumber(a) - getVehicleDisplayNumber(b))
     .map((v) => compactVehiculoFlota(v, conductores));
 }
 

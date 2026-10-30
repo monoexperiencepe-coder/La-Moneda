@@ -13,6 +13,7 @@ import {
   buildDowntimeFilasDashboard,
 } from '../../utils/vehicleDowntimeImpact';
 import { canMutateVehiculos } from '../../utils/permissions';
+import { getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
 
 const DisponibilidadOperativa: React.FC = () => {
   const navigate = useNavigate();
@@ -189,7 +190,12 @@ const DisponibilidadOperativa: React.FC = () => {
                         to={`/vehiculos/${f.vehicleId}`}
                         className="font-medium text-violet-800 hover:underline"
                       >
-                        #{f.vehicleId}
+                        #{getVehicleDisplayNumber(
+                          vehicles.find((v) => v.id === f.vehicleId) ?? {
+                            id: f.vehicleId,
+                            numeroUnidad: null,
+                          },
+                        )}
                       </Link>
                     </td>
                     <td className="py-2 pr-3">{f.placa}</td>

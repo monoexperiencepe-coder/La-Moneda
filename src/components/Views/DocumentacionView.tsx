@@ -4,7 +4,7 @@ import Card from '../Common/Card';
 import Badge from '../Common/Badge';
 import { Documentacion, Vehicle } from '../../data/types';
 import { formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
 import { formatDate, isExpiringSoon, isExpired } from '../../utils/formatting';
 import { FileText, Car, AlertTriangle } from 'lucide-react';
 
@@ -69,7 +69,9 @@ const DocumentacionView: React.FC<DocumentacionViewProps> = ({ vehicles, documen
           <div className="space-y-4 mt-2">
             {[...documentaciones]
               .sort((a, b) => {
-                const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+                const vr =
+                  vehicleFleetSortRankFromId(vehicles, a.vehicleId) -
+                  vehicleFleetSortRankFromId(vehicles, b.vehicleId);
                 if (vr !== 0) return vr;
                 return b.fecha.localeCompare(a.fecha);
               })
@@ -84,7 +86,9 @@ const DocumentacionView: React.FC<DocumentacionViewProps> = ({ vehicles, documen
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})` : formatVehicleIdFallback(d.vehicleId)}
+                          {vehicle
+                            ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`
+                            : formatVehicleIdFallback(d.vehicleId, vehicles)}
                         </p>
                         <p className="text-xs text-gray-400">{d.motivo} · {formatDate(d.fecha)}</p>
                       </div>

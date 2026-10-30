@@ -71,6 +71,11 @@ function assertValidNumeroUnidad(n: number): number {
   return n;
 }
 
+/**
+ * Siguiente numero_unidad = max(actual)+1 en tenant (cliente).
+ * Riesgo conocido: dos altas simultáneas pueden colisionar en UNIQUE (empresa_id, numero_unidad);
+ * el insert falla con 23505 — requiere reintento o RPC atómica en BD (no autorizado en LM-01).
+ */
 async function fetchNextNumeroUnidad(empresaId: string): Promise<number> {
   const { data, error } = await supabase
     .from('vehiculos')

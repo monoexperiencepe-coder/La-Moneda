@@ -27,6 +27,7 @@ import type { InsertVehiculoInput } from '../services/vehiculosService';
 import type { FleetAssignmentResult } from '../services/fleetAssignmentService';
 import { useAuth } from './AuthContext';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
+import { getVehicleDisplayNumber } from '../utils/vehicleDisplayNumber';
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
 import { resolveEmpresaRealtimeId } from '../utils/resolveEmpresaRealtimeId';
 import { logRealtimeBoot, logRealtimeModuleLoaded } from '../utils/realtimeBootLog';
@@ -227,6 +228,14 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const permissionUser = useMemo(
     () => permissionUserFromAuth(user, profile?.email ?? null),
     [user, profile?.email],
+  );
+
+  const vehicleUnitToastDetail = useCallback(
+    (vehicleId: number) => {
+      const v = registros.vehicles.find((x) => x.id === vehicleId);
+      return `Unidad #${v ? getVehicleDisplayNumber(v) : vehicleId}`;
+    },
+    [registros.vehicles],
   );
 
   const visibleGastos = useMemo(
@@ -722,7 +731,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (result) {
         showUndoToast({
           message: 'Kilometraje registrado',
-          detail: `Auto #${data.vehicleId}`,
+          detail: vehicleUnitToastDetail(data.vehicleId),
           undoAction: undoCreateKilometraje(result, (id) => registros.deleteKilometraje(id)),
         });
       }
@@ -761,7 +770,7 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (snapshot) {
         showUndoToast({
           message: 'Kilometraje eliminado',
-          detail: `Auto #${snapshot.vehicleId}`,
+          detail: vehicleUnitToastDetail(snapshot.vehicleId),
           undoAction: undoDeleteKilometraje(snapshot, registros.mergeKilometraje),
         });
       }

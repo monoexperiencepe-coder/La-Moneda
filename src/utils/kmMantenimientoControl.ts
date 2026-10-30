@@ -1,6 +1,6 @@
-import type { KilometrajeRegistro } from '../data/types';
+import type { KilometrajeRegistro, Vehicle } from '../data/types';
 import { diffCalendarDays, formatDate, todayStr } from './formatting';
-import { vehicleIdSortRank } from './sortByVehicle';
+import { vehicleFleetSortRankFromId } from './sortByVehicle';
 
 /** Km recorridos desde el último mantenimiento; alerta en UI y en “Qué hacer hoy”. */
 export const KM_ALERTA_VARIACION_DESDE_MANT = 5000;
@@ -256,6 +256,7 @@ function toKmControlRow(result: KmDesdeUltimoMantenimientoResult): KmControlRow 
 export function buildKmControlRows(
   kilometrajes: KilometrajeRegistro[],
   restrictVehicleId?: number | null,
+  vehicles?: readonly Pick<Vehicle, 'id' | 'numeroUnidad'>[],
 ): KmControlRow[] {
   const byVehicle = new Map<number, KilometrajeRegistro[]>();
   for (const r of kilometrajes) {
@@ -267,7 +268,9 @@ export function buildKmControlRows(
   const entries = Array.from(byVehicle.entries()).filter(([vid]) =>
     restrictVehicleId == null ? true : vid === restrictVehicleId,
   );
-  entries.sort(([a], [b]) => vehicleIdSortRank(a) - vehicleIdSortRank(b));
+  entries.sort(
+    ([a], [b]) => vehicleFleetSortRankFromId(vehicles, a) - vehicleFleetSortRankFromId(vehicles, b),
+  );
 
   return entries.map(([vehicleId, rows]) => toKmControlRow(computeKmDesdeUltimoMantenimiento(vehicleId, rows)));
 }

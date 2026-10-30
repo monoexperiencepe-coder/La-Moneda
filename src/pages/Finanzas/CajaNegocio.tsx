@@ -10,7 +10,8 @@ import { formatDateLong, todayStr, toDateOnlyString } from '../../utils/formatti
 import type { CajaNegocioVehiculo } from '../../data/types';
 import MonthlyBarChartCard from '../../components/Charts/MonthlyBarChartCard';
 import { MESES } from '../../data/catalogs';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
+import { formatVehicleSelectLabel, vehicleFleetSortKey } from '../../utils/vehicleDisplayNumber';
 import { cleanOperationalCommentForUi } from '../../utils/cleanOperationalComment';
 
 function inRange(fecha: string, desde: string, hasta: string): boolean {
@@ -124,10 +125,12 @@ const CajaNegocio: React.FC = () => {
   const vehicleOptions = useMemo(
     () => [
       { value: '', label: 'Toda la flota' },
-      ...[...vehicles].sort((a, b) => a.id - b.id).map((v) => ({
-        value: String(v.id),
-        label: `${v.placa} · ${v.marca} ${v.modelo}`,
-      })),
+      ...[...vehicles]
+        .sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b))
+        .map((v) => ({
+          value: String(v.id),
+          label: `${formatVehicleSelectLabel(v)}`,
+        })),
     ],
     [vehicles],
   );
@@ -147,13 +150,15 @@ const CajaNegocio: React.FC = () => {
       return true;
     });
     return [...rows].sort((a, b) => {
-      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+      const vr =
+        vehicleFleetSortRankFromId(vehicles, a.vehicleId) -
+        vehicleFleetSortRankFromId(vehicles, b.vehicleId);
       if (vr !== 0) return vr;
       const fd = b.fecha.localeCompare(a.fecha);
       if (fd !== 0) return fd;
       return b.id - a.id;
     });
-  }, [cajaNegocioVehiculo, desde, hasta, filterVehicleId, filterYear]);
+  }, [cajaNegocioVehiculo, desde, hasta, filterVehicleId, filterYear, vehicles]);
 
   const totalFiltrado = useMemo(() => filtrados.reduce((s, x) => s + x.monto, 0), [filtrados]);
   const totalGlobal = useMemo(() => cajaNegocioVehiculo.reduce((s, x) => s + x.monto, 0), [cajaNegocioVehiculo]);

@@ -5,8 +5,11 @@ import Select from '../Common/Select';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { formatDate, todayStr } from '../../utils/formatting';
 import type { RegistroTiempo as RT } from '../../data/types';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
-import { formatVehicleLabelFull, formatVehicleUnitHash } from '../../utils/vehicleDisplayNumber';
+import {
+  formatVehicleLabelFull,
+  formatVehicleUnitHash,
+  vehicleFleetSortKey,
+} from '../../utils/vehicleDisplayNumber';
 import { Trash2, Pencil, Loader2 } from 'lucide-react';
 
 function isoToDatetimeLocal(iso: string): string {
@@ -147,7 +150,7 @@ const ValorTiempoSection: React.FC<{ subtitle?: string; scopeVehicleId?: number 
   };
 
   const vehiclesById = useMemo(
-    () => [...activeVehicles].sort((a, b) => a.id - b.id),
+    () => [...activeVehicles].sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b)),
     [activeVehicles],
   );
 

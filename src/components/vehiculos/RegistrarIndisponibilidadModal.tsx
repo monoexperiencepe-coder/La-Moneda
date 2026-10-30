@@ -5,7 +5,11 @@ import Select from '../Common/Select';
 import Input from '../Common/Input';
 import type { Vehicle, VehicleDowntimeMotivo } from '../../data/types';
 import { todayStr } from '../../utils/formatting';
-import { formatVehicleMarcaPlacaLabel, getVehicleDisplayNumber } from '../../utils/vehicleDisplayNumber';
+import {
+  formatVehicleMarcaPlacaLabel,
+  getVehicleDisplayNumber,
+  vehicleFleetSortKey,
+} from '../../utils/vehicleDisplayNumber';
 import { VEHICLE_DOWNTIME_MOTIVO_LABELS } from '../../utils/vehicleDowntimeImpact';
 import {
   cerrarVehicleDowntime,
@@ -58,7 +62,7 @@ const RegistrarIndisponibilidadModal: React.FC<Props> = ({
     () =>
       [...vehicles]
         .filter((v) => v.activo !== false)
-        .sort((a, b) => a.id - b.id)
+        .sort((a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b))
         .map((v) => ({
           value: String(v.id),
           label: formatVehicleMarcaPlacaLabel(v),

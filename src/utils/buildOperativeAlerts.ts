@@ -122,7 +122,9 @@ export function buildOperativeAlerts(
 
   /* 3) Kilometraje: muchos km desde el último mantenimiento registrado */
   const activeIds = new Set(activeVehicles.map((v) => v.id));
-  const kmRows = buildKmControlRows(kilometrajes).filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
+  const kmRows = buildKmControlRows(kilometrajes, null, vehicles).filter(
+    (r) => r.alertaVariacion && activeIds.has(r.vehicleId),
+  );
   kmRows.sort((a, b) => (b.variacion ?? 0) - (a.variacion ?? 0));
   for (const r of kmRows.slice(0, MAX_ALERTAS_KM_MANT)) {
     const v = byId.get(r.vehicleId);

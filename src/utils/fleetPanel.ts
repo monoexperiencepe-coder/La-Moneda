@@ -89,7 +89,10 @@ export function buildFleetPanelRows(
 ): FleetPanelRow[] {
   const active = vehicles.filter((v) => v.activo);
   const kmByVehicle = new Map(
-    (kilometrajes?.length ? buildKmControlRows(kilometrajes) : []).map((r) => [r.vehicleId, r]),
+    (kilometrajes?.length ? buildKmControlRows(kilometrajes, null, vehicles) : []).map((r) => [
+      r.vehicleId,
+      r,
+    ]),
   );
 
   return active
@@ -248,7 +251,7 @@ export function computeTodayReview(
   );
   pendAlta.sort((a, b) => b.fecha.localeCompare(a.fecha));
 
-  const kmRows = kilometrajes?.length ? buildKmControlRows(kilometrajes) : [];
+  const kmRows = kilometrajes?.length ? buildKmControlRows(kilometrajes, null, vehicles) : [];
   const kmAlertRows = kmRows.filter((r) => r.alertaVariacion && activeIds.has(r.vehicleId));
   const muestraKmMantVariacion: TodayReviewItem[] = kmAlertRows.slice(0, 5).map((r) => {
     const v = vehicles.find((x) => x.id === r.vehicleId && x.activo);

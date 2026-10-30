@@ -60,7 +60,7 @@ import {
 } from '../../utils/cleanOperationalComment';
 import { labelCategoriaIngresoExtraordinario } from '../../data/ingresoAlcanceCatalog';
 import { isIngresoExtraordinario, isIngresoVehicular } from '../../utils/ingresoAlcance';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
 import { formatVehicleIdPlaca, formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import { extractVehicleSearchIds, isStrictVehicleOnlyQuery } from '../../utils/vehicleSearchFromQuery';
@@ -623,14 +623,14 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
     const v = vehicles.find((x) => String(x.id) === k);
-    return v ? `${v.marca} ${v.modelo} (${v.placa})` : formatVehicleIdFallback(k);
+    return v ? `${v.marca} ${v.modelo} (${v.placa})` : formatVehicleIdFallback(k, vehicles);
   }, [vehicles]);
 
   const getVehicleIdPlaca = (vehicleId: number | string | null) => {
     const k = vehicleIdKey(vehicleId);
     if (!k) return 'General';
     const v = vehicles.find((x) => String(x.id) === k);
-    if (!v) return formatVehicleIdFallback(k);
+    if (!v) return formatVehicleIdFallback(k, vehicles);
     return formatVehicleIdPlaca(v);
   };
 
@@ -909,7 +909,7 @@ const RegistrosTable: React.FC<RegistrosTableProps> = ({
   }, [rawData, deferredQuery, mode, getVehicleLabel, deferredVehicleSearchIds, deferredVehicleSearchStrict, serverHistorialSearch?.serverSide]);
 
   const rowVehicleRank = (item: Ingreso | Gasto) =>
-    vehicleIdSortRank('vehicleId' in item ? item.vehicleId : null);
+    vehicleFleetSortRankFromId(vehicles, 'vehicleId' in item ? item.vehicleId : null);
 
   const sorted = useMemo(() => {
     if (serverMode && preserveServerOrder) return filtered;

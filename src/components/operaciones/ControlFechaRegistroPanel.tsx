@@ -8,12 +8,12 @@ import Button from '../Common/Button';
 import { esControlFechaSinAlertaVencimiento, TIPOS_CONTROL_FECHA_OPTIONS } from '../../data/controlFechaCatalog';
 import { formatDate, todayStr } from '../../utils/formatting';
 import { diffDaysFromToday } from '../../utils/fleetPanel';
-import { formatVehiclePlacaMarcaLabel } from '../../utils/vehicleDisplayNumber';
+import { formatVehiclePlacaMarcaLabel, vehicleFleetSortKey } from '../../utils/vehicleDisplayNumber';
 import { useRegistrosContext } from '../../context/RegistrosContext';
 import { useAuth } from '../../context/AuthContext';
 import type { ControlFechasHistoryFilters } from '../../services/controlFechasService';
 import { fetchDocumentacionFullAll } from '../../services/controlFechasService';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
 import { matchesHistorialRecordSearch } from '../../utils/recordSearch';
 import {
   documentacionHistorialTipoLabel,
@@ -77,7 +77,10 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
   const [histYear, setHistYear] = useState('ALL');
 
   const active = useMemo(
-    () => [...vehicles.filter((v) => v.activo)].sort((a, b) => a.id - b.id),
+    () =>
+      [...vehicles.filter((v) => v.activo)].sort(
+        (a, b) => vehicleFleetSortKey(a) - vehicleFleetSortKey(b),
+      ),
     [vehicles],
   );
   const vehicleOpts = [
@@ -213,7 +216,9 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
 
   const sortHistorialRows = useCallback((rows: ControlFecha[]) => {
     return [...rows].sort((a, b) => {
-      const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+      const vr =
+        vehicleFleetSortRankFromId(vehicles, a.vehicleId) -
+        vehicleFleetSortRankFromId(vehicles, b.vehicleId);
       if (vr !== 0) return vr;
       const fd = b.fechaVencimiento.localeCompare(a.fechaVencimiento);
       if (fd !== 0) return fd;

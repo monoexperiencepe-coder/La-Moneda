@@ -16,7 +16,8 @@ import { updateClasificacionGasto } from '../../services/gastosService';
 import { REVISION_USER_LABEL } from '../../config/app';
 import { gastoObservacionParaLista } from '../../utils/cleanOperationalComment';
 import { useAuth } from '../../context/AuthContext';
-import { vehicleIdSortRank } from '../../utils/sortByVehicle';
+import { vehicleFleetSortRankFromId } from '../../utils/sortByVehicle';
+import { formatVehicleIdFallback } from '../../utils/vehicleDisplayNumber';
 import { vehicleIdKey } from '../../utils/vehicleId';
 import {
   collectHistoricosSubtiposForTipoGasto,
@@ -82,11 +83,13 @@ const RevisionClasificacion: React.FC = () => {
   const ordenados = useMemo(
     () =>
       [...gastosPendientesRevision].sort((a, b) => {
-        const vr = vehicleIdSortRank(a.vehicleId) - vehicleIdSortRank(b.vehicleId);
+        const vr =
+          vehicleFleetSortRankFromId(vehicles, a.vehicleId) -
+          vehicleFleetSortRankFromId(vehicles, b.vehicleId);
         if (vr !== 0) return vr;
         return (a.clasificacion_confianza ?? 1) - (b.clasificacion_confianza ?? 1);
       }),
-    [gastosPendientesRevision],
+    [gastosPendientesRevision, vehicles],
   );
 
   const subtipoOptionsByTipo = useMemo(() => {
@@ -125,7 +128,7 @@ const RevisionClasificacion: React.FC = () => {
     const k = vehicleIdKey(vehicleId);
     if (!k) return '—';
     const v = vehicles.find((x) => String(x.id) === k);
-    return v ? `${v.marca} ${v.modelo} (${v.placa})` : `#${k}`;
+    return v ? `${v.marca} ${v.modelo} (${v.placa})` : formatVehicleIdFallback(k, vehicles);
   };
 
   const handleApprove = useCallback(

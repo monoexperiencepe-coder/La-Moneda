@@ -27,6 +27,11 @@ import {
   ingresoPromedioMensualDivisor,
   ingresoPromedioMensualLabel,
 } from '../../utils/ingresoPromedioMensual';
+import {
+  buildVehicleRankingRows,
+  filterAndSortVehicleRankingRows,
+  vehicleRankingDisplayNumber,
+} from '../../utils/ingresosVehicleRanking';
 
 const IngresosMesChart = lazy(() => import('../../components/Finanzas/IngresosMesChart'));
 
@@ -38,7 +43,7 @@ const Ingresos: React.FC = () => {
 
   /** Ranking por vehículo: mostrar toda la flota o solo unidades con al menos 1 ingreso en el período. */
   const [rankingVehicleScope, setRankingVehicleScope] = useState<'all' | 'with_moves'>('all');
-  /** Orden de filas en ranking por vehículo (orden de flota = por id de vehículo). */
+  /** Orden de filas en ranking por vehículo (orden de flota = numero_unidad visible). */
   const [rankingVehicleSort, setRankingVehicleSort] = useState<'fleet' | 'moves' | 'total'>('fleet');
   const [registrarOpen, setRegistrarOpen] = useState(false);
   const [registrarSaving, setRegistrarSaving] = useState(false);
@@ -500,54 +505,21 @@ const Ingresos: React.FC = () => {
     [vehicles],
   );
 
-  const vehicleRankingRows = useMemo(() => {
-    const map = new Map<number, { total: number; count: number }>();
-    for (const i of ingresosVistaGrafico) {
-      const raw = i.vehicleId;
-      if (raw == null || !Number.isFinite(Number(raw))) continue;
-      const id = Number(raw);
-      const cur = map.get(id) ?? { total: 0, count: 0 };
-      cur.total += ingresoMontoPEN(i);
-      cur.count += 1;
-      map.set(id, cur);
-    }
+  const vehicleRankingRows = useMemo(
+    () => buildVehicleRankingRows(ingresosVistaGrafico, vehicles),
+    [ingresosVistaGrafico, vehicles],
+  );
 
-    const seen = new Set<number>();
-    const rows: Array<{ vehicleId: number; total: number; count: number }> = [];
-    const byFleetOrder = [...vehicles].sort((a, b) => a.id - b.id);
-    for (const v of byFleetOrder) {
-      seen.add(v.id);
-      const agg = map.get(v.id) ?? { total: 0, count: 0 };
-      rows.push({ vehicleId: v.id, ...agg });
-    }
-    const orphanIds = [...map.keys()].filter((id) => !seen.has(id)).sort((a, b) => a - b);
-    for (const id of orphanIds) {
-      const agg = map.get(id)!;
-      rows.push({ vehicleId: id, ...agg });
-    }
-    return rows;
-  }, [ingresosVistaGrafico, vehicles]);
-
-  const displayedVehicleRows = useMemo(() => {
-    let rows =
-      rankingVehicleScope === 'with_moves'
-        ? vehicleRankingRows.filter((r) => r.count > 0)
-        : vehicleRankingRows;
-    if (rankingVehicleSort === 'fleet') {
-      return rows;
-    }
-    rows = [...rows];
-    if (rankingVehicleSort === 'moves') {
-      rows.sort(
-        (a, b) => b.count - a.count || b.total - a.total || a.vehicleId - b.vehicleId,
-      );
-    } else {
-      rows.sort(
-        (a, b) => b.total - a.total || b.count - a.count || a.vehicleId - b.vehicleId,
-      );
-    }
-    return rows;
-  }, [vehicleRankingRows, rankingVehicleScope, rankingVehicleSort]);
+  const displayedVehicleRows = useMemo(
+    () =>
+      filterAndSortVehicleRankingRows(
+        vehicleRankingRows,
+        rankingVehicleScope,
+        rankingVehicleSort,
+        vehicles,
+      ),
+    [vehicleRankingRows, rankingVehicleScope, rankingVehicleSort, vehicles],
+  );
 
   const displayedVehicleGrand = useMemo(
     () =>
@@ -901,7 +873,7 @@ const Ingresos: React.FC = () => {
                     <table className="min-w-full text-left text-[13px]">
                       <thead className="sticky top-0 z-[1] bg-slate-50/95 shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm">
                         <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          <th className="w-12 py-2.5 pl-3 pr-1 font-semibold tabular-nums">ID</th>
+                          <th className="w-12 py-2.5 pl-3 pr-1 font-semibold tabular-nums">Unidad</th>
                           <th className="py-2.5 pl-0 pr-2 font-semibold">Unidad</th>
                           <ColumnCountHintTh
                             className="min-w-[3.25rem]"
@@ -917,7 +889,7 @@ const Ingresos: React.FC = () => {
                             className="border-b border-slate-50 transition-colors hover:bg-emerald-50/50"
                           >
                             <td className="py-2.5 pl-3 pr-1 font-mono text-xs font-bold tabular-nums text-slate-500">
-                              #{row.vehicleId}
+                              #{vehicleRankingDisplayNumber(vehicles, row.vehicleId)}
                             </td>
                             <td className="py-2.5 pl-0 pr-2 font-medium leading-snug text-slate-900">
                               {getVehicleLabel(row.vehicleId)}

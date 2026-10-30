@@ -76,8 +76,16 @@ export function findVehicleByDisplayNumber(
 }
 
 /** Fallback cuando solo se tiene vehicleId técnico sin objeto Vehicle. */
-export function formatVehicleIdFallback(vehicleId: number | string | null | undefined): string {
+export function formatVehicleIdFallback(
+  vehicleId: number | string | null | undefined,
+  vehicles?: readonly Pick<Vehicle, 'id' | 'numeroUnidad'>[],
+): string {
   if (vehicleId == null || vehicleId === '') return 'General';
+  const id = Number(vehicleId);
+  if (vehicles && Number.isFinite(id)) {
+    const v = vehicles.find((x) => x.id === id);
+    if (v) return `Unidad #${getVehicleDisplayNumber(v)}`;
+  }
   return `Unidad #${vehicleId}`;
 }
 

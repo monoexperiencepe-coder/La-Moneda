@@ -122,7 +122,7 @@ function buildMantenimientoItems(
   kilometrajes: Awaited<ReturnType<typeof fetchKilometrajes>>,
 ): AlertaDetalleItem[] {
   const activeIds = new Set(vehicles.filter((v) => v.activo).map((v) => v.id));
-  const kmRows = kilometrajes?.length ? buildKmControlRows(kilometrajes) : [];
+  const kmRows = kilometrajes?.length ? buildKmControlRows(kilometrajes, null, vehicles) : [];
   const items: AlertaDetalleItem[] = [];
   for (const r of kmRows) {
     if (!r.alertaVariacion || !activeIds.has(r.vehicleId)) continue;

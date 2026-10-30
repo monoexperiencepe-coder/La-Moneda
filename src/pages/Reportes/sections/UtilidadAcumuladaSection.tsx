@@ -11,6 +11,7 @@ import {
   UTILIDAD_HISTORICA_TOOLTIP,
 } from '../../../utils/utilidadOperativa';
 import { calcularUtilidadRealEnRango, UTILIDAD_REAL_TOOLTIP } from '../../../utils/utilidadReal';
+import { getVehicleDisplayNumber } from '../../../utils/vehicleDisplayNumber';
 import {
   getReportesPeriodRange,
   type ReportesPeriodPreset,
@@ -81,7 +82,9 @@ const UtilidadAcumuladaSection: React.FC<UtilidadAcumuladaSectionProps> = ({
 
   const vehicleLabel = (id: number) => {
     const v = vehicles.find((x) => x.id === id);
-    return v ? `${v.marca} ${v.modelo} · ${v.placa}` : `Unidad #${id}`;
+    return v
+      ? `#${getVehicleDisplayNumber(v)} ${v.marca} ${v.modelo} · ${v.placa}`
+      : `Unidad #${id}`;
   };
 
   return (
