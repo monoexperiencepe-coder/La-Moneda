@@ -7,7 +7,7 @@ import PaymentAccountsSettings from '../../components/Configuracion/PaymentAccou
 
 const Configuracion: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, canManageUserRoles } = useAuth();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -41,19 +41,21 @@ const Configuracion: React.FC = () => {
           <div className="px-5 py-3 border-b border-gray-50">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Administración</p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/usuarios')}
-            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left border-b border-gray-50"
-          >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-violet-600 bg-violet-100">
-              👥
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">Usuarios y roles</p>
-              <p className="text-xs text-gray-400">Admin y contador únicamente (sin borrar cuentas).</p>
-            </div>
-          </button>
+          {canManageUserRoles ? (
+            <button
+              type="button"
+              onClick={() => navigate('/admin/usuarios')}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left border-b border-gray-50"
+            >
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-violet-600 bg-violet-100">
+                👥
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-900">Usuarios y roles</p>
+                <p className="text-xs text-gray-400">Administradores principales · admin ↔ contador.</p>
+              </div>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => navigate('/admin/historial-sistema')}

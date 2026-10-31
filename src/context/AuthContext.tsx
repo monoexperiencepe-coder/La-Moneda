@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
   useCallback,
+  useRef,
 } from 'react';
 import { supabase } from '../lib/supabase';
 import { EMPRESA_ID } from '../config/app';
@@ -16,6 +17,9 @@ import {
   permissionUserFromAuth,
 } from '../utils/permissions';
 import { logRlsDebugContext } from '../services/rlsDebugService';
+import { useProfileRoleRealtimeSync, broadcastProfileRoleChanged } from '../hooks/useProfileRoleRealtimeSync';
+import { dispatchProfileRoleChanged } from '../utils/roleChangeEvents';
+import { isRoleManagerUserId } from '../config/roleManagers';
 
 export interface UserProfile {
   id: string;
@@ -41,9 +45,15 @@ interface AuthContextValue {
   canAccessOperativo: boolean;
   /** Cuenta operador@… con acceso solo a gastos globales + pendiente revisión (restricción UI). */
   isFinancialOperador: boolean;
+  /** LM-03: Diego SB / Álvaro SB24 — gestión de roles (≠ admin operativo). */
+  canManageUserRoles: boolean;
   /** Retorna mensaje de error o null si OK. */
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
+  /** Re-fetch perfil desde Supabase (p. ej. tras cambio de rol remoto). */
+  refreshProfile: () => Promise<void>;
+  /** Incrementa cuando el perfil/rol efectivo cambia (invalidación UI). */
+  profileRevision: number;
   /** Solo para dev/fallback — no usar en producción. */
   setRole: (role: AppRole) => void;
 }
@@ -103,15 +113,43 @@ async function fetchProfile(userId: string): Promise<UserProfile | null> {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileRevision, setProfileRevision] = useState(0);
+  const profileRef = useRef<UserProfile | null>(null);
+  profileRef.current = profile;
+
+  const applyProfileRow = useCallback(
+    (
+      p: UserProfile | null,
+      meta?: { source?: 'realtime' | 'refresh' | 'visibility' | 'broadcast' | 'login' },
+    ) => {
+      const prev = profileRef.current;
+      setProfile(p);
+      setProfileRevision((n) => n + 1);
+      if (p && prev && prev.id === p.id && prev.role !== p.role) {
+        dispatchProfileRoleChanged({
+          userId: p.id,
+          previousRole: prev.role,
+          newRole: p.role,
+          source:
+            meta?.source === 'login' || !meta?.source
+              ? 'refresh'
+              : meta.source,
+        });
+        broadcastProfileRoleChanged(p.id);
+      }
+    },
+    [],
+  );
 
   const applySession = useCallback(async (session: Session | null) => {
     if (!session?.user) {
       setProfile(null);
+      setProfileRevision((n) => n + 1);
       setIsLoading(false);
       return;
     }
     const p = await fetchProfile(session.user.id);
-    setProfile(p);
+    applyProfileRow(p, { source: 'login' });
     setIsLoading(false);
     if (import.meta.env.DEV && p) {
       void logRlsDebugContext('post-login').catch(() => undefined);
@@ -124,7 +162,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         idsMatch: session.user.id === p.id,
       });
     }
-  }, []);
+  }, [applyProfileRow]);
+
+  const refreshProfileFromServer = useCallback(
+    async (source: 'realtime' | 'visibility' | 'broadcast' | 'refresh' = 'refresh') => {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      if (!session?.user) return;
+      const p = await fetchProfile(session.user.id);
+      if (!p) return;
+      applyProfileRow(p, { source });
+    },
+    [applyProfileRow],
+  );
+
+  const refreshProfile = useCallback(async () => {
+    await refreshProfileFromServer('refresh');
+  }, [refreshProfileFromServer]);
+
+  useProfileRoleRealtimeSync({
+    userId: profile?.id ?? null,
+    enabled: Boolean(profile?.id && profile.is_active),
+    onRefreshProfile: refreshProfileFromServer,
+  });
 
   useEffect(() => {
     // Retrieve existing session (fast – from local storage)
@@ -176,6 +236,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const financialOperador = isFinancialOperadorRestricted(permissionUser);
+  const canManageUserRoles = isRoleManagerUserId(profile?.id ?? null);
 
   const value = useMemo<AuthContextValue>(() => ({
     profile,
@@ -188,10 +249,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     canEditFinances: financialOperador || canEditFinances(effectiveRole),
     canAccessOperativo: financialOperador ? false : canAccessOperativo(effectiveRole),
     isFinancialOperador: financialOperador,
+    canManageUserRoles,
     login,
     logout,
+    refreshProfile,
+    profileRevision,
     setRole: (r) => setDevRole(r),
-  }), [profile, user, effectiveRole, isLoading, financialOperador, login, logout]);
+  }), [profile, user, effectiveRole, isLoading, financialOperador, canManageUserRoles, login, logout, refreshProfile, profileRevision]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

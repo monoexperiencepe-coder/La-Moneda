@@ -91,6 +91,14 @@ const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+/** LM-03: solo administradores principales (gestión de roles). */
+const RoleManagerOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { canManageUserRoles, isLoading, isAuthenticated } = useAuth();
+  if (isLoading) return <RoutePageSkeleton />;
+  if (!isAuthenticated || !canManageUserRoles) return <Navigate to="/configuracion" replace />;
+  return <>{children}</>;
+};
+
 /** Inicio: operador restringido va directo a gastos permitidos. */
 const HomeEntry: React.FC = () => {
   const { isFinancialOperador } = useAuth();
@@ -191,9 +199,9 @@ const AppContent: React.FC = () => {
                         <Route
                           path="/admin/usuarios"
                           element={
-                            <AdminOnly>
+                            <RoleManagerOnly>
                               <UsuariosPanel />
-                            </AdminOnly>
+                            </RoleManagerOnly>
                           }
                         />
                         <Route

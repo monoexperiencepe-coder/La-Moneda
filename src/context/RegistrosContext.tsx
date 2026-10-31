@@ -26,6 +26,7 @@ import type { ControlFechasHistoryFilters } from '../services/controlFechasServi
 import type { InsertVehiculoInput } from '../services/vehiculosService';
 import type { FleetAssignmentResult } from '../services/fleetAssignmentService';
 import { useAuth } from './AuthContext';
+import { PROFILE_ROLE_CHANGED_EVENT, type ProfileRoleChangedDetail } from '../utils/roleChangeEvents';
 import { filterGastosForUser, permissionUserFromAuth, canViewGastoTipo } from '../utils/permissions';
 import { getVehicleDisplayNumber } from '../utils/vehicleDisplayNumber';
 import { useEmpresaRegistrosRealtime } from '../hooks/useEmpresaRegistrosRealtime';
@@ -217,6 +218,20 @@ export const RegistrosProvider: React.FC<{ children: ReactNode }> = ({ children 
   const toastHook = useToast();
   const { role, user, profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const undoManager = useUndoManager();
+
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<ProfileRoleChangedDetail>).detail;
+      const selfId = profile?.id ?? user?.id ?? null;
+      if (!detail?.userId || !selfId || detail.userId !== selfId) return;
+      void registros.reloadGastosOnly();
+      void registros.reloadIngresosOnly();
+      void registros.reloadGastosFinancialSummary({ silent: true });
+      registros.markGastosFullStale();
+    };
+    window.addEventListener(PROFILE_ROLE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(PROFILE_ROLE_CHANGED_EVENT, handler);
+  }, [profile?.id, user?.id, registros]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;

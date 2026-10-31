@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { AppRole } from '../data/types';
 import { isUiAssignableRole, type UiAssignableRole } from '../config/userRolesUi';
+import { mapRoleChangeRpcError } from '../utils/userRoleAdmin';
 
 export type UserProfileRow = { id: string; name: string; email: string };
 
@@ -65,12 +66,20 @@ export function logUserRolesAudit(rows: readonly UserProfileAdminRow[]): UserRol
   return summary;
 }
 
-/** Actualiza rol (solo admin; RLS user_profiles_update_admin_tenant). */
+/**
+ * Cambio de rol vía RPC `admin_update_user_role` (LM-03).
+ * Requiere migración SQL aplicada en Supabase; sin ella el trigger bloquea UPDATE directo.
+ */
 export async function updateUserProfileRole(
   userId: string,
   role: UiAssignableRole,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { error } = await supabase.from('user_profiles').update({ role }).eq('id', userId);
-  if (error) return { ok: false, message: error.message };
+  const { error } = await supabase.rpc('admin_update_user_role', {
+    p_target_user_id: userId,
+    p_new_role: role,
+  });
+  if (error) {
+    return { ok: false, message: mapRoleChangeRpcError(error.message) };
+  }
   return { ok: true };
 }
