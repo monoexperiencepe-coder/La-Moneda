@@ -332,6 +332,14 @@ const ControlFechaRegistroPanel: React.FC<ControlFechaRegistroPanelProps> = ({
         comentarios: comentarios.trim(),
       });
       if (!created) return;
+      if (!(docSearchMode && documentacionScope === 'full')) {
+        const f: ControlFechasHistoryFilters = {};
+        if (histVehicleId) f.vehicleId = Number(histVehicleId);
+        if (histTipo) f.tipo = histTipo;
+        if (histDesde) f.fechaVencimientoDesde = histDesde;
+        if (histHasta) f.fechaVencimientoHasta = histHasta;
+        void loadControlFechasHistory(f, 0);
+      }
       setComentarios('');
       if (docSearchMode && documentacionFullLoaded) {
         setDocumentacionFullRows((prev) => sortHistorialRows([created, ...prev]));

@@ -31,14 +31,23 @@ export async function fetchLatestControlFechasByVehicle(
   return devPerfAsync('fetchControlFechas', async () => {
     const empresaId = resolveTenantId(tenantEmpresaId);
     if (!empresaId) return [];
-    const { data, error } = await supabase.rpc('fetch_latest_control_fechas_by_vehicle', {
-      p_empresa_id: empresaId,
-    });
-    if (error) {
-      console.error('[fetch_latest_control_fechas_by_vehicle]', error.message);
+
+    // PostgREST trunca ~1000 filas; con muchos vehículos/tipos los id altos quedan fuera (LM-04).
+    const { rows: rawPages, error: pageError } = await fetchAllSupabasePagesDetailed<Record<string, unknown>>(
+      async (from, to) => {
+        const { data, error } = await supabase
+          .rpc('fetch_latest_control_fechas_by_vehicle', { p_empresa_id: empresaId })
+          .range(from, to);
+        return { data: (data ?? []) as Record<string, unknown>[] | null, error };
+      },
+      { label: 'fetchLatestControlFechasByVehicle' },
+    );
+
+    if (pageError) {
+      console.error('[fetch_latest_control_fechas_by_vehicle]', pageError);
       return [];
     }
-    return (data ?? []).map((r: Record<string, unknown>) => mapControlFechaRow(r));
+    return rawPages.map((r) => mapControlFechaRow(r));
   });
 }
 
